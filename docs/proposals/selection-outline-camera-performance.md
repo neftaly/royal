@@ -1,8 +1,9 @@
 # Selection-outline performance during camera movement
 
-Status: retained source indexing implemented in the working tree (2026-09-08),
-with differential and native pixel checks. Hardware performance, equivalent
-descriptor replacement, and GPU submission follow-up remain investigations.
+Status: partially implemented. Retained source indexing landed in `a1b4961d`
+and is included in Royal 0.0.23, with differential and native pixel checks.
+Hardware performance, equivalent descriptor replacement, and GPU submission
+follow-up remain investigations.
 No public API change.
 
 ## Problem and scope

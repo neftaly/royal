@@ -1,6 +1,8 @@
 # Always-on automatic virtual texturing
 
-Status: implemented in the working tree on 2026-09-08; release pending.
+Status: closed. Implemented in `a1b4961d` and included in Royal 0.0.23
+(`fd045a7b`). The original rationale and verification plan are retained below;
+references to the old application opt-in describe the pre-fix state.
 
 ## Decision
 

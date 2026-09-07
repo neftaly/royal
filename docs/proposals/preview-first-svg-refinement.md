@@ -1,8 +1,11 @@
 # Preview-first SVG loading with bounded background refinement
 
-Status: Royal PNG preview consumer implemented in the working tree (2026-09-08);
-Probability's PNG producer implemented. Physical performance acceptance,
-worker rasterization, occluded-stack demand, and Basis KTX2 remain follow-up work.
+Status: partially implemented. Royal PNG preview consumption landed in
+`a1b4961d` and is included in 0.0.23; full-atlas preparation queue starvation
+was fixed in `01ef7187`. The producer notes below record the supplied Probability
+contract. Preview-supported finer mips and physical-device performance acceptance
+remain follow-ups. Worker rasterization, occluded-stack demand, and Basis KTX2
+remain investigation candidates, not accepted implementation commitments.
 No application mode or opt-out.
 
 ## Outcome and ownership
@@ -10,7 +13,7 @@ No application mode or opt-out.
 Load a small complete representation first, make the game interactive, then
 replace visible regions with sharp SVG-backed VT pages without monopolizing
 the main thread or GPU. Automatic VT is always enabled; see
-[the always-on proposal](always-on-automatic-virtual-texturing.md).
+[the completed always-on proposal](archive/always-on-automatic-virtual-texturing.md).
 
 **Probability generates and caches preview bytes. Royal consumes them and owns
 loading, residency, refinement, cancellation, and publication.** Royal must not
@@ -64,13 +67,15 @@ increased uploads from 45 to 89 and final completion from 4.314 s to 5.689 s.
 Both tiers competed before the preview was complete. These are older AVIF
 controls, not a speed prediction for the current SVG game.
 
-Current Royal boundaries to change:
+The original loading obstacles were addressed by the shipped preview consumer:
 
-- `gltf/static-texture-image-plan.ts` selects SVG first; raster is deferred
-  failure recovery, not an initial representation.
-- `texture/browser-decode.ts` finishes ordinary bitmap decoding before handing
-  retained SVG source to automatic VT. Vector pages should not require a full
-  ordinary SVG texture first.
+- The texture-loading path uses an available portable raster preview before
+  vector refinement while retaining the authoritative SVG source.
+- Preview-backed automatic VT does not require a full ordinary SVG decode before
+  providing coarse coverage.
+
+Remaining scheduling and rasterization boundaries:
+
 - `resource/async-preparation-owner.ts` already owns foreground/detail lanes,
   concurrency, and cancellation. Extend it rather than adding another queue.
 - `resource/frame-upload-budget.ts` bounds bytes but allows one oversized
@@ -84,9 +89,12 @@ Current Royal boundaries to change:
    to inspect the SVG, where possible. Preserve the authoritative SVG and exact
    viewport, alpha, orientation, and color interpretation. Do not replace the
    SVG with its preview or change physical geometry/size inference.
-2. Test a 128 px longest edge first, preserving aspect ratio; compare 256 px for
-   recognizability on boards. These are experimental candidates, not permanent
-   application settings. Do not upscale already-small input unnecessarily.
+2. Use 512 pixels per metre of imported physical viewport, with the longest
+   edge rounded to an integer and clamped to 64–256 px. Preserve aspect ratio;
+   do not round to powers of two or upscale the existing inspection bitmap.
+   This gives ordinary cards 64 px, a 205 mm ruler 105 px, and an A1 mat 256 px.
+   Use the imported dimensions, not opaque bounds, SVG authoring pixels, or
+   individual UV islands. This is an internal default, not a quality setting.
 3. Cache generation by source content, preparation policy, preview dimensions,
    color interpretation, and encoder version/settings. Deduplicate output bytes
    through existing Automerge FS aliases. Filenames remain source provenance,
@@ -105,21 +113,38 @@ Current Royal boundaries to change:
    Once Royal's standards-based KTX2 path is supported, Probability can generate
    that preview with bounded worker/offline encoding and reuse the same cache.
 
-Probability now implements the PNG producer with a 128 px longest edge, no
+The supplied Probability producer update records this physical-size rule, no
 upscaling, full-viewport UVs and content-addressed preview aliases. It stores one
-preview per generated texture, not one per mesh or UV island; no separate atlas
-packing or multi-resolution authoring ladder is added. Dense UV atlases can use
-a 256 px research control later. Preparation is cached within an import pass;
+preview per texture preparation variant, not one per mesh or UV island; no
+separate atlas packing or multi-resolution authoring ladder is added. Identical
+art with different requested physical sizes can have different previews; equal
+encoded bytes still share storage. Preparation is cached within an import pass;
 stored output bytes deduplicate across passes. There is no persistent decoded
 image cache. First-time SVG import
 still needs inspection, polygon generation, and durable saving; preview-first
 opening is not a substitute for optimizing those stages or fixing sync delays.
+
+A controlled re-encode of the same 60 shared Settlers previews measured 204,271
+PNG bytes at the old fixed 128 px limit, 166,713 bytes with physical sizing, and
+200,496 bytes with upward power-of-two rounding. The mat grows from 13,247 to
+51,731 bytes while smaller pieces shrink. These are encoded payload totals,
+excluding Automerge metadata and ZIP overhead, not a loading-speed benchmark.
+The package totals above describe the earlier fixed-size control.
 
 ## Royal consumer behaviour
 
 One logical texture progresses from no coverage to coarse coverage to demanded
 detail. Retain preview coverage anywhere finer pages are absent or evicted.
 
+- Use every VT mip that the preview has enough resolution to supply, not only
+  the coarsest mip. The currently inspected consumer limits previews to the
+  final mip (at most one 128 px page), so it does not yet use all the detail
+  available in a 256 px board preview. A supported finer mip may span multiple
+  pages; populate demanded coverage within the existing budgets before asking
+  SVG for detail the preview already supplies. Preserve the full viewport/UV
+  mapping for arbitrary dimensions such as 105 × 105 and 256 × 181; do not
+  stretch or crop to a power-of-two rectangle. This is follow-up consumer work,
+  not a claim that the larger-preview benefit has already landed.
 - Prioritize visible geometry and missing coarse coverage. Refine already
   covered visible regions next; speculative/offscreen work comes last. Covered
   cards in stacks must not compete with visible artwork for expensive detail.
@@ -164,6 +189,9 @@ detail. Retain preview coverage anywhere finer pages are absent or evicted.
    fixture. Prove earlier complete previews before adding a codec dependency.
 3. Use Probability's implemented preview generation in normal import/export to
    verify real source sharing, UVs, alpha, and subset re-imports end to end.
+   Cover 64 px cards, a non-power-of-two 105 px ruler, and a 256 px board:
+   assert preview-supported mip coverage, no premature SVG request for that
+   coverage, preserved alpha/UVs, and cancellation/shared-owner correctness.
 4. Compare supported KTX2 previews under the same scheduler; adopt only with
    measured end-to-end benefit, including encode/transcode and transfer costs.
 

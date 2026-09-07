@@ -9,10 +9,11 @@ Royal is an open-source prerelease at `0.0.23`. Its intended behavior and
 current conformance are documented in [docs/specs](docs/specs/README.md).
 The implementation owns a demand-rendered WebGL2 lifecycle, progressive static
 glTF and texture publication, PBR presentation, exact CPU picking, retained
-camera/instance resources, LOD and variants, WebXR, and optional virtual
+camera/instance resources, LOD and variants, WebXR, and automatic virtual
 texturing through shared canonical scene paths. Unsupported required glTF
 semantics fail explicitly. The detailed status and remaining gaps live in the
-[conformance ledger](docs/specs/conformance-and-review.md).
+[conformance ledger](docs/specs/conformance-and-review.md). Open proposals and
+completed design decisions are indexed in [docs/proposals](docs/proposals/README.md).
 
 ## Current React API
 
