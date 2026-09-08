@@ -2,6 +2,25 @@ import { describe, expect, it } from "vitest";
 import { FrameUploadBudgetOwner } from "../../packages/renderer-webgl/src/resource/frame-upload-budget";
 
 describe("frame upload byte budget", () => {
+  it("starts the work timer at the first upload, after unrelated frame preparation", () => {
+    let now = 0;
+    const owner = new FrameUploadBudgetOwner(1024, 2, () => now);
+    owner.beginFrame();
+    now = 20;
+    expect(owner.tryAdmit(32)).toBe(true);
+    now = 21;
+    expect(owner.tryAdmit(32)).toBe(true);
+    now = 22;
+    expect(owner.tryAdmit(32)).toBe(false);
+    owner.beginFrame();
+    now = 40;
+    expect(owner.tryAdmitAllocation()).toBe(true);
+    now = 41;
+    expect(owner.tryAdmit(32)).toBe(true);
+    now = 42;
+    expect(owner.tryAdmit(32)).toBe(false);
+  });
+
   it("admits deterministic byte traffic and resets only at the next frame", () => {
     const owner = new FrameUploadBudgetOwner(10);
     expect(owner.tryAdmit(6)).toBe(true);

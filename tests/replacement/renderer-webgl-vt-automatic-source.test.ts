@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { SvgRasterCache } from "../../packages/renderer-webgl/src/virtual-texture/svg-raster-cache";
 import {
   automaticVirtualTextureEligible,
   automaticVirtualTextureIsSvg,
   createAutomaticRasterPageSource,
   createAutomaticSvgPageSource,
+  createAutomaticSvgPreviewPageSource,
   planAutomaticVirtualTextureAxis,
 } from "../../packages/renderer-webgl/src/virtual-texture/automatic-page-source";
 
@@ -12,6 +14,43 @@ afterEach(() => {
 });
 
 describe("automatic virtual texture page source", () => {
+  it("shares bounded regions of a large target and releases them when demand leaves", async () => {
+    const attributes = new Map<string, string>();
+    const context = { drawImage: vi.fn(), getImageData: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
+    const closed = vi.fn();
+    const decode = vi.fn(async () => ({
+      width: Number(attributes.get("width")), height: Number(attributes.get("height")), close: closed,
+    }));
+    vi.stubGlobal("createImageBitmap", decode);
+    vi.stubGlobal("XMLSerializer", class { serializeToString = () => "<svg/>"; });
+    vi.stubGlobal("document", { createElement: () => ({ getContext: () => context, width: 0, height: 0 }) });
+    const cache = new SvgRasterCache();
+    const blob = new Blob(["<svg/>"]);
+    const source = createAutomaticSvgPageSource({ blob, byteLength: blob.size, parsed: {
+      document: { documentElement: { cloneNode: () => ({ setAttribute: (name: string, value: string) => attributes.set(name, value) }) } } as unknown as XMLDocument,
+      viewBox: [0, 0, 16, 8],
+    } }, 16, 8, { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb", cache);
+    const mip = source.manifest.mipCount - 4;
+    const pages = [0, 1, 4, 5].map((x) => ({ mip, x, y: 0 }));
+    source.setDemand!(pages);
+    try {
+      expect(source.hasCachedPage!(pages[1]!)).toBe(false);
+      (await source.read(pages[0]!, new AbortController().signal))!.close();
+      expect(source.hasCachedPage!(pages[1]!)).toBe(true);
+      expect(source.hasCachedPage!(pages[2]!)).toBe(false);
+      for (const page of pages.slice(1)) (await source.read(page, new AbortController().signal))!.close();
+      expect(decode).toHaveBeenCalledTimes(2);
+      expect(Number(attributes.get("width"))).toBeLessThanOrEqual(516);
+      expect(Number(attributes.get("height"))).toBeLessThanOrEqual(516);
+      expect(cache.byteLength).toBeLessThanOrEqual(4 * 1024 * 1024);
+      expect(closed).not.toHaveBeenCalled();
+      source.setDemand!([]);
+      expect(cache.byteLength).toBe(0);
+      expect(closed).toHaveBeenCalledTimes(2);
+      expect(source.hasCachedPage!(pages[1]!)).toBe(false);
+    } finally { source.close!(); }
+  });
+
   it("recognizes explicit retained SVG authority instead of guessing from a URL", () => {
     expect(automaticVirtualTextureIsSvg({
       encodedSvg: {
@@ -88,6 +127,68 @@ describe("automatic virtual texture page source", () => {
       new AbortController().signal,
     )).rejects.toThrow("closed");
   });
+
+  it.each([0, 1, 2])("renders early SVG quality level %i with one bounded decode", async (level) => {
+    const context = { drawImage: vi.fn(), getImageData: vi.fn(), clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
+    vi.stubGlobal("document", { createElement: () => ({ getContext: () => context, height: 0, width: 0 }) });
+    vi.stubGlobal("XMLSerializer", class { serializeToString = (): string => "<svg/>"; });
+    const close = vi.fn();
+    const bitmap = { close, width: 128, height: 128 };
+    const decode = vi.fn(async () => bitmap);
+    vi.stubGlobal("createImageBitmap", decode);
+    const previewImage = {} as ImageBitmap;
+    const encoded = {
+      blob: new Blob(["<svg/>"]), byteLength: 6,
+      parsed: { document: { documentElement: { cloneNode: () => ({ setAttribute: vi.fn() }) } } as unknown as XMLDocument, viewBox: [0, 0, 64, 64] as const },
+    };
+    const load = vi.fn(async () => encoded);
+    const source = createAutomaticSvgPreviewPageSource({ width: 64, height: 64, source: previewImage, svgPreview: { encoded, load } },
+      { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb");
+    const page = await source.read({ mip: source.manifest.mipCount - 1 - level, x: 0, y: 0 }, new AbortController().signal);
+    expect(load).toHaveBeenCalledOnce();
+    expect(decode).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    expect(context.drawImage.mock.calls.every(([image]) => image === bitmap)).toBe(true);
+    page?.close();
+    source.close?.();
+  });
+
+  it.each([[64, 64, 0, 0], [64, 64, 3, 3], [64, 17, 3, 0], [1, 64, 0, 3]])(
+    "bounds clamped SVG decoding and covers gutters for %i x %i at %i,%i",
+    async (width, height, x, y) => {
+      const attributes = new Map<string, string>();
+      const context = { drawImage: vi.fn(), getImageData: vi.fn(), clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
+      vi.stubGlobal("document", { createElement: () => ({ getContext: () => context, height: 0, width: 0 }) });
+      vi.stubGlobal("XMLSerializer", class { serializeToString = (): string => "<svg/>"; });
+      const close = vi.fn();
+      const decode = vi.fn(async () => ({ close, width: Number(attributes.get("width")), height: Number(attributes.get("height")) }));
+      vi.stubGlobal("createImageBitmap", decode);
+      const source = createAutomaticSvgPageSource({
+        blob: new Blob(["<svg/>"]), byteLength: 6,
+        parsed: { document: { documentElement: { cloneNode: () => ({ setAttribute: (key: string, value: string) => attributes.set(key, value) }) } } as unknown as XMLDocument, viewBox: [0, 0, width, height] },
+      }, width, height, { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb");
+      const page = await source.read({ mip: source.manifest.mipCount - 3, x, y }, new AbortController().signal);
+      expect(decode).toHaveBeenCalledOnce();
+      expect(close).toHaveBeenCalledOnce();
+      const rasterWidth = Number(attributes.get("width"));
+      const rasterHeight = Number(attributes.get("height"));
+      expect(rasterWidth).toBeGreaterThan(0);
+      expect(rasterHeight).toBeGreaterThan(0);
+      expect(rasterWidth).toBeLessThanOrEqual(source.manifest.pageSize + source.manifest.borderTexels * 2);
+      expect(rasterHeight).toBeLessThanOrEqual(source.manifest.pageSize + source.manifest.borderTexels * 2);
+      let area = 0;
+      for (const [, sx, sy, sw, sh, , , dw, dh] of context.drawImage.mock.calls) {
+        expect(sx).toBeGreaterThanOrEqual(0);
+        expect(sy).toBeGreaterThanOrEqual(0);
+        expect(sx + sw).toBeLessThanOrEqual(rasterWidth + 1e-9);
+        expect(sy + sh).toBeLessThanOrEqual(rasterHeight + 1e-9);
+        area += dw * dh;
+      }
+      expect(area).toBeCloseTo((source.manifest.pageSize + source.manifest.borderTexels * 2) ** 2);
+      page?.close();
+      source.close?.();
+    },
+  );
 
   it("selects only sufficiently large browser raster sources", () => {
     expect(automaticVirtualTextureEligible({

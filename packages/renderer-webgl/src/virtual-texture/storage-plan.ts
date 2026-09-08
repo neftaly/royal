@@ -1,7 +1,4 @@
-import {
-  DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS,
-  type VirtualTextureManifest,
-} from "./manifest";
+import type { VirtualTextureManifest } from "./manifest";
 
 const DEFAULT_PHYSICAL_BYTES = 32 * 1024 * 1024;
 const MAX_ATLAS_AXIS_SLOTS = 256;
@@ -50,6 +47,8 @@ export const planVirtualTextureAtlasStorage = (
   manifest: VirtualTextureManifest,
   maxTextureSizeInput: number,
   availableBytesInput: number,
+  targetSlots = Infinity,
+  physicalByteLimit = DEFAULT_PHYSICAL_BYTES,
 ): VirtualTextureAtlasStoragePlan => {
   if (!Number.isSafeInteger(maxTextureSizeInput) || maxTextureSizeInput < 1) {
     throw new RangeError("Royal VT received an invalid WebGL2 texture limit");
@@ -66,18 +65,16 @@ export const planVirtualTextureAtlasStorage = (
   const compressed = manifest.pageEncoding === "ktx2-etc2";
   const bytesPerPage = storedPageSize * storedPageSize * (compressed ? 1 : 4);
   const availableAtlasBytes = Math.max(0, availableBytesInput - manifest.tableByteLength);
-  const targetAtlasBytes = Math.min(
-    DEFAULT_PHYSICAL_BYTES,
-    bytesPerPage * DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS,
-  );
+  // This atlas serves all compatible textures, not just the first asset.
   const atlasByteLimit = Math.min(
-    targetAtlasBytes,
+    physicalByteLimit,
     availableAtlasBytes,
     Math.max(bytesPerPage, Math.floor(availableAtlasBytes * 0.75)),
   );
   const slotLimit = Math.min(
     Math.floor(atlasByteLimit / bytesPerPage),
     maximumAxisSlots * maximumAxisSlots,
+    targetSlots,
   );
   if (slotLimit < 1) throw new RangeError("Royal VT budget cannot hold one physical page");
   const [atlasColumns, atlasRows] = atlasDimensions(slotLimit, maximumAxisSlots);
@@ -106,7 +103,7 @@ export const virtualTextureResidentPageCapacity = (
     ? Infinity
     : Math.floor(manifest.physicalByteBudget / bytesPerPage);
   const maxResidentPages = Math.min(
-    manifest.physicalSlots ?? DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS,
+    manifest.physicalSlots ?? atlas.slotCount,
     byteSlots,
     atlas.slotCount,
   );

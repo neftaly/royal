@@ -1,0 +1,196 @@
+{
+  "date": "2026-09-08",
+  "status": "working-tree renderer-only probe; single-device observations, not controlled speedup measurements",
+  "runs": [
+    {
+      "label": "royal-vt-direct-target-ipad.log",
+      "info": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+        "width": 768,
+        "height": 954,
+        "dpr": 2,
+        "pieces": 273,
+        "capabilities": {
+          "maxTextureSize": 16384,
+          "etc2": true,
+          "astc": true
+        }
+      },
+      "settledMs": 8061,
+      "virtualTextures": {
+        "admittedUploadBytes": 314152,
+        "atlasBytes": 33523776,
+        "atlasPools": 1,
+        "automaticCandidates": 60,
+        "automaticDecodedBytes": 2395904,
+        "automaticIneligible": 0,
+        "automaticResources": 60,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 135,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 135,
+        "uploadedPages": 135,
+        "uploadBudgetBytes": 33554432
+      },
+      "gpu": {
+        "budgetBytes": 268435456,
+        "deniedClaims": 0,
+        "retainedBytes": 40102721
+      },
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "errors": [],
+      "frameGaps": {
+        "max": 372,
+        "p95": 25,
+        "over50": 15,
+        "count": 2769,
+        "worst": [
+          {
+            "ms": 1429,
+            "duration": 372
+          },
+          {
+            "ms": 2055,
+            "duration": 246
+          },
+          {
+            "ms": 1598,
+            "duration": 169
+          },
+          {
+            "ms": 2630,
+            "duration": 116
+          },
+          {
+            "ms": 2167,
+            "duration": 112
+          },
+          {
+            "ms": 995,
+            "duration": 110
+          },
+          {
+            "ms": 5647,
+            "duration": 101
+          },
+          {
+            "ms": 2344,
+            "duration": 96
+          },
+          {
+            "ms": 3628,
+            "duration": 85
+          },
+          {
+            "ms": 2248,
+            "duration": 81
+          }
+        ]
+      }
+    },
+    {
+      "label": "royal-vt-direct-target-final-ipad.log",
+      "info": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+        "width": 768,
+        "height": 954,
+        "dpr": 2,
+        "pieces": 273,
+        "capabilities": {
+          "maxTextureSize": 16384,
+          "etc2": true,
+          "astc": true
+        }
+      },
+      "settledMs": 7178,
+      "virtualTextures": {
+        "admittedUploadBytes": 157076,
+        "atlasBytes": 33523776,
+        "atlasPools": 1,
+        "automaticCandidates": 60,
+        "automaticDecodedBytes": 2395904,
+        "automaticIneligible": 0,
+        "automaticResources": 60,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 135,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 135,
+        "uploadedPages": 135,
+        "uploadBudgetBytes": 33554432
+      },
+      "gpu": {
+        "budgetBytes": 268435456,
+        "deniedClaims": 0,
+        "retainedBytes": 40102721
+      },
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "errors": [],
+      "frameGaps": {
+        "max": 306,
+        "p95": 24,
+        "over50": 15,
+        "count": 2786,
+        "worst": [
+          {
+            "ms": 1518,
+            "duration": 306
+          },
+          {
+            "ms": 1915,
+            "duration": 169
+          },
+          {
+            "ms": 1212,
+            "duration": 147
+          },
+          {
+            "ms": 1657,
+            "duration": 139
+          },
+          {
+            "ms": 2033,
+            "duration": 118
+          },
+          {
+            "ms": 736,
+            "duration": 114
+          },
+          {
+            "ms": 2142,
+            "duration": 109
+          },
+          {
+            "ms": 3277,
+            "duration": 105
+          },
+          {
+            "ms": 5321,
+            "duration": 104
+          },
+          {
+            "ms": 262,
+            "duration": 76
+          }
+        ]
+      }
+    }
+  ]
+}

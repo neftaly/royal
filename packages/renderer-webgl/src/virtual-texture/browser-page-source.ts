@@ -22,6 +22,12 @@ export type DecodedVirtualTexturePage = Readonly<{
 export type VirtualTexturePageSource = Readonly<{
   close?(): void;
   manifest: VirtualTextureManifest;
+  /** Optional cheap coverage, distinct from authoritative target pixels. */
+  readPreview?(page: VirtualTexturePageId, signal: AbortSignal): Promise<DecodedVirtualTexturePage>;
+  /** Current admitted demand, for bounded sharing of source preparation. */
+  setDemand?(pages: readonly VirtualTexturePageId[]): void;
+  /** Scheduling hint only; reads still use the bounded preparation lane. */
+  hasCachedPage?(page: VirtualTexturePageId): boolean;
   read(
     page: VirtualTexturePageId,
     signal: AbortSignal,

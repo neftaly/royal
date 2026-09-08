@@ -1,0 +1,289 @@
+{
+  "overview": {
+    "info": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+      "width": 768,
+      "height": 954,
+      "dpr": 2,
+      "pieces": 273,
+      "capabilities": {
+        "maxTextureSize": 16384,
+        "etc2": true,
+        "astc": true
+      }
+    },
+    "errors": [],
+    "settledMs": 8211.000000000002,
+    "last": {
+      "ms": 45236,
+      "frame": 213,
+      "vt": {
+        "admittedUploadBytes": 157076,
+        "atlasBytes": 17842176,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 135,
+        "admittedPages": 135,
+        "unresidentPages": 0,
+        "automaticCandidates": 60,
+        "automaticDecodedBytes": 2395904,
+        "automaticIneligible": 0,
+        "automaticResources": 60,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 135,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 135,
+        "uploadedPages": 135,
+        "uploadBudgetBytes": 33554432
+      },
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "gpu": {
+        "budgetBytes": 268435456,
+        "deniedClaims": 0,
+        "retainedBytes": 24421121
+      },
+      "asset": {
+        "bounds": {
+          "max": [
+            0.4204990863800049,
+            0.0010000000474974513,
+            0.296999990940094
+          ],
+          "min": [
+            -0.4204990863800049,
+            -0.0010000000474974513,
+            -0.296999990940094
+          ]
+        },
+        "lightCount": 0,
+        "nodeCount": 1,
+        "primitiveCount": 3,
+        "sceneIndex": 0,
+        "scenes": [
+          {
+            "index": 0
+          }
+        ],
+        "status": "ready",
+        "timings": {
+          "externalResourceReadDurationMs": 326,
+          "firstDrawableAfterMs": 1319,
+          "preparationQueueDurationMs": 148.9999999999999,
+          "preparationDurationMs": 551,
+          "sourceReadDurationMs": 291.0000000000001,
+          "sourceReadStartedAfterMs": 2,
+          "imagesCompleteAfterMs": 1323
+        },
+        "textures": {
+          "fallback": 0,
+          "failed": 0,
+          "loading": 0,
+          "ready": 2,
+          "total": 2
+        },
+        "variantNames": []
+      }
+    },
+    "gapStats": {
+      "max": 352,
+      "p95": 24,
+      "over50": 17,
+      "count": 2774,
+      "worst": [
+        {
+          "ms": 1750,
+          "duration": 352
+        },
+        {
+          "ms": 2186,
+          "duration": 200
+        },
+        {
+          "ms": 2695,
+          "duration": 165
+        },
+        {
+          "ms": 2530,
+          "duration": 151
+        },
+        {
+          "ms": 1398,
+          "duration": 136
+        },
+        {
+          "ms": 1874,
+          "duration": 124
+        },
+        {
+          "ms": 1986,
+          "duration": 112
+        },
+        {
+          "ms": 6340,
+          "duration": 93
+        },
+        {
+          "ms": 2267,
+          "duration": 81
+        },
+        {
+          "ms": 146,
+          "duration": 75
+        }
+      ]
+    }
+  },
+  "zoom": {
+    "info": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+      "width": 768,
+      "height": 954,
+      "dpr": 2,
+      "pieces": 273,
+      "capabilities": {
+        "maxTextureSize": 16384,
+        "etc2": true,
+        "astc": true
+      }
+    },
+    "errors": [],
+    "settledMs": 27077,
+    "last": {
+      "ms": 45083,
+      "frame": 631,
+      "copyCalls": 135,
+      "vt": {
+        "admittedUploadBytes": 314152,
+        "atlasBytes": 71368704,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 583,
+        "admittedPages": 583,
+        "unresidentPages": 0,
+        "automaticCandidates": 60,
+        "automaticDecodedBytes": 4525824,
+        "automaticIneligible": 0,
+        "automaticResources": 60,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 697,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 697,
+        "uploadedPages": 697,
+        "uploadBudgetBytes": 33554432
+      },
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "gpu": {
+        "budgetBytes": 268435456,
+        "deniedClaims": 0,
+        "retainedBytes": 77947649
+      },
+      "asset": {
+        "bounds": {
+          "max": [
+            0.4204990863800049,
+            0.0010000000474974513,
+            0.296999990940094
+          ],
+          "min": [
+            -0.4204990863800049,
+            -0.0010000000474974513,
+            -0.296999990940094
+          ]
+        },
+        "lightCount": 0,
+        "nodeCount": 1,
+        "primitiveCount": 3,
+        "sceneIndex": 0,
+        "scenes": [
+          {
+            "index": 0
+          }
+        ],
+        "status": "ready",
+        "timings": {
+          "externalResourceReadDurationMs": 466,
+          "firstDrawableAfterMs": 1274,
+          "preparationQueueDurationMs": 254.0000000000001,
+          "preparationDurationMs": 465.9999999999999,
+          "sourceReadDurationMs": 86,
+          "sourceReadStartedAfterMs": 2,
+          "imagesCompleteAfterMs": 1277
+        },
+        "textures": {
+          "fallback": 0,
+          "failed": 0,
+          "loading": 0,
+          "ready": 2,
+          "total": 2
+        },
+        "variantNames": []
+      }
+    },
+    "gapStats": {
+      "max": 383,
+      "p95": 38,
+      "over50": 41,
+      "count": 2328,
+      "worst": [
+        {
+          "ms": 12473,
+          "duration": 383
+        },
+        {
+          "ms": 1676,
+          "duration": 294
+        },
+        {
+          "ms": 1382,
+          "duration": 214
+        },
+        {
+          "ms": 13430,
+          "duration": 163
+        },
+        {
+          "ms": 1961,
+          "duration": 143
+        },
+        {
+          "ms": 2158,
+          "duration": 132
+        },
+        {
+          "ms": 5689,
+          "duration": 106
+        },
+        {
+          "ms": 675,
+          "duration": 102
+        },
+        {
+          "ms": 403,
+          "duration": 96
+        },
+        {
+          "ms": 2417,
+          "duration": 92
+        }
+      ]
+    }
+  }
+}

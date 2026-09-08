@@ -56,6 +56,7 @@ export class FrameUploadBudgetOwner {
   /** Accounts for indivisible allocation/mip work as well as byte copies. */
   tryAdmitAllocation(): boolean {
     if (this.#submittedWork && this.#now() - this.#startedAt >= this.#timeBudgetMs) return false;
+    if (!this.#submittedWork) this.#startedAt = this.#now();
     this.#submittedWork = true;
     return true;
   }
@@ -69,6 +70,7 @@ export class FrameUploadBudgetOwner {
       (!this.#submittedWork || this.#now() - this.#startedAt < this.#timeBudgetMs)
       && (byteLength <= this.#remainingBytes || this.#admittedBytes === 0)
     ) {
+      if (!this.#submittedWork) this.#startedAt = this.#now();
       this.#submittedWork = true;
       this.#admittedBytes += byteLength;
       this.#remainingBytes = Math.max(0, this.#remainingBytes - byteLength);

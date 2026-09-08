@@ -1,5 +1,41 @@
 # Preview-first SVG consumer verification
 
+## Direct-target working-tree verification (2026-09-08)
+
+The current automatic path skips intermediate mips, uses supplied preview
+coverage while target pages arrive, and shares small target rasters across
+pages within a 4 MiB root-local cache. Coarse source authority remains required
+when coarse is an actual visible target. This supersedes the older scheduling
+description below.
+
+`target-raster-probe.mjs` exports `runTargetRasterProbe()` for the dev server.
+It compares every pixel of four generated 256px SVG pages, including text and gutters,
+against a whole-image 512 x 280 reference. Chromium passed clamp, repeat, and
+mirrored-repeat with zero pixel difference and one SVG decode attempt per
+four-page target. Each source released all 573,440 cached bytes on disposal.
+Passing `2` tests a 1024 x 560 target spanning twelve pages and four shared
+regions, with a maximum channel error of one against the full-image reference.
+The native lifecycle probe uses a camera distance of 0.2 to exercise a target
+larger than the new 256px coverage page; refinement, failed detail, disposal,
+restoration, and failed-detail restoration pass, including pixel-identical
+preview retention on failure.
+
+`refinement-a10.json` records the subsequent page-granularity investigation.
+The final instrumented and uninstrumented runs both settle about 4.1 seconds
+after the scripted zoom, versus 16.1 seconds in the earlier uninstrumented
+128px-page run. Final SVG pages are 256px; authored and ordinary-raster pages
+are unchanged. All 172 current target pages are resident, with 227 retained
+pages including earlier views, and 69,222,400 atlas bytes. No page failures,
+growth failures, denied GPU claims, or context interruptions occurred. These
+are individual observations; startup can still hitch (351 ms maximum gap in
+the final uninstrumented run).
+
+The existing native root probes also passed refinement, optional-detail failure,
+last-claim cancellation, restoration, and failure/restoration. Failure retained
+pixel-identical preview coverage. These are browser correctness checks, not
+device performance claims. A10 workload results are recorded in
+[the capacity findings](../../docs/proposals/vt-capacity-a10-findings.md).
+
 Working-tree implementation, 2026-09-08, based on `5bb9ab6c`.
 
 Royal removes the automatic-VT option and attaches VT lazily when decoded
@@ -95,3 +131,46 @@ Physical desktop/mobile frame and input latency, a worker-capable SVG backend,
 occluded-stack demand, and a supported Basis KTX2 comparison remain outstanding.
 The current DOM rasterizer can still block on a complex SVG. This evidence does
 not establish an absolute hitch-free guarantee or a production speedup.
+## Atlas growth verification (2026-09-08)
+
+`growth-sync-a10.json` records the subsequent synchronization investigation.
+The final implementation yields between submitting work and creating its GPU
+fence, then polls without blocking and validates before publication. Final
+instrumented maxima for error checks, fence creation, and fence waits were
+about 1 ms each, versus the original 94 ms error-check wait. The run without
+timing wrappers retained all target pages and recorded a 146 ms gap near growth
+completion (257 ms maximum during startup), settling about 16.1 seconds after
+zoom. See the capacity findings for limitations and intermediate experiments.
+
+`atlas-copy-probe.mjs` exports `runAtlasCopyProbe()` for the Royal Vite page.
+It relocates four patterned pages between different atlas column counts and
+compares every channel, including alpha, for RGBA8 and SRGB8_ALPHA8. Chrome
+reported zero mismatches and GL errors, with the read framebuffer restored.
+
+`growth-a10.json` records overview and delayed zoom observations on the A10
+iPad using the same 273-piece fixture as the earlier direct-target runs.
+The overview uses 17,842,176 atlas bytes for 135 pages. Zooming the camera extent
+from 0.85 to 0.3 after 12 seconds grows to 71,368,704 atlas bytes, copying all
+135 existing pages and reaching all 583 currently demanded pages. The final
+697 resident pages include retained earlier detail. Both runs have zero
+growth/page failures, denied GPU claims, and context interruptions. These are
+single observations, not latency guarantees: the zoom run settles at 27.1
+seconds overall and records a 383 ms maximum rAF gap near the zoom transition.
+
+### Transformed VT shader regression
+
+`transformed-vt-probe.mjs` checks the report in Probability's
+`research/royal-linen-vt-shader-bug.md` (released Royal 0.0.23). The same linker
+failure was reproduced in Chromium against this checkout before the fix:
+`surfaceBaseColorTextureCoordinate` was declared by the fragment stage but omitted
+from the standard vertex stage for VT with nonidentity texture coordinates.
+Both vertex guards now include virtual base colour. Unlit already used the correct
+`TEXTURED` guard, and both program and draw owners already bind the UV uniforms.
+
+Run `runTransformedVtProbe()` from this module on the Royal Vite origin. It links
+production standard and unlit VT programs with identity and transformed UVs, then
+captures the production vertex outputs using transform feedback. UV0 and UV1 are
+swapped between artwork and the normal map, with independent artwork transforms
+and normal tiling of 1500 × 750. All six Chromium cases passed, with exact expected
+coordinates. This is a shader-level regression, not an end-to-end verification of
+Probability's Linen import or AVIF decoding.

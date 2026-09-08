@@ -195,7 +195,7 @@ visible. Degenerate or non-finite projections must fall back safely without
 unbounded demand.
 
 Perspective-varying triangles use bounded demand-only subdivision when sampled
-mip requirements differ. Each leaf requests its finest observed requirement;
+mip requirements differ. Each leaf requests its observed mip range;
 the subdivision never mutates or tessellates rendered geometry. Four fixed
 levels and caller-owned numeric scratch bound CPU, memory, and stack work while
 preventing a far corner of a two-triangle ground plane from forcing its close
@@ -204,12 +204,15 @@ analysis and uses the same path.
 
 The coarsest usable ancestor SHOULD be requested first. A finer page MUST NOT be
 published to the page table until its atlas upload is complete. Missing fine
-pages sample the closest resident ancestor. Sparse-addressing holes use the
+pages sample the closest resident ancestor. Added pages patch only their
+affected descendants in the CPU table, preserving finer resident mappings;
+eviction and changes to atlas columns require a full rebuild. Sparse-addressing holes use the
 nearest authored ancestor when one exists and otherwise use the ordinary or
 neutral fallback—never stale atlas contents.
 
-When current demand exceeds physical capacity, Royal drops complete fine mip
-levels until the retained working set fits. It does not keep an arbitrary
+When current demand exceeds physical capacity, Royal coarsens direct automatic
+targets or drops complete fine levels from authored ancestor chains until the
+retained working set fits. It does not keep an arbitrary
 spatial prefix at fine detail, because a stable uniformly coarser image is
 preferred to a hard moving boundary between sharp and ancestor-resolved areas.
 
@@ -272,10 +275,39 @@ source is no longer claimed.
 Optional base-color `GS_texture_svg` textures MUST publish usable raster preview
 coverage before SVG refinement requires full-source rasterization. The selected
 preview is fitted within 64 KiB of RGBA base storage and retains full-viewport
-UVs. Its coarsest VT page remains an ancestor fallback. Vector authority is read
+UVs. Automatic demand requests the current target mip levels and one coarsest
+coverage page, without requiring every intermediate mip. A supplied preview may
+populate that coverage page while finer target pages are prepared directly.
+Automatic VT bindings require resident coarse coverage so partial refinement
+cannot expose unmapped grey regions. When any visible occurrence actually needs
+the coarsest mip, it MUST receive source-authoritative pixels rather than remain
+bound to an enlarged preview, including when other occurrences need finer mips.
+All vector page work uses the background detail lane. The coarsest full image
+fits within one page, so one SVG rasterization plus canvas-generated gutters
+suffices when that image is the target. Vector authority is read
 and validated once on demand; it MUST NOT require a full ordinary SVG bitmap.
 A failed preview permits direct SVG recovery; failed optional detail keeps the
 preview. Required SVG and non-base-color uses preserve direct-source semantics.
+
+Automatic SVG sources use 256px pages with 2px gutters; ordinary raster sources
+retain 128px pages and authored VT retains its declared page size. Larger SVG
+pages reduce preparation/publication overhead without changing the requested
+texel density. The ordinary-raster eligibility threshold is unchanged.
+
+When admitted demand includes multiple pages at a mip whose whole image fits
+within 512px per axis, SVG preparation may rasterize that target once and crop
+its pages from shared pixels. Larger clamped SVG targets can share regions of
+two by two pages, at most 516px per axis including gutters. Fractional edge
+regions retain per-page rasterization so rounding cannot stretch all pages in
+a group. The root-owned SVG raster cache reserves at most
+4 MiB including in-flight decodes, separately from the 16 MiB pending-page
+ceiling. It evicts idle images, pins active consumers, closes rejected or
+discarded images, and releases source entries when demand or ownership ends.
+Single-page regions and larger wrapped targets retain bounded region rasterization. The cache
+does not rasterize intermediate levels or the full 16,384px logical extent.
+`automaticDecodedBytes` includes reserved and retained shared SVG raster bytes.
+Cached target pages are scheduled before cold reads can evict their rasters;
+they still use the existing bounded detail-preparation lane.
 
 At most one detail preparation executes per root. Pending page work reserves
 its decoded-pixel upper bound before starting, with a 16 MiB ceiling shared by
@@ -301,12 +333,39 @@ Compatible logical textures share one root-owned physical atlas pool. Pool
 compatibility is exact stored-page extent, compression class, and color space;
 samplers and page tables remain per logical texture. Manifest `physicalSlots`
 and `physicalByteBudget` cap that texture's resident working set rather than
-causing another atlas allocation. A pool targets the existing default 24-page
-physical footprint (and never more than 32 MiB), then yields to the stricter
-remaining root GPU budget. This keeps one VT's
-allocation unchanged and reduces memory for each additional compatible VT;
-pool growth requires separate measured justification. Diagnostics report
-`atlasPools` and `atlasBytes` separately from logical `residentPages`.
+causing another atlas allocation. RGBA pools start from visible demand rounded
+toward a power-of-two slot count, bounded by legal rectangular atlas dimensions.
+They grow as demand increases, within the remaining root GPU budget and a
+combined atlas allowance of 75% of that budget. The default root budget remains
+256 MiB. Both the old and replacement atlas count against it during migration;
+growth can therefore stop below the final allowance when temporary storage will
+not fit. Compressed ETC2 pools retain the bounded 32 MiB allocation policy.
+Unspecified per-texture limits allow use of the shared pool; they do not impose
+an additional 24-page ceiling.
+
+RGBA growth copies resident GPU pages without decoding them again. Copies and
+page uploads share the four-page frame limit and upload-byte/time admission.
+Growth preserves the column count when that layout fits the full planned
+capacity within legal dimensions, avoiding page-table rewrites in that case.
+The old atlas remains drawable until all copies complete, then bindings and
+page tables switch together. Allocation and each copy batch are flushed before
+yielding a frame; their completion fence is created on a later frame, then
+polled with a zero timeout. Error validation occurs only after completion,
+including the final copy batch before publication. This separation matters on
+WebKit, where creating a fence immediately after work can itself block. A
+failed fence or 120 unsuccessful frame polls abandons that replacement.
+Failed growth preserves the old atlas and retries
+only when demand or available capacity changes. Pools retain spare capacity
+until their final logical resource is released; shrinking and redistribution
+between existing pools are not implemented.
+
+Direct-target demand that exceeds a texture's admitted capacity is coarsened
+to complete parent targets. Collection exceeding the bounded demand workspace
+is repeated at a coarser minimum mip, avoiding a spatially partial prefix.
+Diagnostics report `atlasPools`, `atlasBytes` (including in-progress growth),
+`atlasGrowthFailures`, bounded `desiredPages`, capacity-fitted `admittedPages`,
+and `unresidentPages` separately from logical `residentPages`. Desired counts
+are measured after workspace coarsening; they are not unlimited ideal demand.
 
 Shared slots are identified by both resource and page identity. Cross-resource
 eviction invalidates the evicted logical mapping and republishes every dirty

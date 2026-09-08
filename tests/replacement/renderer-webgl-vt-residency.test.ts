@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseVirtualTextureManifest, virtualTexturePageKey } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
 import {
   selectVirtualTexturePoolSlot,
+  addVirtualTexturePageTablePage,
   writeVirtualTexturePageTable,
 } from "../../packages/renderer-webgl/src/virtual-texture/residency";
 
@@ -15,6 +16,27 @@ const manifest = parseVirtualTextureManifest({
 });
 
 describe("VT2 residency core", () => {
+  it("incrementally matches a rebuild for arbitrary insertion order and rectangular edges", () => {
+    const rectangular = parseVirtualTextureManifest({
+      borderTexels: 1, contractVersion: 2, pageSize: 128,
+      pages: { uriTemplate: "{mip}/{x}/{y}.png" }, virtualSize: [1025, 573],
+    });
+    const pages = rectangular.mipLayouts.flatMap((layout, mip) => Array.from({ length: layout.width * layout.height },
+      (_, index) => ({ mip, x: index % layout.width, y: Math.floor(index / layout.width) })));
+    // Fine entries deliberately precede some ancestors; overwriting a page
+    // also changes its slot without erasing any finer descendant mapping.
+    const order = [...pages.filter((_, i) => i % 2 === 0), ...pages.filter((_, i) => i % 2 !== 0), ...pages.slice(0, 5)];
+    const residents = new Map<number | string, number>();
+    const patched = new Uint8Array(rectangular.tableByteLength);
+    const rebuilt = new Uint8Array(rectangular.tableByteLength);
+    for (const [slot, page] of order.entries()) {
+      residents.set(virtualTexturePageKey(page), slot);
+      addVirtualTexturePageTablePage(rectangular, page, slot, 8, patched);
+      writeVirtualTexturePageTable(rectangular, residents, 8, rebuilt);
+      expect(patched).toEqual(rebuilt);
+    }
+  });
+
   it("resolves one retained lookup per logical page", () => {
     class CountedResidents extends Map<number | string, number> {
       gets = 0;

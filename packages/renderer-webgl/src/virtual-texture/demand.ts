@@ -35,6 +35,7 @@ export type VirtualTextureDemandSurface = Readonly<{
 }>;
 
 export type VirtualTextureDemandWorkspace = Readonly<{
+  ancestors: "all" | "coarsest";
   clipA: Float64Array;
   clipB: Float64Array;
   frustumPlanes: Float32Array;
@@ -47,7 +48,7 @@ export type VirtualTextureDemandWorkspace = Readonly<{
   subdivision: Float64Array;
   xs: Uint32Array;
   ys: Uint32Array;
-}> & { count: number; overflow: boolean };
+}> & { count: number; overflow: boolean; coarsestTarget: boolean; minimumMip: number };
 
 const CLIP_VERTEX_COMPONENTS = 6;
 const MAX_CLIPPED_VERTICES = 12;
@@ -55,11 +56,15 @@ const MAX_DEMAND_SUBDIVISION_DEPTH = 4;
 
 export const createVirtualTextureDemandWorkspace = (
   maxPages: number,
+  ancestors: "all" | "coarsest" = "all",
 ): VirtualTextureDemandWorkspace => {
   if (!Number.isSafeInteger(maxPages) || maxPages < 1) {
     throw new RangeError("Royal VT demand capacity must be a positive safe integer");
   }
   return {
+    ancestors,
+    coarsestTarget: false,
+    minimumMip: 0,
     clipA: new Float64Array(MAX_CLIPPED_VERTICES * CLIP_VERTEX_COMPONENTS),
     clipB: new Float64Array(MAX_CLIPPED_VERTICES * CLIP_VERTEX_COMPONENTS),
     count: 0,
@@ -81,6 +86,7 @@ export const createVirtualTextureDemandWorkspace = (
 
 export const resetVirtualTextureDemand = (workspace: VirtualTextureDemandWorkspace): void => {
   workspace.count = 0;
+  workspace.coarsestTarget = false;
   workspace.keys.clear();
   workspace.overflow = false;
 };
@@ -97,6 +103,32 @@ export const truncateVirtualTextureDemand = (
     throw new RangeError("Royal VT demand capacity must be a positive safe integer");
   }
   if (workspace.count <= capacity) return;
+  if (workspace.ancestors === "coarsest") {
+    // Direct targets omit intermediate levels. Synthesize a feasible parent
+    // target instead of discarding all detail down to the coverage page.
+    while (workspace.count > capacity) {
+      let finest = Infinity;
+      for (let index = 0; index < workspace.count; index += 1) finest = Math.min(finest, workspace.mips[index]!);
+      let target = 0;
+      workspace.keys.clear();
+      for (let index = 0; index < workspace.count; index += 1) {
+        const coarsen = workspace.mips[index] === finest;
+        const mip = workspace.mips[index]! + (coarsen ? 1 : 0);
+        const x = coarsen ? Math.floor(workspace.xs[index]! / 2) : workspace.xs[index]!;
+        const y = coarsen ? Math.floor(workspace.ys[index]! / 2) : workspace.ys[index]!;
+        const key = virtualTexturePageKeyParts(mip, x, y);
+        if (workspace.keys.has(key)) continue;
+        workspace.keys.add(key);
+        workspace.mips[target] = mip;
+        workspace.xs[target] = x;
+        workspace.ys[target] = y;
+        target += 1;
+      }
+      workspace.count = target;
+    }
+    workspace.overflow = true;
+    return;
+  }
   let minimumMip = 0;
   let maximumMip = 0;
   for (let index = 0; index < workspace.count; index += 1) {
@@ -155,7 +187,9 @@ const addPageWithAncestors = (
   x: number,
   y: number,
 ): void => {
+  if (mip === manifest.mipCount - 1) workspace.coarsestTarget = true;
   for (let ancestorMip = manifest.mipCount - 1; ancestorMip >= mip; ancestorMip -= 1) {
+    if (workspace.ancestors === "coarsest" && ancestorMip !== manifest.mipCount - 1 && ancestorMip !== mip) continue;
     const divisor = 2 ** (ancestorMip - mip);
     addPage(workspace, ancestorMip, Math.floor(x / divisor), Math.floor(y / divisor));
   }
@@ -498,7 +532,7 @@ const addClippedTriangleDemand = (
       Math.hypot(duDx * manifest.width, dvDx * manifest.height),
       Math.hypot(duDy * manifest.width, dvDy * manifest.height),
     );
-    const mip = Math.max(0, Math.min(
+    const mip = Math.max(workspace.minimumMip, Math.min(
       manifest.mipCount - 1,
       Math.floor(Math.log2(Math.max(1, rho))),
     ));
@@ -571,10 +605,12 @@ const addClippedTriangleDemand = (
     }
     return;
   }
-  addWrappedRange(
+  // Perspective can require several target mips within this final subdivision.
+  // Keep those actual levels even when intermediate ancestors are omitted.
+  for (let targetMip = minimumMip; targetMip <= maximumMip; targetMip += 1) addWrappedRange(
     workspace,
     manifest,
-    minimumMip,
+    targetMip,
     Math.min(
       screen[2]! / screen[4]!,
       screen[7]! / screen[9]!,
@@ -704,7 +740,9 @@ export const collectVirtualTextureDemand = (
   surfaces: readonly VirtualTextureDemandSurface[],
   views: readonly VirtualTextureDemandView[],
   sampler: CanonicalTextureSampler,
+  minimumMip = 0,
 ): void => {
+  workspace.minimumMip = minimumMip;
   for (const view of views) {
     frustumPlanesInto(workspace.frustumPlanes, view.viewProjection);
     for (const surface of surfaces) {

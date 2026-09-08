@@ -8,6 +8,7 @@ import type {
 } from "../texture/source";
 import type { ParsedSvgTextureSource } from "../texture/svg-source";
 import { decodeBrowserImageElement } from "../texture/browser-image-element";
+import { SvgRasterCache } from "./svg-raster-cache";
 import {
   createGeneratedVirtualTextureManifest,
   type VirtualTexturePageId,
@@ -18,6 +19,7 @@ import type {
 } from "./browser-page-source";
 
 const AUTOMATIC_SVG_MAX_LONG_EDGE = 16_384;
+const AUTOMATIC_SVG_PAGE_SIZE = 256;
 
 type AxisSegment = Readonly<{
   destinationExtent: number;
@@ -280,6 +282,18 @@ const drawRasterizedSvgRegion = (
   context.restore();
 };
 
+/** One bounded image covers a clamped page and its edge/corner gutters. */
+const clampedRasterAxis = (segments: readonly AxisSegment[], texelsPerPixel: number): AxisSegment => {
+  let start = Infinity;
+  let end = -Infinity;
+  for (const segment of segments) {
+    start = Math.min(start, segment.sourceStart);
+    end = Math.max(end, segment.sourceStart + segment.sourceExtent);
+  }
+  return { sourceStart: start, sourceExtent: end - start, destinationStart: 0,
+    destinationExtent: Math.max(1, Math.ceil((end - start) / texelsPerPixel)), reversed: false };
+};
+
 const exactPageSegment = (
   axis: readonly AxisSegment[],
   storedPageSize: number,
@@ -319,7 +333,7 @@ const automaticSvgManifest = (
     borderTexels: AUTOMATIC_VT_BORDER_TEXELS,
     colorSpace,
     height,
-    pageSize: AUTOMATIC_VT_PAGE_SIZE,
+    pageSize: AUTOMATIC_SVG_PAGE_SIZE,
     width,
   });
 };
@@ -329,12 +343,24 @@ export const createAutomaticSvgPreviewPageSource = (
   preview: DecodedImageTextureSource & Readonly<{ svgPreview: NonNullable<DecodedImageTextureSource["svgPreview"]> }>,
   sampler: CanonicalTextureSampler,
   colorSpace: "linear" | "srgb",
+  rasterCache = new SvgRasterCache(),
 ): VirtualTexturePageSource => {
   const manifest = automaticSvgManifest(preview.width, preview.height, colorSpace);
   let vector: VirtualTexturePageSource | undefined;
   let closed = false;
+  let demand: readonly VirtualTexturePageId[] = [];
   return {
     manifest,
+    hasCachedPage: (page) => vector?.hasCachedPage?.(page) ?? false,
+    setDemand: (pages) => {
+      demand = pages;
+      vector?.setDemand?.(pages);
+    },
+    readPreview: async (page, signal) => {
+      if (closed || signal.aborted) throw new DOMException("SVG preview was aborted", "AbortError");
+      return renderAutomaticPage(manifest, sampler, preview.source as CanvasImageSource,
+        preview.width / manifest.width, preview.height / manifest.height, page, signal);
+    },
     close: () => {
       closed = true;
       vector?.close?.();
@@ -342,7 +368,9 @@ export const createAutomaticSvgPreviewPageSource = (
     },
     read: async (page, signal) => {
       if (closed || signal.aborted) throw new DOMException("SVG preview was aborted", "AbortError");
-      if (page.mip === manifest.mipCount - 1) {
+      // The portable image is a loading/error fallback, not authoritative
+      // coarse detail. Small on-screen pieces may never request a finer mip.
+      if (page.mip === manifest.mipCount - 1 && preview.svgPreview.error !== undefined) {
         return renderAutomaticPage(
           manifest, sampler, preview.source as CanvasImageSource,
           preview.width / manifest.width, preview.height / manifest.height,
@@ -351,7 +379,10 @@ export const createAutomaticSvgPreviewPageSource = (
       }
       const encoded = await preview.svgPreview.load();
       if (closed || signal.aborted) throw new DOMException("SVG refinement was aborted", "AbortError");
-      vector ??= createAutomaticSvgPageSource(encoded, preview.width, preview.height, sampler, colorSpace);
+      if (vector === undefined) {
+        vector = createAutomaticSvgPageSource(encoded, preview.width, preview.height, sampler, colorSpace, rasterCache);
+        vector.setDemand?.(demand);
+      }
       return vector.read(page, signal);
     },
   };
@@ -363,23 +394,157 @@ export const createAutomaticSvgPageSource = (
   intrinsicHeight: number,
   sampler: CanonicalTextureSampler,
   colorSpace: "linear" | "srgb",
+  rasterCache = new SvgRasterCache(),
 ): VirtualTexturePageSource => {
   const manifest = automaticSvgManifest(intrinsicWidth, intrinsicHeight, colorSpace);
   const { width, height } = manifest;
   let parsed: ParsedSvgTextureSource | undefined = encodedSource.parsed;
   let closed = false;
   let originClean = false;
+  const abort = new AbortController();
+  const sharedMips = new Map<number, object>();
+  const regionPages = 512 / manifest.pageSize;
+  const sharedRegions = new Map<string, { x: AxisSegment; y: AxisSegment }>();
+  const regionFor = (page: VirtualTexturePageId): string => `${page.mip}:${Math.floor(page.x / regionPages)}:${Math.floor(page.y / regionPages)}`;
+  const regionAxis = (size: number, startPage: number, scale: number): AxisSegment => {
+    const start = Math.max(0, (startPage * manifest.pageSize - manifest.borderTexels) * scale);
+    const end = Math.min(size, ((startPage + regionPages) * manifest.pageSize + manifest.borderTexels) * scale);
+    return { sourceStart: start, sourceExtent: end - start, destinationStart: 0,
+      destinationExtent: Math.ceil((end - start) / scale), reversed: false };
+  };
   return {
+    hasCachedPage: (page) => {
+      const key = sharedMips.get(page.mip) ?? sharedRegions.get(regionFor(page));
+      return key !== undefined && rasterCache.has(key);
+    },
+    setDemand: (pages) => {
+      const counts = new Map<number, number>();
+      for (const page of pages) counts.set(page.mip, (counts.get(page.mip) ?? 0) + 1);
+      for (const [mip, key] of sharedMips) {
+        if ((counts.get(mip) ?? 0) <= 1) {
+          rasterCache.delete(key);
+          sharedMips.delete(mip);
+        }
+      }
+      for (const [mip, count] of counts) {
+        if (count > 1 && Math.ceil(Math.max(width, height) / 2 ** mip) <= 512 && !sharedMips.has(mip)) {
+          sharedMips.set(mip, {});
+        }
+      }
+      const groups = new Map<string, { page: VirtualTexturePageId; count: number }>();
+      if (sampler.wrapS === "clamp-to-edge" && sampler.wrapT === "clamp-to-edge") {
+        for (const page of pages) {
+          if (Math.ceil(Math.max(width, height) / 2 ** page.mip) <= 512) continue;
+          const key = regionFor(page);
+          const group = groups.get(key);
+          if (group === undefined) groups.set(key, { page, count: 1 });
+          else group.count += 1;
+        }
+      }
+      for (const [key, region] of sharedRegions) {
+        if ((groups.get(key)?.count ?? 0) <= 1) {
+          rasterCache.delete(region);
+          sharedRegions.delete(key);
+        }
+      }
+      for (const [key, { page, count }] of groups) {
+        if (count <= 1 || sharedRegions.has(key)) continue;
+        const scale = 2 ** page.mip;
+        const region = {
+          x: regionAxis(width, Math.floor(page.x / regionPages) * regionPages, scale),
+          y: regionAxis(height, Math.floor(page.y / regionPages) * regionPages, scale),
+        };
+        // Rounding a partial edge raster would stretch every page in its
+        // group. Keep those edges on the existing per-page path instead.
+        if (region.x.sourceExtent / scale !== region.x.destinationExtent
+          || region.y.sourceExtent / scale !== region.y.destinationExtent) continue;
+        sharedRegions.set(key, region);
+      }
+    },
     close: () => {
       closed = true;
       parsed = undefined;
+      abort.abort();
+      for (const key of sharedMips.values()) rasterCache.delete(key);
+      sharedMips.clear();
+      for (const key of sharedRegions.values()) rasterCache.delete(key);
+      sharedRegions.clear();
     },
     manifest,
     read: async (page, signal) => {
       if (closed) throw new Error("Royal automatic SVG VT page source is closed");
+      if (signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
       const source = parsed!;
       const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
       const sourceTexelsPerMipTexel = 2 ** page.mip;
+      const imageWidth = Math.max(1, Math.ceil(width / sourceTexelsPerMipTexel));
+      const imageHeight = Math.max(1, Math.ceil(height / sourceTexelsPerMipTexel));
+      const region = sharedRegions.get(regionFor(page));
+      if (region !== undefined) {
+        const cached = await rasterCache.use(region, region.x.destinationExtent * region.y.destinationExtent * 4,
+          () => rasterizeSvgRegion(source, width, height, region.x, region.y, abort.signal),
+          (decoded) => {
+            if (closed || signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
+            if (!originClean) {
+              proveOriginClean(decoded.source as CanvasImageSource);
+              originClean = true;
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = storedPageSize;
+            canvas.height = storedPageSize;
+            const context = canvas.getContext("2d", { alpha: true });
+            if (context === null) throw new Error("Royal automatic SVG VT could not allocate a page canvas");
+            context.imageSmoothingEnabled = true;
+            context.imageSmoothingQuality = "high";
+            const xs = planAutomaticVirtualTextureAxis((page.x * manifest.pageSize - manifest.borderTexels) * sourceTexelsPerMipTexel,
+              storedPageSize * sourceTexelsPerMipTexel, width, storedPageSize, sampler.wrapS);
+            const ys = planAutomaticVirtualTextureAxis((page.y * manifest.pageSize - manifest.borderTexels) * sourceTexelsPerMipTexel,
+              storedPageSize * sourceTexelsPerMipTexel, height, storedPageSize, sampler.wrapT);
+            for (const y of ys) for (const x of xs) drawSegment(context, decoded.source as CanvasImageSource,
+              { ...x, sourceStart: x.sourceStart - region.x.sourceStart },
+              { ...y, sourceStart: y.sourceStart - region.y.sourceStart },
+              region.x.destinationExtent / region.x.sourceExtent, region.y.destinationExtent / region.y.sourceExtent);
+            return { kind: "image" as const, source: canvas, close: () => { canvas.width = 1; canvas.height = 1; } };
+          });
+        if (cached !== undefined) return cached;
+      }
+      const rasterKey = sharedMips.get(page.mip);
+      if (rasterKey !== undefined) {
+        const cached = await rasterCache.use(rasterKey, imageWidth * imageHeight * 4,
+          () => rasterizeSvgRegion(source, width, height,
+            { sourceStart: 0, sourceExtent: width, destinationStart: 0, destinationExtent: imageWidth, reversed: false },
+            { sourceStart: 0, sourceExtent: height, destinationStart: 0, destinationExtent: imageHeight, reversed: false },
+            abort.signal),
+          (decoded) => {
+            if (closed || signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
+            if (!originClean) {
+              proveOriginClean(decoded.source as CanvasImageSource);
+              originClean = true;
+            }
+            return renderAutomaticPage(manifest, sampler, decoded.source as CanvasImageSource,
+              imageWidth / width, imageHeight / height, page, signal);
+          });
+        if (cached !== undefined) return cached;
+      }
+      if (page.mip === manifest.mipCount - 1) {
+        // The whole coarsest image fits in one page. Rasterize once, then
+        // populate wrapped/clamped gutters without nine separate SVG decodes.
+        const decoded = await rasterizeSvgRegion(source, width, height,
+          { sourceStart: 0, sourceExtent: width, destinationStart: 0, destinationExtent: imageWidth, reversed: false },
+          { sourceStart: 0, sourceExtent: height, destinationStart: 0, destinationExtent: imageHeight, reversed: false },
+          signal);
+        try {
+          if (closed || signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
+          if (!originClean) {
+            proveOriginClean(decoded.source as CanvasImageSource);
+            originClean = true;
+          }
+          return renderAutomaticPage(manifest, sampler, decoded.source as CanvasImageSource,
+            imageWidth / width, imageHeight / height, page, signal);
+        } finally {
+          decoded.close?.();
+        }
+      }
       const sourceX = (page.x * manifest.pageSize - manifest.borderTexels)
         * sourceTexelsPerMipTexel;
       const sourceY = (page.y * manifest.pageSize - manifest.borderTexels)
@@ -395,9 +560,15 @@ export const createAutomaticSvgPageSource = (
       const exactY = exactPageSegment(ys, storedPageSize);
       if (exactX !== undefined && exactY !== undefined) {
         const decoded = await rasterizeSvgRegion(source, width, height, exactX, exactY, signal);
-        if (!originClean) {
-          proveOriginClean(decoded.source as CanvasImageSource);
-          originClean = true;
+        try {
+          if (closed || signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
+          if (!originClean) {
+            proveOriginClean(decoded.source as CanvasImageSource);
+            originClean = true;
+          }
+        } catch (error) {
+          decoded.close?.();
+          throw error;
         }
         return {
           close: () => decoded.close?.(),
@@ -413,12 +584,31 @@ export const createAutomaticSvgPageSource = (
       context.clearRect(0, 0, storedPageSize, storedPageSize);
       context.imageSmoothingEnabled = true;
       context.imageSmoothingQuality = "high";
-      for (const y of ys) for (const x of xs) {
-        const decoded = await rasterizeSvgRegion(source, width, height, x, y, signal);
+      if (sampler.wrapS === "clamp-to-edge" && sampler.wrapT === "clamp-to-edge") {
+        const regionX = clampedRasterAxis(xs, sourceTexelsPerMipTexel);
+        const regionY = clampedRasterAxis(ys, sourceTexelsPerMipTexel);
+        const decoded = await rasterizeSvgRegion(source, width, height, regionX, regionY, signal);
         try {
-          drawRasterizedSvgRegion(context, decoded, x, y);
+          if (closed || signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
+          for (const y of ys) for (const x of xs) {
+            drawSegment(context, decoded.source as CanvasImageSource,
+              { ...x, sourceStart: x.sourceStart - regionX.sourceStart },
+              { ...y, sourceStart: y.sourceStart - regionY.sourceStart },
+              regionX.destinationExtent / regionX.sourceExtent,
+              regionY.destinationExtent / regionY.sourceExtent);
+          }
         } finally {
           decoded.close?.();
+        }
+      } else {
+        for (const y of ys) for (const x of xs) {
+          const decoded = await rasterizeSvgRegion(source, width, height, x, y, signal);
+          try {
+            if (closed || signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
+            drawRasterizedSvgRegion(context, decoded, x, y);
+          } finally {
+            decoded.close?.();
+          }
         }
       }
       if (!originClean) {

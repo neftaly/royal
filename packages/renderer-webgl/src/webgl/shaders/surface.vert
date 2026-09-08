@@ -30,7 +30,7 @@ vec2 transformedTextureCoordinate(vec4 row0, vec4 row1) {
 }
 #endif
 #endif
-#ifdef BASE_COLOR_TEXTURED
+#if defined(BASE_COLOR_TEXTURED) || defined(VIRTUAL_BASE_COLOR_TEXTURED)
 #ifndef IDENTITY_TEXTURE_COORDINATES
 uniform vec4 baseColorTextureCoordinates0;
 uniform vec4 baseColorTextureCoordinates1;
@@ -93,7 +93,7 @@ void main() {
 #ifdef IDENTITY_TEXTURE_COORDINATES
   surfaceTextureCoordinate = textureCoordinate0;
 #else
-#ifdef BASE_COLOR_TEXTURED
+#if defined(BASE_COLOR_TEXTURED) || defined(VIRTUAL_BASE_COLOR_TEXTURED)
   surfaceBaseColorTextureCoordinate = transformedTextureCoordinate(
     baseColorTextureCoordinates0,
     baseColorTextureCoordinates1

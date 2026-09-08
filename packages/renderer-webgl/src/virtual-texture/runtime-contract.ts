@@ -72,9 +72,17 @@ export type VirtualTextureRuntimeSnapshot = Readonly<{
   atlasPools: number;
   /** Persistent GPU bytes claimed by physical atlas pools. */
   atlasBytes: number;
+  /** Failed growth attempts; existing atlas coverage is retained. */
+  atlasGrowthFailures: number;
+  /** Bounded requested count after workspace coarsening, before capacity fitting. */
+  desiredPages: number;
+  /** Page count after fitting demand to current per-texture capacity. */
+  admittedPages: number;
+  /** Admitted demand without resident authoritative coverage yet, including failures. */
+  unresidentPages: number;
   /** Unique ordinary base-color assets considered by the latest scene. */
   automaticCandidates: number;
-  /** Estimated CPU bytes retained by current automatic raster VT leases. */
+  /** Estimated automatic raster leases plus reserved/retained shared SVG rasters. */
   automaticDecodedBytes: number;
   /** Latest-scene candidates rejected by format, size, or decoded-memory policy. */
   automaticIneligible: number;
@@ -109,6 +117,10 @@ export const idleVirtualTextureRuntimeSnapshot = (
   admittedUploadBytes: 0,
   atlasBytes: 0,
   atlasPools: 0,
+  atlasGrowthFailures: 0,
+  desiredPages: 0,
+  admittedPages: 0,
+  unresidentPages: 0,
   automaticCandidates: 0,
   automaticDecodedBytes: 0,
   automaticIneligible: 0,

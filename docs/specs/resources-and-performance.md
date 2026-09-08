@@ -69,10 +69,12 @@ starts while detail remains queued, one detail job starts. Active work is never
 preempted. Detail concurrency is capped at one, leaving foreground capacity
 available whenever the root job ceiling exceeds one.
 
-Root upload admission also observes a 2 ms elapsed-work target, including VT
+Root upload admission also observes a 4 ms elapsed-work target, including VT
 atlas/page-table allocation. One indivisible operation may exceed the target;
 further work waits for another frame. This does not impose a hard frame/input
 latency bound or interrupt driver calls.
+The elapsed-work timer starts at the first admitted upload or allocation, so
+unrelated frame preparation cannot consume the upload allowance in advance.
 
 A non-visual glTF claim enters this same foreground preparation lane. It does
 not create a parallel preload cache, scheduler, or retention policy. Image

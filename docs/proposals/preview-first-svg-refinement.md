@@ -212,3 +212,51 @@ Ship when preview completeness improves and refinement stays within the agreed
 device frame/input budget without unbounded memory or visible blanking. Keep
 final-detail time separate: delaying refinement is allowed to protect input,
 but permanently starving visible detail is not.
+
+## Probability follow-up: model deduplication (2026-09-08)
+
+Probability's Royal 0.0.23 integration now exercises preview-first loading and
+always-on automatic VT. Its latest full Settlers investigation found a producer
+identity bug, not a missing renderer geometry cache: generated mesh/node labels
+included copy-specific filenames. A saved export contained 270 glTF files but
+only 56 distinct documents excluding those generated labels. Newly generated
+models now use a neutral internal label; exact-byte Automerge FS aliases share
+the whole model. Original SVG titles and imported glTF names remain untouched.
+
+The updated fixture export is `/tmp/probability-model-dedup.zip`: 56 glTF
+payloads, 281 distinct source paths/import identities and 273 pieces, with no
+missing model references. Subset-update browser coverage verifies that changing
+one source separates its model while its formerly shared sibling is retained.
+This fixture is more representative for future renderer measurements than the
+older export with 270 redundant model roots. There are still 36 unique geometry
+tasks and 61 ordinary preview/image resources, so total geometry/image residency
+need not shrink in proportion to the number of glTF roots.
+
+Frozen SVG input fingerprint (Probability benchmark's paths/base64-bytes SHA-256):
+`63a1abc5317fc0f4bb0c11b483bafb27047a9cc3863fbef36b898a1202c2f544`.
+Through literal root `pnpm dev`, local-only persistence and headless Chromium:
+
+- Before whole-model sharing, two recent imports took 31.331 s and 35.684 s.
+- With sharing: Import completion 20.797 s; first physically positioned pieces
+  13.465 s; all 273 physically positioned 15.671 s; visual settlement 15.731 s.
+- The overlapping durable flush took 8.429 s; do not add it to import time or
+  interpret it as synchronous persistence CPU time. Unchanged re-import 5.777 s.
+- A 909 ms longest task and roughly 950 ms maximum frame gap remain. Four
+  requested VT detail pages were pending at the captured resource snapshot.
+
+These are single observations on a shared host, not physical-device frame-time
+percentiles. App readiness and `aria-busy` are not proof of GPU presentation or
+INP. Profiles/results: `/tmp/probability-model-dedup-{initial,unchanged}.{json,cpuprofile}`.
+The producer launches model reads in 32-item browser-task batches and memoizes
+unchanged model-preparation subscribers. The duplicate-conflict-validation
+optimization included in these historical measurements was subsequently
+reverted: Automerge/persistence changes are out of scope. Storage batching and
+initial-folder-population experiments were also removed. None of the retained
+changes lower SVG resolution or bypass the durable save barrier.
+
+Remaining profiling should distinguish app document commit/persistence from
+renderer preparation/publication and GPU submission. The CPU profiles include
+substantial unattributed native `(program)` time; it must not automatically be
+attributed to SVG decoding. A separate, higher-overhead native timeline is at
+`/tmp/probability-native-trace-initial.trace.json` (before the whole-model fix).
+No second application VT scheduler or additional preview codec was introduced.

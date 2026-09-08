@@ -739,7 +739,7 @@ export class CanvasRoot implements RendererRoot {
       this.#gltfPreparer = construction.own(lazyBrowserGltfPreparer(
         asyncPreparationJobLimit,
       ));
-      this.#frameUploadBudget = new FrameUploadBudgetOwner(frameUploadByteBudget, 2, platform.now);
+      this.#frameUploadBudget = new FrameUploadBudgetOwner(frameUploadByteBudget, 4, platform.now);
       this.#idleVirtualTextureRuntimeSnapshot = idleVirtualTextureRuntimeSnapshot(
         frameUploadByteBudget,
       );
@@ -1709,18 +1709,22 @@ export class CanvasRoot implements RendererRoot {
       if (activation === undefined) return;
       const runtime = module.createBrowserVirtualTextureRuntime(
         this.#gl,
-        (asset) => {
+        (asset, presentationChanged) => {
           if (this.#disposed) return;
           this.#publishVirtualTexture(asset);
-          this.#invalidatePresentation();
+          if (presentationChanged) this.#invalidatePresentation();
+          else this.#publish();
         },
         this.#persistentGpuBudget,
         this.#asyncPreparation.runForeground,
         {
           acquireDecoded: (asset) => this.#textureAssets.acquireDecoded(asset),
           decoded: (asset) => this.#textureAssets.decoded(asset),
-          onChanged: () => {
-            if (!this.#disposed) this.#invalidatePresentation();
+          onChanged: (presentationChanged) => {
+            if (!this.#disposed) {
+              if (presentationChanged) this.#invalidatePresentation();
+              else this.#publish();
+            }
           },
         },
         this.#frameUploadBudget,

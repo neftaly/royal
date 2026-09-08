@@ -48,7 +48,7 @@ export async function runSvgPreviewProbe(renderer, core, mode = 'refine') {
     const model = core.gltf({ src: '/fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf' });
     root.setSize({ cssHeight: 384, cssWidth: 384, pixelRatio: 1 });
     root.setScene(core.scene({
-      camera: core.perspectiveCamera({ position: [0, 0, 0.4] }),
+      camera: core.perspectiveCamera({ position: [0, 0, 0.2] }),
       clearColor: [0, 0, 0, 1], nodes: [model],
     }));
     await wait(() => detailSignal !== undefined && snapshot().resources.virtualTextures.residentPages > 0, 'preview coverage while SVG read is held');

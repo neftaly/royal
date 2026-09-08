@@ -1,0 +1,1359 @@
+{
+  "regions-profile": {
+    "report": {
+      "info": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Safari/605.1.15",
+        "width": 768,
+        "height": 954,
+        "dpr": 2,
+        "pieces": 273,
+        "capabilities": {
+          "maxTextureSize": 16384,
+          "etc2": true,
+          "astc": true
+        }
+      },
+      "errors": [],
+      "settledMs": 26069,
+      "last": {
+        "ms": 45078.00000000001,
+        "frame": 620,
+        "copyCalls": 135,
+        "vt": {
+          "admittedUploadBytes": 157076,
+          "atlasBytes": 71368704,
+          "atlasPools": 1,
+          "atlasGrowthFailures": 0,
+          "desiredPages": 583,
+          "admittedPages": 583,
+          "unresidentPages": 0,
+          "automaticCandidates": 60,
+          "automaticDecodedBytes": 4917760,
+          "automaticIneligible": 0,
+          "automaticResources": 60,
+          "automaticWaiting": 0,
+          "deferredUploads": 0,
+          "failedPages": 0,
+          "pageRequests": 697,
+          "pendingPages": 0,
+          "pendingPageBytes": 0,
+          "pendingPageByteLimit": 16777216,
+          "residentPages": 697,
+          "uploadedPages": 697,
+          "uploadBudgetBytes": 33554432
+        },
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "gpu": {
+          "budgetBytes": 268435456,
+          "deniedClaims": 0,
+          "retainedBytes": 77947649
+        },
+        "asset": {
+          "bounds": {
+            "max": [
+              0.4204990863800049,
+              0.0010000000474974513,
+              0.296999990940094
+            ],
+            "min": [
+              -0.4204990863800049,
+              -0.0010000000474974513,
+              -0.296999990940094
+            ]
+          },
+          "lightCount": 0,
+          "nodeCount": 1,
+          "primitiveCount": 3,
+          "sceneIndex": 0,
+          "scenes": [
+            {
+              "index": 0
+            }
+          ],
+          "status": "ready",
+          "timings": {
+            "externalResourceReadDurationMs": 541,
+            "firstDrawableAfterMs": 1361,
+            "preparationQueueDurationMs": 114,
+            "preparationDurationMs": 590,
+            "sourceReadDurationMs": 112,
+            "sourceReadStartedAfterMs": 4,
+            "imagesCompleteAfterMs": 1363
+          },
+          "textures": {
+            "fallback": 0,
+            "failed": 0,
+            "loading": 0,
+            "ready": 2,
+            "total": 2
+          },
+          "variantNames": []
+        }
+      },
+      "gapStats": {
+        "max": 313,
+        "p95": 38,
+        "over50": 27,
+        "count": 2352,
+        "worst": [
+          {
+            "ms": 1664,
+            "duration": 313
+          },
+          {
+            "ms": 798,
+            "duration": 255
+          },
+          {
+            "ms": 1863,
+            "duration": 199
+          },
+          {
+            "ms": 2025,
+            "duration": 162
+          },
+          {
+            "ms": 2241,
+            "duration": 154
+          },
+          {
+            "ms": 13990,
+            "duration": 148
+          },
+          {
+            "ms": 12256,
+            "duration": 122
+          },
+          {
+            "ms": 2362,
+            "duration": 121
+          },
+          {
+            "ms": 2466,
+            "duration": 104
+          },
+          {
+            "ms": 6226,
+            "duration": 103
+          }
+        ]
+      }
+    },
+    "costs": {
+      "getParameter": {
+        "count": 132,
+        "total": 2,
+        "max": 1
+      },
+      "drawImage": {
+        "count": 1752,
+        "total": 38.00000000000114,
+        "max": 6
+      },
+      "getImageData": {
+        "count": 119,
+        "total": 419.00000000000864,
+        "max": 26
+      },
+      "linkProgram": {
+        "count": 26,
+        "total": 1,
+        "max": 1
+      },
+      "texStorage2D": {
+        "count": 125,
+        "total": 0,
+        "max": 0
+      },
+      "texSubImage2D": {
+        "count": 5006,
+        "total": 1126.0000000000264,
+        "max": 32.000000000000455
+      },
+      "generateMipmap": {
+        "count": 61,
+        "total": 0,
+        "max": 0
+      },
+      "getProgramParameter": {
+        "count": 23,
+        "total": 116.99999999999818,
+        "max": 13
+      },
+      "getUniformLocation": {
+        "count": 217,
+        "total": 15.999999999999545,
+        "max": 1
+      },
+      "drawElements": {
+        "count": 16799,
+        "total": 18.000000000004547,
+        "max": 1.000000000003638
+      },
+      "checkFramebufferStatus": {
+        "count": 37,
+        "total": 2.000000000001819,
+        "max": 1.000000000001819
+      },
+      "drawArrays": {
+        "count": 3,
+        "total": 0,
+        "max": 0
+      },
+      "getError": {
+        "count": 39,
+        "total": 1.999999999998181,
+        "max": 1
+      },
+      "flush": {
+        "count": 76,
+        "total": 0,
+        "max": 0
+      },
+      "fenceSync": {
+        "count": 38,
+        "total": 4,
+        "max": 1.000000000001819
+      },
+      "clientWaitSync": {
+        "count": 38,
+        "total": 2,
+        "max": 1
+      },
+      "cloneNode": {
+        "count": 110,
+        "total": 29.999999999987267,
+        "max": 3
+      },
+      "serializeToString": {
+        "count": 110,
+        "total": 30.99999999999909,
+        "max": 2
+      },
+      "copyTexSubImage2D": {
+        "count": 135,
+        "total": 0,
+        "max": 0
+      }
+    }
+  },
+  "regions-budget-profile": {
+    "report": {
+      "info": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+        "width": 768,
+        "height": 954,
+        "dpr": 2,
+        "pieces": 273,
+        "capabilities": {
+          "maxTextureSize": 16384,
+          "etc2": true,
+          "astc": true
+        }
+      },
+      "errors": [],
+      "settledMs": 27093,
+      "last": {
+        "ms": 45102,
+        "frame": 553,
+        "copyCalls": 135,
+        "vt": {
+          "admittedUploadBytes": 157076,
+          "atlasBytes": 71368704,
+          "atlasPools": 1,
+          "atlasGrowthFailures": 0,
+          "desiredPages": 583,
+          "admittedPages": 583,
+          "unresidentPages": 0,
+          "automaticCandidates": 60,
+          "automaticDecodedBytes": 4917760,
+          "automaticIneligible": 0,
+          "automaticResources": 60,
+          "automaticWaiting": 0,
+          "deferredUploads": 0,
+          "failedPages": 0,
+          "pageRequests": 697,
+          "pendingPages": 0,
+          "pendingPageBytes": 0,
+          "pendingPageByteLimit": 16777216,
+          "residentPages": 697,
+          "uploadedPages": 697,
+          "uploadBudgetBytes": 33554432
+        },
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "gpu": {
+          "budgetBytes": 268435456,
+          "deniedClaims": 0,
+          "retainedBytes": 77947649
+        },
+        "asset": {
+          "bounds": {
+            "max": [
+              0.4204990863800049,
+              0.0010000000474974513,
+              0.296999990940094
+            ],
+            "min": [
+              -0.4204990863800049,
+              -0.0010000000474974513,
+              -0.296999990940094
+            ]
+          },
+          "lightCount": 0,
+          "nodeCount": 1,
+          "primitiveCount": 3,
+          "sceneIndex": 0,
+          "scenes": [
+            {
+              "index": 0
+            }
+          ],
+          "status": "ready",
+          "timings": {
+            "externalResourceReadDurationMs": 572,
+            "firstDrawableAfterMs": 1400.0000000000002,
+            "preparationQueueDurationMs": 190,
+            "preparationDurationMs": 540.0000000000002,
+            "sourceReadDurationMs": 96,
+            "sourceReadStartedAfterMs": 2,
+            "imagesCompleteAfterMs": 1402
+          },
+          "textures": {
+            "fallback": 0,
+            "failed": 0,
+            "loading": 0,
+            "ready": 2,
+            "total": 2
+          },
+          "variantNames": []
+        }
+      },
+      "gapStats": {
+        "max": 211,
+        "p95": 41,
+        "over50": 53,
+        "count": 2337,
+        "worst": [
+          {
+            "ms": 1616,
+            "duration": 211
+          },
+          {
+            "ms": 1778,
+            "duration": 162
+          },
+          {
+            "ms": 13879,
+            "duration": 148
+          },
+          {
+            "ms": 1405,
+            "duration": 147
+          },
+          {
+            "ms": 1214,
+            "duration": 139
+          },
+          {
+            "ms": 1075,
+            "duration": 124
+          },
+          {
+            "ms": 12241,
+            "duration": 120
+          },
+          {
+            "ms": 2147,
+            "duration": 114
+          },
+          {
+            "ms": 675,
+            "duration": 102
+          },
+          {
+            "ms": 208,
+            "duration": 100
+          }
+        ]
+      }
+    },
+    "costs": {
+      "getParameter": {
+        "count": 128,
+        "total": 0,
+        "max": 0
+      },
+      "drawImage": {
+        "count": 1752,
+        "total": 67.00000000001091,
+        "max": 15
+      },
+      "getImageData": {
+        "count": 119,
+        "total": 453.99999999999864,
+        "max": 23
+      },
+      "linkProgram": {
+        "count": 14,
+        "total": 0,
+        "max": 0
+      },
+      "texStorage2D": {
+        "count": 124,
+        "total": 0,
+        "max": 0
+      },
+      "texSubImage2D": {
+        "count": 5078,
+        "total": 1175.0000000000446,
+        "max": 8
+      },
+      "generateMipmap": {
+        "count": 61,
+        "total": 1.0000000000004547,
+        "max": 1.0000000000004547
+      },
+      "getProgramParameter": {
+        "count": 14,
+        "total": 27.000000000000455,
+        "max": 9
+      },
+      "getUniformLocation": {
+        "count": 147,
+        "total": 12.99999999999909,
+        "max": 1
+      },
+      "drawElements": {
+        "count": 14399,
+        "total": 13.000000000005457,
+        "max": 1.000000000003638
+      },
+      "getError": {
+        "count": 37,
+        "total": 0,
+        "max": 0
+      },
+      "cloneNode": {
+        "count": 110,
+        "total": 44.00000000002319,
+        "max": 4
+      },
+      "serializeToString": {
+        "count": 110,
+        "total": 24.00000000000091,
+        "max": 3
+      },
+      "flush": {
+        "count": 72,
+        "total": 0,
+        "max": 0
+      },
+      "fenceSync": {
+        "count": 36,
+        "total": 1.9999999999977263,
+        "max": 0.9999999999995453
+      },
+      "clientWaitSync": {
+        "count": 36,
+        "total": 2,
+        "max": 1
+      },
+      "checkFramebufferStatus": {
+        "count": 34,
+        "total": 1,
+        "max": 1
+      },
+      "copyTexSubImage2D": {
+        "count": 135,
+        "total": 0,
+        "max": 0
+      }
+    }
+  },
+  "regions-table-profile": {
+    "report": {
+      "info": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+        "width": 768,
+        "height": 954,
+        "dpr": 2,
+        "pieces": 273,
+        "capabilities": {
+          "maxTextureSize": 16384,
+          "etc2": true,
+          "astc": true
+        }
+      },
+      "errors": [],
+      "settledMs": 28140,
+      "last": {
+        "ms": 45150,
+        "frame": 572,
+        "copyCalls": 135,
+        "vt": {
+          "admittedUploadBytes": 383848,
+          "atlasBytes": 71368704,
+          "atlasPools": 1,
+          "atlasGrowthFailures": 0,
+          "desiredPages": 583,
+          "admittedPages": 583,
+          "unresidentPages": 0,
+          "automaticCandidates": 60,
+          "automaticDecodedBytes": 4050880,
+          "automaticIneligible": 0,
+          "automaticResources": 60,
+          "automaticWaiting": 0,
+          "deferredUploads": 0,
+          "failedPages": 0,
+          "pageRequests": 697,
+          "pendingPages": 0,
+          "pendingPageBytes": 0,
+          "pendingPageByteLimit": 16777216,
+          "residentPages": 697,
+          "uploadedPages": 697,
+          "uploadBudgetBytes": 33554432
+        },
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "gpu": {
+          "budgetBytes": 268435456,
+          "deniedClaims": 0,
+          "retainedBytes": 77947649
+        },
+        "asset": {
+          "bounds": {
+            "max": [
+              0.4204990863800049,
+              0.0010000000474974513,
+              0.296999990940094
+            ],
+            "min": [
+              -0.4204990863800049,
+              -0.0010000000474974513,
+              -0.296999990940094
+            ]
+          },
+          "lightCount": 0,
+          "nodeCount": 1,
+          "primitiveCount": 3,
+          "sceneIndex": 0,
+          "scenes": [
+            {
+              "index": 0
+            }
+          ],
+          "status": "ready",
+          "timings": {
+            "externalResourceReadDurationMs": 420,
+            "firstDrawableAfterMs": 1206,
+            "preparationQueueDurationMs": 256,
+            "preparationDurationMs": 415,
+            "sourceReadDurationMs": 113,
+            "sourceReadStartedAfterMs": 2,
+            "imagesCompleteAfterMs": 1210
+          },
+          "textures": {
+            "fallback": 0,
+            "failed": 0,
+            "loading": 0,
+            "ready": 2,
+            "total": 2
+          },
+          "variantNames": []
+        }
+      },
+      "gapStats": {
+        "max": 294,
+        "p95": 40,
+        "over50": 42,
+        "count": 2335,
+        "worst": [
+          {
+            "ms": 1802,
+            "duration": 294
+          },
+          {
+            "ms": 1508,
+            "duration": 277
+          },
+          {
+            "ms": 2504,
+            "duration": 171
+          },
+          {
+            "ms": 13957,
+            "duration": 149
+          },
+          {
+            "ms": 12274,
+            "duration": 135
+          },
+          {
+            "ms": 2206,
+            "duration": 129
+          },
+          {
+            "ms": 1919,
+            "duration": 117
+          },
+          {
+            "ms": 3445,
+            "duration": 108
+          },
+          {
+            "ms": 5935,
+            "duration": 102
+          },
+          {
+            "ms": 426,
+            "duration": 97
+          }
+        ]
+      }
+    },
+    "costs": {
+      "getParameter": {
+        "count": 127,
+        "total": 0,
+        "max": 0
+      },
+      "drawImage": {
+        "count": 1778,
+        "total": 54.00000000000637,
+        "max": 7
+      },
+      "getImageData": {
+        "count": 119,
+        "total": 414.99999999999864,
+        "max": 28
+      },
+      "linkProgram": {
+        "count": 26,
+        "total": 0,
+        "max": 0
+      },
+      "texStorage2D": {
+        "count": 125,
+        "total": 0,
+        "max": 0
+      },
+      "texSubImage2D": {
+        "count": 5086,
+        "total": 1215.0000000000427,
+        "max": 28.000000000000455
+      },
+      "generateMipmap": {
+        "count": 61,
+        "total": 1,
+        "max": 1
+      },
+      "getProgramParameter": {
+        "count": 23,
+        "total": 123,
+        "max": 18
+      },
+      "getUniformLocation": {
+        "count": 217,
+        "total": 15.99999999999909,
+        "max": 1.0000000000004547
+      },
+      "drawElements": {
+        "count": 15229,
+        "total": 15.000000000001819,
+        "max": 1.000000000003638
+      },
+      "checkFramebufferStatus": {
+        "count": 35,
+        "total": 0,
+        "max": 0
+      },
+      "drawArrays": {
+        "count": 1,
+        "total": 0,
+        "max": 0
+      },
+      "getError": {
+        "count": 37,
+        "total": 1,
+        "max": 1
+      },
+      "flush": {
+        "count": 72,
+        "total": 1,
+        "max": 1
+      },
+      "fenceSync": {
+        "count": 36,
+        "total": 4.999999999996362,
+        "max": 1
+      },
+      "clientWaitSync": {
+        "count": 36,
+        "total": 4,
+        "max": 1.000000000001819
+      },
+      "cloneNode": {
+        "count": 186,
+        "total": 77.00000000002638,
+        "max": 5.000000000003638
+      },
+      "serializeToString": {
+        "count": 186,
+        "total": 52.999999999989086,
+        "max": 4
+      },
+      "copyTexSubImage2D": {
+        "count": 135,
+        "total": 0,
+        "max": 0
+      }
+    }
+  },
+  "regions-4ms-profile": {
+    "report": {
+      "info": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Safari/605.1.15",
+        "width": 768,
+        "height": 954,
+        "dpr": 2,
+        "pieces": 273,
+        "capabilities": {
+          "maxTextureSize": 16384,
+          "etc2": true,
+          "astc": true
+        }
+      },
+      "errors": [],
+      "settledMs": 23085,
+      "last": {
+        "ms": 45101,
+        "frame": 413,
+        "copyCalls": 136,
+        "vt": {
+          "admittedUploadBytes": 226772,
+          "atlasBytes": 71368704,
+          "atlasPools": 1,
+          "atlasGrowthFailures": 0,
+          "desiredPages": 583,
+          "admittedPages": 583,
+          "unresidentPages": 0,
+          "automaticCandidates": 60,
+          "automaticDecodedBytes": 4050880,
+          "automaticIneligible": 0,
+          "automaticResources": 60,
+          "automaticWaiting": 0,
+          "deferredUploads": 0,
+          "failedPages": 0,
+          "pageRequests": 697,
+          "pendingPages": 0,
+          "pendingPageBytes": 0,
+          "pendingPageByteLimit": 16777216,
+          "residentPages": 697,
+          "uploadedPages": 697,
+          "uploadBudgetBytes": 33554432
+        },
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "gpu": {
+          "budgetBytes": 268435456,
+          "deniedClaims": 0,
+          "retainedBytes": 77947649
+        },
+        "asset": {
+          "bounds": {
+            "max": [
+              0.4204990863800049,
+              0.0010000000474974513,
+              0.296999990940094
+            ],
+            "min": [
+              -0.4204990863800049,
+              -0.0010000000474974513,
+              -0.296999990940094
+            ]
+          },
+          "lightCount": 0,
+          "nodeCount": 1,
+          "primitiveCount": 3,
+          "sceneIndex": 0,
+          "scenes": [
+            {
+              "index": 0
+            }
+          ],
+          "status": "ready",
+          "timings": {
+            "externalResourceReadDurationMs": 418,
+            "firstDrawableAfterMs": 1118,
+            "preparationQueueDurationMs": 197,
+            "preparationDurationMs": 397,
+            "sourceReadDurationMs": 104,
+            "sourceReadStartedAfterMs": 2,
+            "imagesCompleteAfterMs": 1123
+          },
+          "textures": {
+            "fallback": 0,
+            "failed": 0,
+            "loading": 0,
+            "ready": 2,
+            "total": 2
+          },
+          "variantNames": []
+        }
+      },
+      "gapStats": {
+        "max": 336,
+        "p95": 41,
+        "over50": 46,
+        "count": 2415,
+        "worst": [
+          {
+            "ms": 1754,
+            "duration": 336
+          },
+          {
+            "ms": 1418,
+            "duration": 211
+          },
+          {
+            "ms": 14004,
+            "duration": 184
+          },
+          {
+            "ms": 2497,
+            "duration": 142
+          },
+          {
+            "ms": 12276,
+            "duration": 140
+          },
+          {
+            "ms": 1891,
+            "duration": 137
+          },
+          {
+            "ms": 2161,
+            "duration": 114
+          },
+          {
+            "ms": 3177,
+            "duration": 111
+          },
+          {
+            "ms": 679,
+            "duration": 104
+          },
+          {
+            "ms": 5266,
+            "duration": 104
+          }
+        ]
+      }
+    },
+    "costs": {
+      "getParameter": {
+        "count": 113,
+        "total": 0,
+        "max": 0
+      },
+      "drawImage": {
+        "count": 1778,
+        "total": 76.00000000000932,
+        "max": 18
+      },
+      "getImageData": {
+        "count": 119,
+        "total": 405.9999999999975,
+        "max": 29
+      },
+      "linkProgram": {
+        "count": 26,
+        "total": 0,
+        "max": 0
+      },
+      "texStorage2D": {
+        "count": 125,
+        "total": 0,
+        "max": 0
+      },
+      "texSubImage2D": {
+        "count": 4350,
+        "total": 1399.999999999969,
+        "max": 13.000000000000455
+      },
+      "generateMipmap": {
+        "count": 61,
+        "total": 0,
+        "max": 0
+      },
+      "getProgramParameter": {
+        "count": 23,
+        "total": 91.99999999999955,
+        "max": 11.000000000000455
+      },
+      "getUniformLocation": {
+        "count": 217,
+        "total": 17,
+        "max": 1.0000000000002274
+      },
+      "drawElements": {
+        "count": 11146,
+        "total": 9.99999999999909,
+        "max": 1
+      },
+      "getError": {
+        "count": 38,
+        "total": 4,
+        "max": 1
+      },
+      "checkFramebufferStatus": {
+        "count": 36,
+        "total": 1,
+        "max": 1
+      },
+      "drawArrays": {
+        "count": 5,
+        "total": 0,
+        "max": 0
+      },
+      "cloneNode": {
+        "count": 186,
+        "total": 74.99999999999909,
+        "max": 3.000000000003638
+      },
+      "serializeToString": {
+        "count": 186,
+        "total": 58.99999999998727,
+        "max": 5
+      },
+      "flush": {
+        "count": 74,
+        "total": 1,
+        "max": 1
+      },
+      "fenceSync": {
+        "count": 37,
+        "total": 2,
+        "max": 1
+      },
+      "clientWaitSync": {
+        "count": 37,
+        "total": 0.9999999999995453,
+        "max": 0.9999999999995453
+      },
+      "copyTexSubImage2D": {
+        "count": 136,
+        "total": 0,
+        "max": 0
+      }
+    }
+  },
+  "svg256-profile": {
+    "report": {
+      "info": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+        "width": 768,
+        "height": 954,
+        "dpr": 2,
+        "pieces": 273,
+        "capabilities": {
+          "maxTextureSize": 16384,
+          "etc2": true,
+          "astc": true
+        }
+      },
+      "errors": [],
+      "settledMs": 16081,
+      "last": {
+        "ms": 45100,
+        "frame": 221,
+        "copyCalls": 76,
+        "vt": {
+          "admittedUploadBytes": 292244,
+          "atlasBytes": 69222400,
+          "atlasPools": 1,
+          "atlasGrowthFailures": 0,
+          "desiredPages": 172,
+          "admittedPages": 172,
+          "unresidentPages": 0,
+          "automaticCandidates": 60,
+          "automaticDecodedBytes": 4050880,
+          "automaticIneligible": 0,
+          "automaticResources": 60,
+          "automaticWaiting": 0,
+          "deferredUploads": 0,
+          "failedPages": 0,
+          "pageRequests": 227,
+          "pendingPages": 0,
+          "pendingPageBytes": 0,
+          "pendingPageByteLimit": 16777216,
+          "residentPages": 227,
+          "uploadedPages": 227,
+          "uploadBudgetBytes": 33554432
+        },
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "gpu": {
+          "budgetBytes": 268435456,
+          "deniedClaims": 0,
+          "retainedBytes": 72065793
+        },
+        "asset": {
+          "bounds": {
+            "max": [
+              0.4204990863800049,
+              0.0010000000474974513,
+              0.296999990940094
+            ],
+            "min": [
+              -0.4204990863800049,
+              -0.0010000000474974513,
+              -0.296999990940094
+            ]
+          },
+          "lightCount": 0,
+          "nodeCount": 1,
+          "primitiveCount": 3,
+          "sceneIndex": 0,
+          "scenes": [
+            {
+              "index": 0
+            }
+          ],
+          "status": "ready",
+          "timings": {
+            "externalResourceReadDurationMs": 418,
+            "firstDrawableAfterMs": 1066,
+            "preparationQueueDurationMs": 193,
+            "preparationDurationMs": 367,
+            "sourceReadDurationMs": 86,
+            "sourceReadStartedAfterMs": 2,
+            "imagesCompleteAfterMs": 1070
+          },
+          "textures": {
+            "fallback": 0,
+            "failed": 0,
+            "loading": 0,
+            "ready": 2,
+            "total": 2
+          },
+          "variantNames": []
+        }
+      },
+      "gapStats": {
+        "max": 336,
+        "p95": 29,
+        "over50": 29,
+        "count": 2665,
+        "worst": [
+          {
+            "ms": 1463,
+            "duration": 336
+          },
+          {
+            "ms": 1954,
+            "duration": 302
+          },
+          {
+            "ms": 3180,
+            "duration": 129
+          },
+          {
+            "ms": 12253,
+            "duration": 127
+          },
+          {
+            "ms": 2525,
+            "duration": 124
+          },
+          {
+            "ms": 1586,
+            "duration": 123
+          },
+          {
+            "ms": 1127,
+            "duration": 103
+          },
+          {
+            "ms": 5233,
+            "duration": 101
+          },
+          {
+            "ms": 2665,
+            "duration": 94
+          },
+          {
+            "ms": 607,
+            "duration": 88
+          }
+        ]
+      }
+    },
+    "costs": {
+      "getParameter": {
+        "count": 85,
+        "total": 0,
+        "max": 0
+      },
+      "drawImage": {
+        "count": 1122,
+        "total": 46.999999999995225,
+        "max": 6
+      },
+      "getImageData": {
+        "count": 119,
+        "total": 489.9999999999968,
+        "max": 26
+      },
+      "linkProgram": {
+        "count": 26,
+        "total": 0,
+        "max": 0
+      },
+      "texStorage2D": {
+        "count": 124,
+        "total": 0,
+        "max": 0
+      },
+      "texSubImage2D": {
+        "count": 1310,
+        "total": 785.0000000000055,
+        "max": 37
+      },
+      "generateMipmap": {
+        "count": 61,
+        "total": 0,
+        "max": 0
+      },
+      "getProgramParameter": {
+        "count": 23,
+        "total": 110,
+        "max": 30
+      },
+      "getUniformLocation": {
+        "count": 217,
+        "total": 14.000000000000455,
+        "max": 1.0000000000004547
+      },
+      "drawElements": {
+        "count": 7409,
+        "total": 1,
+        "max": 1
+      },
+      "checkFramebufferStatus": {
+        "count": 20,
+        "total": 1,
+        "max": 1
+      },
+      "drawArrays": {
+        "count": 7,
+        "total": 1,
+        "max": 1
+      },
+      "getError": {
+        "count": 21,
+        "total": 1,
+        "max": 1
+      },
+      "cloneNode": {
+        "count": 126,
+        "total": 43.000000000002274,
+        "max": 4
+      },
+      "serializeToString": {
+        "count": 126,
+        "total": 35.99999999998818,
+        "max": 3
+      },
+      "flush": {
+        "count": 40,
+        "total": 0,
+        "max": 0
+      },
+      "fenceSync": {
+        "count": 20,
+        "total": 5.000000000001819,
+        "max": 4
+      },
+      "clientWaitSync": {
+        "count": 20,
+        "total": 1,
+        "max": 1
+      },
+      "copyTexSubImage2D": {
+        "count": 76,
+        "total": 0,
+        "max": 0
+      }
+    }
+  },
+  "svg256-final": {
+    "report": {
+      "info": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+        "width": 768,
+        "height": 954,
+        "dpr": 2,
+        "pieces": 273,
+        "capabilities": {
+          "maxTextureSize": 16384,
+          "etc2": true,
+          "astc": true
+        }
+      },
+      "errors": [],
+      "settledMs": 16066,
+      "last": {
+        "ms": 45085,
+        "frame": 214,
+        "copyCalls": 76,
+        "vt": {
+          "admittedUploadBytes": 562644,
+          "atlasBytes": 69222400,
+          "atlasPools": 1,
+          "atlasGrowthFailures": 0,
+          "desiredPages": 172,
+          "admittedPages": 172,
+          "unresidentPages": 0,
+          "automaticCandidates": 60,
+          "automaticDecodedBytes": 4050880,
+          "automaticIneligible": 0,
+          "automaticResources": 60,
+          "automaticWaiting": 0,
+          "deferredUploads": 0,
+          "failedPages": 0,
+          "pageRequests": 227,
+          "pendingPages": 0,
+          "pendingPageBytes": 0,
+          "pendingPageByteLimit": 16777216,
+          "residentPages": 227,
+          "uploadedPages": 227,
+          "uploadBudgetBytes": 33554432
+        },
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "gpu": {
+          "budgetBytes": 268435456,
+          "deniedClaims": 0,
+          "retainedBytes": 72065793
+        },
+        "asset": {
+          "bounds": {
+            "max": [
+              0.4204990863800049,
+              0.0010000000474974513,
+              0.296999990940094
+            ],
+            "min": [
+              -0.4204990863800049,
+              -0.0010000000474974513,
+              -0.296999990940094
+            ]
+          },
+          "lightCount": 0,
+          "nodeCount": 1,
+          "primitiveCount": 3,
+          "sceneIndex": 0,
+          "scenes": [
+            {
+              "index": 0
+            }
+          ],
+          "status": "ready",
+          "timings": {
+            "externalResourceReadDurationMs": 404,
+            "firstDrawableAfterMs": 1204,
+            "preparationQueueDurationMs": 207,
+            "preparationDurationMs": 508,
+            "sourceReadDurationMs": 82,
+            "sourceReadStartedAfterMs": 3,
+            "imagesCompleteAfterMs": 1206
+          },
+          "textures": {
+            "fallback": 0,
+            "failed": 0,
+            "loading": 0,
+            "ready": 2,
+            "total": 2
+          },
+          "variantNames": []
+        }
+      },
+      "gapStats": {
+        "max": 351,
+        "p95": 29,
+        "over50": 21,
+        "count": 2685,
+        "worst": [
+          {
+            "ms": 1567,
+            "duration": 351
+          },
+          {
+            "ms": 1994,
+            "duration": 194
+          },
+          {
+            "ms": 2260,
+            "duration": 165
+          },
+          {
+            "ms": 1216,
+            "duration": 139
+          },
+          {
+            "ms": 12266,
+            "duration": 128
+          },
+          {
+            "ms": 738,
+            "duration": 126
+          },
+          {
+            "ms": 2900,
+            "duration": 119
+          },
+          {
+            "ms": 1676,
+            "duration": 109
+          },
+          {
+            "ms": 4827,
+            "duration": 102
+          },
+          {
+            "ms": 2095,
+            "duration": 101
+          }
+        ]
+      }
+    },
+    "costs": null
+  }
+}

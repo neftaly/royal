@@ -1,6 +1,7 @@
 import {
   virtualTexturePageKeyParts,
   type VirtualTextureManifest,
+  type VirtualTexturePageId,
 } from "./manifest";
 
 export type VirtualTexturePageKey = number | string;
@@ -13,6 +14,35 @@ export type VirtualTexturePoolSlot = Readonly<{
 export interface ProtectedVirtualTexturePoolPages {
   has(resourceKey: string, pageKey: VirtualTexturePageKey): boolean;
 }
+
+/** Patches only descendants affected by an added page, preserving finer mappings. */
+export const addVirtualTexturePageTablePage = (
+  manifest: VirtualTextureManifest,
+  page: VirtualTexturePageId,
+  slot: number,
+  atlasColumns: number,
+  target: Uint8Array,
+): void => {
+  const slotX = slot % atlasColumns;
+  const slotY = Math.floor(slot / atlasColumns);
+  for (let mip = page.mip; mip >= 0; mip -= 1) {
+    const scale = 2 ** (page.mip - mip);
+    const layout = manifest.mipLayouts[mip]!;
+    const stride = Math.max(1, manifest.tableWidth / 2 ** mip);
+    const endX = Math.min(layout.width, (page.x + 1) * scale);
+    const endY = Math.min(layout.height, (page.y + 1) * scale);
+    for (let y = page.y * scale; y < endY; y += 1) {
+      for (let x = page.x * scale; x < endX; x += 1) {
+        const offset = layout.byteOffset + (y * stride + x) * 4;
+        if (target[offset + 3] !== 0 && target[offset + 2]! < page.mip) continue;
+        target[offset] = slotX;
+        target[offset + 1] = slotY;
+        target[offset + 2] = page.mip;
+        target[offset + 3] = 255;
+      }
+    }
+  }
+};
 
 /** Pure allocation-free shared-atlas slot choice keyed by logical texture and page. */
 export const selectVirtualTexturePoolSlot = (

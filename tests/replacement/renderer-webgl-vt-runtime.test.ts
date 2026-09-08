@@ -142,7 +142,115 @@ describe("VT runtime activation core", () => {
 });
 
 describe("browser virtual texture runtime", () => {
-  it("restores coarse preview coverage after vector failure and GPU invalidation", async () => {
+  it("consumes cached target pages before rotating through more cold SVGs than the cache can retain", async () => {
+    const context = { clearRect: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(), save: vi.fn(), restore: vi.fn(), scale: vi.fn(), translate: vi.fn() };
+    vi.stubGlobal("document", { baseURI: "https://example.test/", createElement: () => ({ getContext: () => context, width: 0, height: 0 }) });
+    const attributes = new Map<string, string>();
+    vi.stubGlobal("XMLSerializer", class { serializeToString = () => "<svg/>"; });
+    const decode = vi.fn(async () => ({ width: Number(attributes.get("width")), height: Number(attributes.get("height")), close: vi.fn() }));
+    vi.stubGlobal("createImageBitmap", decode);
+    const encoded: EncodedSvgTextureSource = { blob: new Blob(["<svg/>"]), byteLength: 6, parsed: {
+      document: { documentElement: { cloneNode: () => ({ setAttribute: (name: string, value: string) => attributes.set(name, value) }) } } as unknown as XMLDocument,
+      viewBox: [0, 0, 64, 64],
+    } };
+    const decoded = { width: 64, height: 64, source: {} as ImageBitmap, svgPreview: { encoded, load: async () => encoded } };
+    const assets = Array.from({ length: 6 }, (_, i) => imageTexture(`https://example.test/${i}.png`));
+    const prepared = prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}), nodes: assets.map((texture) =>
+      mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture }) })) }), undefined, undefined, () => decoded);
+    const runtime = createBrowserVirtualTextureRuntime(fakeGl(), vi.fn(), undefined, undefined, {
+      acquireDecoded: () => ({ source: decoded, release: vi.fn() }), decoded: () => decoded, onChanged: vi.fn(),
+    });
+    const matrix = identityMat4();
+    const view = { view: matrix, viewProjection: matrix, viewport: { width: 512, height: 512, x: 0, y: 0 } };
+    try {
+      runtime.setScene(prepared);
+      await waitFor(() => {
+        const uploaded = runtime.runtimeSnapshot().uploadedPages;
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot().uploadedPages - uploaded).toBeLessThanOrEqual(4);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 30, unresidentPages: 0, pendingPages: 0 });
+      });
+      expect(decode).toHaveBeenCalledTimes(6);
+      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(4 * 1024 * 1024 + 6 * 64 * 64 * 4);
+    } finally { runtime.dispose(); }
+  });
+
+  it("shows preview coverage, skips intermediate SVG mips, and replaces preview on a coarse-only target", async () => {
+    const context = {
+      clearRect: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(), save: vi.fn(), restore: vi.fn(),
+      scale: vi.fn(), translate: vi.fn(),
+    };
+    vi.stubGlobal("document", {
+      baseURI: "https://example.test/",
+      createElement: () => ({ getContext: () => context, height: 0, width: 0 }),
+    });
+    const sizes: number[] = [];
+    const attrs = new Map<string, string>();
+    vi.stubGlobal("XMLSerializer", class { serializeToString = (): string => "<svg/>"; });
+    const close = vi.fn();
+    const decode = vi.fn(async () => {
+      const width = Number(attrs.get("width"));
+      sizes.push(width);
+      return { width, height: Number(attrs.get("height")), close };
+    });
+    vi.stubGlobal("createImageBitmap", decode);
+    const encoded: EncodedSvgTextureSource = {
+      blob: new Blob(["<svg/>"]), byteLength: 6,
+      parsed: { document: { documentElement: { cloneNode: () => ({ setAttribute: (key: string, value: string) => attrs.set(key, value) }) } } as unknown as XMLDocument, viewBox: [0, 0, 64, 64] },
+    };
+    let resolve!: (value: EncodedSvgTextureSource) => void;
+    const detail: { encoded?: EncodedSvgTextureSource; load: () => Promise<EncodedSvgTextureSource> } = {
+      load: vi.fn(() => detail.encoded === undefined
+        ? new Promise<EncodedSvgTextureSource>((done) => { resolve = done; })
+        : Promise.resolve(detail.encoded)),
+    };
+    const decoded = { width: 64, height: 64, source: {} as ImageBitmap, svgPreview: detail };
+    const asset = imageTexture("https://example.test/preview.png");
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) })],
+    }), undefined, undefined, () => decoded);
+    const runtime = createBrowserVirtualTextureRuntime(fakeGl(), vi.fn(), undefined, undefined, {
+      acquireDecoded: () => ({ source: decoded, release: vi.fn() }),
+      decoded: () => decoded, onChanged: vi.fn(),
+    });
+    const matrix = identityMat4();
+    const view = { view: matrix, viewProjection: matrix, viewport: { width: 512, height: 512, x: 0, y: 0 } };
+    try {
+      runtime.setScene(prepared);
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.automaticBinding(asset)).toBeDefined();
+        expect(detail.load).toHaveBeenCalledOnce();
+      });
+      expect(decode).not.toHaveBeenCalled();
+      expect(runtime.runtimeSnapshot().residentPages).toBe(1);
+      detail.encoded = encoded;
+      resolve(encoded);
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 5, pendingPages: 0 });
+      });
+      expect(sizes).toEqual([512]);
+      expect(runtime.runtimeSnapshot().pageRequests).toBe(5);
+      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBe(64 * 64 * 4 + 512 * 512 * 4);
+      view.viewport.width = 64;
+      view.viewport.height = 64;
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(sizes).toEqual([512, 256]);
+        expect(runtime.runtimeSnapshot().pendingPages).toBe(0);
+      });
+      expect(runtime.automaticBinding(asset)).toBeDefined();
+      expect(runtime.runtimeSnapshot().pageRequests).toBe(6);
+      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBe(64 * 64 * 4);
+    } finally {
+      runtime.dispose();
+    }
+    expect(close).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([false, true])("restores coarse preview coverage after vector failure (already failed: %s)", async (alreadyFailed) => {
     const context = {
       clearRect: vi.fn(), drawImage: vi.fn(), save: vi.fn(), restore: vi.fn(),
       scale: vi.fn(), translate: vi.fn(),
@@ -152,6 +260,7 @@ describe("browser virtual texture runtime", () => {
       createElement: () => ({ getContext: () => context, height: 0, width: 0 }),
     });
     const detail: { error?: string; load: () => Promise<EncodedSvgTextureSource> } = {
+      ...(alreadyFailed ? { error: "optional vector failed" } : {}),
       load: vi.fn(async () => {
         detail.error = "optional vector failed";
         throw new Error(detail.error);
@@ -168,12 +277,13 @@ describe("browser virtual texture runtime", () => {
       decoded: () => decoded, onChanged: vi.fn(),
     });
     const matrix = identityMat4();
-    const view = { view: matrix, viewProjection: matrix, viewport: { width: 1024, height: 1024, x: 0, y: 0 } };
+    const view = { view: matrix, viewProjection: matrix, viewport: { width: alreadyFailed ? 64 : 1024, height: alreadyFailed ? 64 : 1024, x: 0, y: 0 } };
+    const sourceFailures = alreadyFailed ? 0 : 1;
     try {
       runtime.setScene(prepared);
       await waitFor(() => {
         runtime.update([view]);
-        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 1, failedPages: 1, pendingPages: 0 });
+        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 1, failedPages: sourceFailures, pendingPages: 0 });
       });
       runtime.invalidate();
       expect(runtime.automaticBinding(asset)).toBeUndefined();
@@ -181,8 +291,20 @@ describe("browser virtual texture runtime", () => {
         runtime.update([view]);
         expect(runtime.automaticBinding(asset)).toBeDefined();
       });
-      expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 1, failedPages: 1, pendingPages: 0, pendingPageBytes: 0 });
-      expect(detail.load).toHaveBeenCalledOnce();
+      expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 1, failedPages: sourceFailures, pendingPages: 0, pendingPageBytes: 0 });
+      expect(detail.load).toHaveBeenCalledTimes(alreadyFailed ? 0 : 1);
+      const settledRequests = runtime.runtimeSnapshot().pageRequests;
+      for (let i = 0; i < 5; i += 1) runtime.update([view]);
+      expect(runtime.runtimeSnapshot().pageRequests).toBe(settledRequests);
+      context.clearRect.mockImplementation(() => { throw new Error("preview canvas failed"); });
+      runtime.invalidate();
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ failedPages: sourceFailures + 1, pendingPages: 0 });
+      });
+      const failedRequests = runtime.runtimeSnapshot().pageRequests;
+      for (let i = 0; i < 5; i += 1) runtime.update([view]);
+      expect(runtime.runtimeSnapshot().pageRequests).toBe(failedRequests);
     } finally {
       runtime.dispose();
     }
@@ -329,6 +451,45 @@ describe("browser virtual texture runtime", () => {
     runtime.dispose();
   });
 
+  it("refines more than 24 visible textures without camera movement", async () => {
+    const manifest = {
+      borderTexels: 1, contractVersion: 2, pageSize: 128,
+      pages: { uriTemplate: "pages/{mip}-{x}-{y}.png" }, virtualSize: [128, 128],
+    };
+    vi.stubGlobal("document", { baseURI: "https://example.test/" });
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ close: vi.fn(), height: 130, width: 130 })));
+    vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo) => String(input).endsWith("vt.json")
+      ? new Response(JSON.stringify(manifest), { headers: { "content-type": "application/json" } })
+      : new Response(new Blob([new Uint8Array([1])]))));
+    const textures = Array.from({ length: 60 }, (_, i) => virtualTexture(`https://example.test/${i}/vt.json`));
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: textures.map((texture) => mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture }) })),
+    }));
+    const gl = fakeGl();
+    Object.assign(gl, { texStorage2D: vi.fn() });
+    const budget = new PersistentGpuBudgetOwner();
+    const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn(), budget);
+    const matrix = identityMat4();
+    const views = [{ view: matrix, viewProjection: matrix, viewport: { height: 1024, width: 1024, x: 0, y: 0 } }];
+    try {
+      runtime.setScene(prepared);
+      await waitFor(() => {
+        expect(textures.every((texture) => runtime.snapshot(texture).status === "ready")).toBe(true);
+      });
+      await waitFor(() => {
+        const before = runtime.runtimeSnapshot().uploadedPages;
+        runtime.update(views);
+        expect(runtime.runtimeSnapshot().uploadedPages - before).toBeLessThanOrEqual(4);
+        expect(runtime.runtimeSnapshot().residentPages).toBe(60);
+      });
+      expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 1, failedPages: 0, pendingPages: 0 });
+    } finally {
+      runtime.dispose();
+    }
+    expect(budget.snapshot().retainedBytes).toBe(0);
+  });
+
   it("round-robins newly available page slots across visible texture resources", async () => {
     const manifest = {
       borderTexels: 1,
@@ -371,7 +532,8 @@ describe("browser virtual texture runtime", () => {
     const texStorage2D = vi.fn();
     Object.assign(gl, { texStorage2D });
     const budget = new PersistentGpuBudgetOwner();
-    const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn(), budget);
+    const changed = vi.fn();
+    const runtime = createBrowserVirtualTextureRuntime(gl, changed, budget);
     const identity = identityMat4();
     const view: SurfaceFrameView = {
       view: identity,
@@ -383,11 +545,13 @@ describe("browser virtual texture runtime", () => {
     await waitFor(() => {
       expect(textures.every((texture) => runtime.snapshot(texture).status === "ready")).toBe(true);
     });
+    changed.mockClear();
     runtime.update([view]);
+    expect(changed.mock.calls.every(([, presentationChanged]) => presentationChanged === false)).toBe(true);
     // Five compatible logical textures share one atlas and retain five page tables.
     expect(texStorage2D).toHaveBeenCalledTimes(6);
     expect(runtime.runtimeSnapshot()).toMatchObject({
-      atlasBytes: 1_622_400,
+      atlasBytes: 64 * 130 * 130 * 4,
       atlasPools: 1,
     });
     expect(pageReads.map(({ url }) => new URL(url).pathname.split("/")[1]))
@@ -395,7 +559,10 @@ describe("browser virtual texture runtime", () => {
 
     pageReads[0]!.resolve(new Response(new Blob([new Uint8Array([1])])));
     await waitFor(() => expect(createImageBitmap).toHaveBeenCalledOnce());
+    await waitFor(() => expect(changed).toHaveBeenCalledWith(textures[0], true));
+    changed.mockClear();
     runtime.update([view]);
+    expect(changed.mock.calls.every(([, presentationChanged]) => presentationChanged === false)).toBe(true);
 
     expect(new URL(pageReads[4]!.url).pathname.split("/")[1]).toBe("4");
     runtime.dispose();

@@ -10,6 +10,8 @@ Probability.
 
 | Document | Remaining work |
 | --- | --- |
+| [Automatic texture memory](automatic-texture-memory.md) | Direct-target refinement, bounded small-raster reuse, and demand-grown RGBA atlases implemented in the working tree; shrinking, redistribution, and optional prefetch remain proposals. |
+| [VT capacity and A10 iPad findings](vt-capacity-a10-findings.md) | Uncommitted budget-sized atlas and authoritative coarse SVG refinement; physical-device results and remaining refinement hitches. |
 | [Preview-first SVG refinement](preview-first-svg-refinement.md) | Use preview-supported finer mips and measure physical-device responsiveness; alternative rasterizers/codecs require evidence. Basic preview consumption and the full-atlas queue fix have landed. |
 | [Selection-outline camera performance](selection-outline-camera-performance.md) | Hardware measurements, equivalent descriptor replacement, and GPU submission investigation. Retained source indexing has landed. |
 | [Screen-space tolerant picking](screen-space-tolerant-picking.md) | Research semantics, approaches, fixtures, and costs before accepting an API. |

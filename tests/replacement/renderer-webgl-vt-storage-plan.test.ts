@@ -15,6 +15,32 @@ const manifest = (overrides: Record<string, unknown> = {}) => parseVirtualTextur
 });
 
 describe("VT storage planning core", () => {
+  it("starts at demand and permits growth above 32 MiB inside the root allowance", () => {
+    const source = manifest({ borderTexels: 2 });
+    const available = 256 * 1024 * 1024;
+    expect(planVirtualTextureAtlasStorage(source, 16384, available, 1, available * 0.75).slotCount).toBe(1);
+    const grown = planVirtualTextureAtlasStorage(source, 16384, available, 1024, available * 0.75);
+    expect(grown.slotCount).toBe(1024);
+    expect(grown.allocationBytes).toBeGreaterThan(32 * 1024 * 1024);
+    expect(grown.allocationBytes).toBeLessThanOrEqual(available * 0.75);
+  });
+  it("sizes shared capacity from bytes while preserving authored limits", () => {
+    const source = manifest({ borderTexels: 2 });
+    const plan = planVirtualTextureAtlasStorage(source, 4096, 256 * 1024 * 1024);
+    expect(plan.slotCount).toBe(480);
+    expect(plan.allocationBytes).toBe(480 * 132 * 132 * 4);
+    expect(plan.allocationBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
+    expect(virtualTextureResidentPageCapacity(source, 4096, plan)).toBe(480);
+    expect(virtualTextureResidentPageCapacity(manifest({ physicalSlots: 8 }), 4096, plan)).toBe(8);
+  });
+
+  it("caps atlas dimensions on small GPUs", () => {
+    const plan = planVirtualTextureAtlasStorage(manifest(), 512, 256 * 1024 * 1024);
+    expect(plan.slotCount).toBe(9);
+    expect(plan.atlasColumns * plan.storedPageSize).toBeLessThanOrEqual(512);
+    expect(plan.atlasRows * plan.storedPageSize).toBeLessThanOrEqual(512);
+  });
+
   it("does not round a 24-page atlas target into 25 pages of storage", () => {
     const source = manifest();
     const bytesPerPage = 130 * 130 * 4;
