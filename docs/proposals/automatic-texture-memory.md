@@ -5,9 +5,10 @@ automatic demand, preview coverage, authoritative coarse targets, and bounded
 sharing of small target rasters are implemented. RGBA atlases now start from
 demand and grow through bounded GPU copies, with both allocations charged until
 the swap. The root budget remains 256 MiB; the combined atlas allowance is 75%
-of that budget. ETC2 retains its 32 MiB pool policy. Shrinking, redistribution
-between existing pools, and automatic default-budget calibration remain
-proposed.
+of that budget. ETC2 retains its 32 MiB pool policy. RGBA shrinking with two-second hysteresis,
+compaction, and spare-capacity redistribution is implemented. Temporary initial
+budget shortages remain retryable. Forced redistribution of actively needed
+capacity and automatic default-budget calibration remain proposed.
 Sections below retain the design rationale; the specification describes current
 behavior. See [device findings](vt-capacity-a10-findings.md).
 

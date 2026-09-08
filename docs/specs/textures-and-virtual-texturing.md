@@ -354,16 +354,35 @@ polled with a zero timeout. Error validation occurs only after completion,
 including the final copy batch before publication. This separation matters on
 WebKit, where creating a fence immediately after work can itself block. A
 failed fence or 120 unsuccessful frame polls abandons that replacement.
-Failed growth preserves the old atlas and retries
-only when demand or available capacity changes. Pools retain spare capacity
-until their final logical resource is released; shrinking and redistribution
-between existing pools are not implemented.
+Failed migration preserves the old atlas and retries only when demand or
+available capacity changes.
+
+RGBA pools also shrink when the rounded demand fits at most half their slots.
+A two-second low-demand delay avoids reallocating for brief camera changes;
+a single timer wakes an idle root instead of drawing continuously during the
+wait. Unmet demand in other pools bypasses that delay only when it exceeds available
+atlas allowance or unclaimed migration capacity. Pending shrink savings remain
+reserved until commit, so cancellation cannot overcommit the atlas allowance. Shrinking compacts
+resident pages into a smaller replacement, preserving currently demanded pages
+first, then coarsest coverage and recent spare pages. It never shrinks below
+current bounded desired demand. Copies use the same bounded, fenced migration
+path as growth; page tables are rebuilt for compacted slot indices. A changed
+view that needs discarded resident pages cancels the replacement. Disposal and
+context invalidation cancel the wakeup and release migration claims.
+
+Released storage becomes available to ordinary resources and other pools.
+An initial VT allocation blocked by current budget capacity remains retryable
+when capacity returns, rather than permanently becoming unsupported. This
+redistributes spare storage; it does not force an actively needed pool below its
+desired demand to give another pool an equal share. If even a replacement cannot
+fit alongside the old atlas, capacity remains unchanged. ETC2 resizing and
+automatic calibration of the root's default budget remain unimplemented.
 
 Direct-target demand that exceeds a texture's admitted capacity is coarsened
 to complete parent targets. Collection exceeding the bounded demand workspace
 is repeated at a coarser minimum mip, avoiding a spatially partial prefix.
-Diagnostics report `atlasPools`, `atlasBytes` (including in-progress growth),
-`atlasGrowthFailures`, bounded `desiredPages`, capacity-fitted `admittedPages`,
+Diagnostics report `atlasPools`, `atlasBytes` (including in-progress migration),
+`atlasGrowthFailures` (failed growth or shrink migrations), bounded `desiredPages`, capacity-fitted `admittedPages`,
 and `unresidentPages` separately from logical `residentPages`. Desired counts
 are measured after workspace coarsening; they are not unlimited ideal demand.
 

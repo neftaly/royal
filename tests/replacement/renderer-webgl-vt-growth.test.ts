@@ -9,7 +9,7 @@ import { waitFor } from "./support/wait-for";
 
 afterEach(() => vi.unstubAllGlobals());
 
-const harness = async (virtualSize = 1024) => {
+const harness = async (virtualSize = 1024, budgetBytes?: number) => {
   vi.stubGlobal("document", { baseURI: "https://example.test/" });
   vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo) => new Response(
     String(input).endsWith(".json") ? JSON.stringify({
@@ -21,7 +21,7 @@ const harness = async (virtualSize = 1024) => {
   const texture = virtualTexture("https://example.test/vt.json");
   const gl = fakeGl();
   Object.assign(gl, { texStorage2D: vi.fn() });
-  const budget = new PersistentGpuBudgetOwner();
+  const budget = new PersistentGpuBudgetOwner(budgetBytes);
   const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn(), budget);
   const matrix = identityMat4();
   const view = { view: matrix, viewProjection: matrix, viewport: { width: 256, height: 256, x: 0, y: 0 } };
@@ -36,6 +36,193 @@ const harness = async (virtualSize = 1024) => {
 };
 
 describe("demand-grown RGBA atlases", () => {
+  it("keeps shrink hysteresis when a new pool has ample budget", async () => {
+    const { runtime, view, texture } = await harness();
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    try {
+      view.viewport.width = view.viewport.height = 1024;
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot().residentPages).toBe(85);
+      });
+      const original = runtime.binding(texture)!;
+      const other = virtualTexture({ manifestUri: "https://example.test/other.json", colorSpace: "linear" });
+      runtime.setScene(prepareCanonicalSurfaceScene(scene({
+        camera: perspectiveCamera({}), nodes: [
+          mesh({ geometry: planeGeometry(0.5), material: unlitMaterial({ texture }) }),
+          mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: other }) }),
+        ],
+      })));
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 2, unresidentPages: 0 });
+      });
+      for (let frame = 0; frame < 10; frame++) runtime.update([view]);
+      expect(runtime.binding(texture)).toBe(original);
+    } finally { runtime.dispose(); clock.mockRestore(); }
+  });
+
+  it("does not lend another pool the bytes of an uncommitted shrink", async () => {
+    const { runtime, view, texture, gl, budget } = await harness(1024, 16 * 1024 * 1024);
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    try {
+      view.viewport.width = view.viewport.height = 1024;
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot().residentPages).toBe(85);
+      });
+      view.viewport.width = view.viewport.height = 256;
+      runtime.update([view]);
+      clock.mockReturnValue(2001);
+      runtime.update([view]);
+      vi.mocked(gl.clientWaitSync).mockReturnValue(gl.TIMEOUT_EXPIRED);
+      const other = virtualTexture({ manifestUri: "https://example.test/other.json", colorSpace: "linear" });
+      const changeScene = (size: number) => runtime.setScene(prepareCanonicalSurfaceScene(scene({
+        camera: perspectiveCamera({}), nodes: [
+          mesh({ geometry: planeGeometry(size), material: unlitMaterial({ texture }) }),
+          mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: other }) }),
+        ],
+      })));
+      view.viewport.width = view.viewport.height = 1024;
+      changeScene(0.5);
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot().atlasPools).toBe(2);
+      });
+      changeScene(2);
+      runtime.update([view]);
+      expect(runtime.runtimeSnapshot().atlasBytes).toBeLessThanOrEqual(budget.budgetBytes * 0.75);
+    } finally { runtime.dispose(); clock.mockRestore(); }
+  });
+
+  it("keeps all old residency when a shrink copy fails and does not retry unchanged pressure", async () => {
+    const { runtime, view, texture, gl, budget } = await harness();
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    try {
+      view.viewport.width = view.viewport.height = 1024;
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot().residentPages).toBe(85);
+      });
+      const large = runtime.binding(texture)!;
+      const retained = budget.snapshot().retainedBytes;
+      view.viewport.width = view.viewport.height = 256;
+      runtime.update([view]);
+      clock.mockReturnValue(2001);
+      gl.copyTexSubImage2D.mockImplementationOnce(() => { throw new Error("copy failed"); });
+      for (let frame = 0; frame < 3; frame++) runtime.update([view]);
+      expect(runtime.binding(texture)).toBe(large);
+      expect(budget.snapshot().retainedBytes).toBe(retained);
+      expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 85, unresidentPages: 0, atlasGrowthFailures: 1 });
+      const allocations = vi.mocked(gl.texStorage2D).mock.calls.length;
+      for (let frame = 0; frame < 5; frame++) runtime.update([view]);
+      expect(vi.mocked(gl.texStorage2D).mock.calls.length).toBe(allocations);
+    } finally { runtime.dispose(); clock.mockRestore(); }
+  });
+
+  it("reclaims spare capacity for an incompatible pool without waiting for the idle delay", async () => {
+    const { runtime, view, texture, budget } = await harness(1024, 16 * 1024 * 1024);
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    try {
+      view.viewport.width = view.viewport.height = 1024;
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 85, unresidentPages: 0 });
+      });
+      const large = runtime.binding(texture)!;
+      const other = virtualTexture({ manifestUri: "https://example.test/other.json", colorSpace: "linear" });
+      runtime.setScene(prepareCanonicalSurfaceScene(scene({
+        camera: perspectiveCamera({}), nodes: [
+          mesh({ geometry: planeGeometry(0.5), material: unlitMaterial({ texture }) }),
+          mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: other }) }),
+        ],
+      })));
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 2, desiredPages: 90, unresidentPages: 0 });
+        expect(runtime.binding(texture)!.atlas.texture).not.toBe(large.atlas.texture);
+        expect(runtime.binding(other)).toBeDefined();
+      });
+      expect(runtime.runtimeSnapshot().atlasGrowthFailures).toBe(0);
+      expect(budget.snapshot().retainedBytes).toBeLessThan(budget.budgetBytes);
+    } finally { runtime.dispose(); clock.mockRestore(); }
+    expect(budget.snapshot().retainedBytes).toBe(0);
+  });
+
+  it("retries initial allocation after temporary budget exhaustion", async () => {
+    const { runtime, view, texture, budget } = await harness();
+    runtime.invalidate();
+    const blocker = {};
+    expect(budget.tryClaim(blocker, budget.availableBytes)).toBe(true);
+    try {
+      for (let frame = 0; frame < 3; frame++) {
+        expect(runtime.update([view]).pending).toBe(false);
+        expect(runtime.binding(texture)).toBeUndefined();
+      }
+      budget.release(blocker);
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 5, unresidentPages: 0 });
+      });
+    } finally { budget.release(blocker); runtime.dispose(); }
+  });
+
+  it("shrinks sustained low demand by compacting resident pages without rereading them", async () => {
+    const { runtime, view, texture, budget } = await harness();
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    try {
+      view.viewport.width = view.viewport.height = 1024;
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 85, unresidentPages: 0 });
+      });
+      const large = runtime.binding(texture)!;
+      const retained = budget.snapshot().retainedBytes;
+      const requests = runtime.runtimeSnapshot().pageRequests;
+      view.viewport.width = view.viewport.height = 256;
+      runtime.update([view]);
+      expect(runtime.binding(texture)).toBe(large);
+      clock.mockReturnValue(1999);
+      runtime.update([view]);
+      expect(runtime.binding(texture)).toBe(large);
+      clock.mockReturnValue(2001);
+      runtime.update([view]);
+      expect(runtime.binding(texture)).toBe(large);
+      expect(budget.snapshot().retainedBytes).toBeGreaterThan(retained);
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.binding(texture)!.atlas.texture).not.toBe(large.atlas.texture);
+      });
+      expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 8, unresidentPages: 0, pageRequests: requests });
+      expect(budget.snapshot().retainedBytes).toBeLessThan(retained);
+    } finally { runtime.dispose(); clock.mockRestore(); }
+    expect(budget.snapshot().retainedBytes).toBe(0);
+  });
+
+  it("cancels a pending shrink when the view needs the larger atlas again", async () => {
+    const { runtime, view, texture, budget } = await harness();
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    try {
+      view.viewport.width = view.viewport.height = 1024;
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot().residentPages).toBe(85);
+      });
+      const large = runtime.binding(texture)!;
+      const retained = budget.snapshot().retainedBytes;
+      view.viewport.width = view.viewport.height = 256;
+      runtime.update([view]);
+      clock.mockReturnValue(2001);
+      runtime.update([view]);
+      expect(budget.snapshot().retainedBytes).toBeGreaterThan(retained);
+      view.viewport.width = view.viewport.height = 1024;
+      runtime.update([view]);
+      expect(runtime.binding(texture)).toBe(large);
+      expect(budget.snapshot().retainedBytes).toBe(retained);
+      expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 85, unresidentPages: 0 });
+    } finally { runtime.dispose(); clock.mockRestore(); }
+  });
+
   it("keeps existing page coordinates and tables when growth fits below the old rows", async () => {
     const { runtime, view, gl, texture } = await harness();
     const original = runtime.binding(texture)!;

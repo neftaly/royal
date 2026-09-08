@@ -11,6 +11,7 @@ export const copyVirtualTextureAtlasSlots = (
   target: AtlasImage,
   slots: readonly number[],
   validate = true,
+  targetSlots: readonly number[] = slots,
 ): void => {
   if (slots.length === 0) return;
   const previousRead = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
@@ -25,9 +26,11 @@ export const copyVirtualTextureAtlasSlots = (
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, target.atlasTexture);
     const size = source.storedPageSize;
-    for (const slot of slots) {
+    for (let index = 0; index < slots.length; index += 1) {
+      const slot = slots[index]!;
+      const targetSlot = targetSlots[index]!;
       gl.copyTexSubImage2D(gl.TEXTURE_2D, 0,
-        (slot % target.atlasColumns) * size, Math.floor(slot / target.atlasColumns) * size,
+        (targetSlot % target.atlasColumns) * size, Math.floor(targetSlot / target.atlasColumns) * size,
         (slot % source.atlasColumns) * size, Math.floor(slot / source.atlasColumns) * size,
         size, size);
     }

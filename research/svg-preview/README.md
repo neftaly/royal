@@ -174,3 +174,39 @@ swapped between artwork and the normal map, with independent artwork transforms
 and normal tiling of 1500 × 750. All six Chromium cases passed, with exact expected
 coordinates. This is a shader-level regression, not an end-to-end verification of
 Probability's Linen import or AVIF decoding.
+
+### Shrinking and spare-budget reuse (2026-09-08)
+
+`atlas-copy-probe.mjs` now also compacts source slots 3 and 1 into destination
+slots 0 and 1 of a smaller atlas. Native Chromium RGBA8 and SRGB8_ALPHA8 checks
+pass with zero channel errors and preserved read-framebuffer bindings for both
+growth and compaction.
+
+[`shrink-a10.json`](shrink-a10.json) records the same 273-piece/60-texture A10
+fixture with camera extents 0.85 → 0.3 at 12 seconds → 0.85 at 24 seconds → 0.3
+at 34 seconds. Atlas allocation fell from 69,222,400 bytes to 34,611,200 bytes by
+the 29.24-second sample. Page requests remained 227 across shrinking: migration
+copied existing pixels without rerasterizing them. By 39.25 seconds the second
+zoom-in had all 172 target pages, with 326 cumulative page requests. The 99 new
+requests repopulated discarded detail. Final retained GPU bytes were 72,065,793,
+with zero migration failures, page failures, denied claims, or context losses.
+The root stayed at frame 402 between the final two samples. Startup still had a
+336 ms maximum rAF gap; the repeated zoom-in had a 102 ms gap. These observations
+do not establish hitch-free interaction.
+
+The runtime regression covers delayed shrinking, cancellation, copy-failure
+rollback, temporary initial-budget exhaustion, and two incompatible RGBA pools
+sharing a 16 MiB root budget. Shrinking preserves all bounded desired pages and
+releases spare capacity; it does not forcibly take actively demanded capacity
+from one pool to equalize pools. The root default remains 256 MiB and resizing
+still requires old-plus-new allocation headroom. Compressed ETC2 resizing and
+automatic default-budget calibration remain separate work.
+
+
+Adversarial follow-up found and fixed two multi-pool policy errors. First, a
+pending shrink previously lent its expected savings to another pool; cancelling
+that shrink retained 14,331,200 atlas bytes against a 12,582,912-byte allowance in
+the 16 MiB regression. Accounting now reserves the larger old/replacement size
+until commit. Second, any new pool could bypass shrink hysteresis even with ample
+budget. The bypass now requires a measured capacity shortage. Both regressions
+failed before the fixes and pass afterward; the 30 migration tests pass together.
