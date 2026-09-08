@@ -49,6 +49,7 @@ export const planVirtualTextureAtlasStorage = (
   availableBytesInput: number,
   targetSlots = Infinity,
   physicalByteLimit = DEFAULT_PHYSICAL_BYTES,
+  allocation: "initial" | "migration" = "initial",
 ): VirtualTextureAtlasStoragePlan => {
   if (!Number.isSafeInteger(maxTextureSizeInput) || maxTextureSizeInput < 1) {
     throw new RangeError("Royal VT received an invalid WebGL2 texture limit");
@@ -64,12 +65,12 @@ export const planVirtualTextureAtlasStorage = (
   }
   const compressed = manifest.pageEncoding === "ktx2-etc2";
   const bytesPerPage = storedPageSize * storedPageSize * (compressed ? 1 : 4);
-  const availableAtlasBytes = Math.max(0, availableBytesInput - manifest.tableByteLength);
+  const availableAtlasBytes = Math.max(0, availableBytesInput - (allocation === "initial" ? manifest.tableByteLength : 0));
   // This atlas serves all compatible textures, not just the first asset.
   const atlasByteLimit = Math.min(
     physicalByteLimit,
     availableAtlasBytes,
-    Math.max(bytesPerPage, Math.floor(availableAtlasBytes * 0.75)),
+    allocation === "initial" ? Math.max(bytesPerPage, Math.floor(availableAtlasBytes * 0.75)) : Infinity,
   );
   const slotLimit = Math.min(
     Math.floor(atlasByteLimit / bytesPerPage),

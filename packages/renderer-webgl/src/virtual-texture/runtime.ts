@@ -1,3 +1,4 @@
+import { allocateVirtualTexturePoolBytes } from "./pool-budget";
 import type { VirtualTextureAssetRef } from "@royal/renderer-core";
 import type { SurfaceFrameView } from "../frame/surface-frame";
 import { IDENTITY_TEXTURE_COORDINATES } from "../surface/texture-coordinates";
@@ -97,10 +98,11 @@ type ReadyPage = Readonly<{
 }>;
 
 type GpuVirtualTextureAtlas = VirtualTextureAtlasStoragePlan & {
+  copyFramebuffer?: WebGLFramebuffer;
   validationPending?: boolean;
   validationFence?: WebGLSync;
   validationWaitFrames?: number;
-  growth?: { replacement: GpuVirtualTextureAtlas; nextSlot: number; retainedSlots?: number[] };
+  growth?: { replacement: GpuVirtualTextureAtlas; nextSlot: number; retainedSlots?: number[]; capacityLimited?: boolean; targetSlots: number };
   shrinkAfter?: number;
   blockedGrowth?: string;
   atlasTexture: WebGLTexture;
@@ -135,6 +137,7 @@ type RuntimeResource = {
   demandRevision: number;
   demandNeedsFit?: boolean;
   allocationBudgetBlocked?: boolean;
+  admittedPageLimit?: number;
   desiredPageCount?: number;
   readonly failedPages: Set<VirtualTexturePageKey>;
   gpu: GpuVirtualTexture | undefined;
@@ -361,6 +364,7 @@ const destroyGpuVirtualTextureAtlas = (
 ): void => {
   if (atlas.growth !== undefined) destroyGpuVirtualTextureAtlas(gl, atlas.growth.replacement, budget);
   if (atlas.validationFence !== undefined) gl.deleteSync(atlas.validationFence);
+  if (atlas.copyFramebuffer !== undefined) gl.deleteFramebuffer(atlas.copyFramebuffer);
   gl.deleteTexture(atlas.atlasTexture);
   budget.release(atlas.budgetIdentity);
 };
@@ -384,10 +388,13 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #viewRevision = 0;
   #viewState = new Float64Array(0);
   readonly #gl: WebGL2RenderingContext;
+  #maxTextureSize: number | undefined;
   readonly #etc2Available: boolean;
   readonly #atlases = new Map<string, GpuVirtualTextureAtlas>();
   readonly #atlasDemand = new Map<string, number>();
   readonly #atlasDemandBytes = new Map<string, number>();
+  #atlasShares = new Map<string, number>();
+  readonly #atlasMinimumSlots = new Map<string, number>();
   #atlasGrowthFailures = 0;
   #shrinkTimer: ReturnType<typeof setTimeout> | undefined;
   readonly #budget: PersistentGpuBudgetOwner;
@@ -457,6 +464,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   }
 
   invalidate(): void {
+    this.#maxTextureSize = undefined;
     clearTimeout(this.#shrinkTimer);
     this.#shrinkTimer = undefined;
     for (const resource of this.#resources.values()) {
@@ -734,6 +742,10 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
 
     this.#atlasDemand.clear();
     this.#atlasDemandBytes.clear();
+    this.#atlasMinimumSlots.clear();
+    const poolRequests = new Map<string, { key: string; minimumBytes: number; wantedBytes: number }>();
+    let compressedBytes = 0;
+    const compressedKeys = new Set<string>();
     for (const resource of this.#resources.values()) {
       this.#refreshFrameDemand(resource, views);
       const manifest = resource.manifest;
@@ -744,12 +756,50 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         manifest.physicalByteBudget === undefined ? Infinity : Math.floor(manifest.physicalByteBudget / bytesPerPage));
       this.#atlasDemand.set(key, (this.#atlasDemand.get(key) ?? 0) + count);
       this.#atlasDemandBytes.set(key, (this.#atlasDemandBytes.get(key) ?? 0) + count * bytesPerPage);
+      this.#atlasMinimumSlots.set(key, (this.#atlasMinimumSlots.get(key) ?? 0) + (count > 0 ? 1 : 0));
+      if (count === 0 && !this.#atlases.has(key)) continue;
+      if (manifest.pageEncoding === "ktx2-etc2") {
+        if (!compressedKeys.has(key)) compressedBytes += this.#atlases.get(key)?.allocationBytes ?? 32 * 1024 * 1024;
+        compressedKeys.add(key);
+      } else {
+        poolRequests.set(key, { key,
+          minimumBytes: Math.max(1, this.#atlasMinimumSlots.get(key)!) * bytesPerPage,
+          wantedBytes: 2 ** Math.ceil(Math.log2(Math.max(1, this.#atlasDemand.get(key)!))) * bytesPerPage,
+        });
+      }
     }
+    this.#atlasShares = allocateVirtualTexturePoolBytes([...poolRequests.values()],
+      Math.max(0, Math.floor(this.#budget.budgetBytes * 0.75) - compressedBytes));
     for (const atlas of this.#atlases.values()) {
       const growth = this.#resizeAtlas(atlas, uploadsRemaining);
       uploadsRemaining -= growth.copied;
       pending ||= growth.pending;
       webGlStateChanged ||= growth.changed;
+    }
+
+    // Share each physical pool among its visible logical textures as well.
+    // Otherwise an earlier texture can protect every slot from later arrivals.
+    for (const atlas of this.#atlases.values()) {
+      const resources = [...this.#resources.values()].filter((resource) =>
+        resource.manifest !== undefined && resource.manifestFailure === undefined
+          && virtualTextureAtlasKey(resource.asset, resource.manifest) === atlas.key);
+      if (!resources.some((resource) => resource.demandNeedsFit || resource.admittedPageLimit === undefined
+        || resource.demandRevision !== this.#viewRevision)) continue;
+      const requests = resources.filter((resource) => (resource.desiredPageCount ?? 0) > 0).map((resource) => {
+        const manifest = resource.manifest!;
+        return { key: resource.key, minimumBytes: 1,
+          wantedBytes: Math.min(resource.desiredPageCount!, manifest.physicalSlots ?? atlas.slotCount,
+            manifest.physicalByteBudget === undefined ? atlas.slotCount
+              : Math.floor(manifest.physicalByteBudget / (atlas.allocationBytes / atlas.slotCount))),
+        };
+      });
+      const shares = allocateVirtualTexturePoolBytes(requests, atlas.slotCount);
+      for (const resource of resources) {
+        const limit = Math.max(1, shares.get(resource.key) ?? atlas.slotCount);
+        if (resource.admittedPageLimit === limit) continue;
+        resource.admittedPageLimit = limit;
+        resource.demandRevision = -1;
+      }
     }
 
     // Resolve every resource's current demand before consulting the shared
@@ -872,7 +922,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       const pageBytes = (manifest.pageSize + manifest.borderTexels * 2) ** 2
         * (manifest.pageEncoding === "ktx2-etc2" ? 1 : 4);
       resource.allocationBudgetBlocked = this.#budget.availableBytes < manifest.tableByteLength + (atlas === undefined ? pageBytes : 0)
-        || (atlas === undefined && manifest.pageEncoding !== "ktx2-etc2" && this.#atlasAllowance() < pageBytes);
+        || (atlas === undefined && manifest.pageEncoding !== "ktx2-etc2" && this.#atlasAllowance(undefined, virtualTextureAtlasKey(resource.asset, manifest)) < pageBytes);
       if (resource.allocationBudgetBlocked) return false;
       if (!this.#uploadBudget.tryAdmitAllocation()) {
         resource.demandRevision = -1;
@@ -892,7 +942,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     const gpu = resource.gpu;
     if (demandChanged) {
       resource.demandNeedsFit = false;
-      truncateVirtualTextureDemand(resource.workspace, gpu.maxResidentPages);
+      truncateVirtualTextureDemand(resource.workspace, Math.min(gpu.maxResidentPages, resource.admittedPageLimit ?? Infinity));
       resource.source?.setDemand?.(Array.from({ length: resource.workspace.count }, (_, index) => ({
         mip: resource.workspace.mips[index]!, x: resource.workspace.xs[index]!, y: resource.workspace.ys[index]!,
       })));
@@ -937,10 +987,15 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   }
 
   #targetAtlasSlots(key: string): number {
-    return 2 ** Math.ceil(Math.log2(Math.max(1, this.#atlasDemand.get(key) ?? 1)));
+    const count = this.#atlasDemand.get(key) ?? 0;
+    const pageBytes = count > 0 ? this.#atlasDemandBytes.get(key)! / count
+      : (this.#atlases.get(key)?.storedPageSize ?? NaN) ** 2 * 4;
+    const share = this.#atlasShares.get(key);
+    return Math.min(2 ** Math.ceil(Math.log2(Math.max(1, count))),
+      share === undefined || !Number.isFinite(pageBytes) ? Infinity : Math.floor(share / pageBytes));
   }
 
-  #atlasAllowance(except?: GpuVirtualTextureAtlas): number {
+  #atlasAllowance(except?: GpuVirtualTextureAtlas, key = except?.key): number {
     let otherBytes = 0;
     for (const atlas of this.#atlases.values()) {
       if (atlas !== except) {
@@ -949,7 +1004,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         otherBytes += Math.max(atlas.allocationBytes, atlas.growth?.replacement.allocationBytes ?? 0);
       }
     }
-    return Math.max(0, Math.floor(this.#budget.budgetBytes * 0.75) - otherBytes);
+    return Math.min(key === undefined ? Infinity : this.#atlasShares.get(key) ?? Infinity,
+      Math.max(0, Math.floor(this.#budget.budgetBytes * 0.75) - otherBytes));
   }
 
   #scheduleShrink(delay: number): void {
@@ -971,7 +1027,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     if (atlas.compressed) return result(false);
     const demand = this.#atlasDemand.get(atlas.key) ?? 0;
     const targetSlots = this.#targetAtlasSlots(atlas.key);
-    const shrinking = targetSlots <= atlas.slotCount / 2;
+    const capacityLimited = demand > targetSlots && targetSlots < atlas.slotCount;
+    const shrinking = capacityLimited || targetSlots <= atlas.slotCount / 2;
     let missingBytes = 0;
     let replacementBytes = 0;
     for (const [key, count] of this.#atlasDemand) {
@@ -985,8 +1042,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       || replacementBytes > this.#budget.availableBytes;
     if (!shrinking) delete atlas.shrinkAfter;
     if (atlas.growth !== undefined && (
-      atlas.growth.retainedSlots === undefined ? demand <= atlas.slotCount
-        : demand > atlas.growth.replacement.slotCount
+      atlas.growth.retainedSlots === undefined ? targetSlots <= atlas.slotCount
+        : (atlas.growth.capacityLimited ? targetSlots > atlas.growth.targetSlots : demand > atlas.growth.replacement.slotCount)
           || atlas.growth.retainedSlots.some((slot) => atlas.slots[slot] === undefined)
     )) {
       destroyGpuVirtualTextureAtlas(this.#gl, atlas.growth.replacement, this.#budget);
@@ -996,8 +1053,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     }
     const fingerprint = `${demand}:${this.#budget.availableBytes}:${this.#atlasAllowance(atlas)}`;
     if (atlas.growth === undefined) {
-      if ((!shrinking && demand <= atlas.slotCount) || atlas.blockedGrowth === fingerprint) return result(false);
-      if (shrinking && !pressure) {
+      if ((!shrinking && targetSlots <= atlas.slotCount) || atlas.blockedGrowth === fingerprint) return result(false);
+      if (shrinking && !pressure && !capacityLimited) {
         atlas.shrinkAfter ??= performance.now() + ATLAS_SHRINK_DELAY_MS;
         const delay = atlas.shrinkAfter - performance.now();
         if (delay > 0) {
@@ -1011,9 +1068,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       try {
         // The old atlas remains fully charged until migration commits. The
         // replacement must fit real unclaimed budget as well as final allowance.
-        const maxTextureSize = this.#gl.getParameter(this.#gl.MAX_TEXTURE_SIZE) as number;
+        const maxTextureSize = this.#textureSizeLimit();
         plan = planVirtualTextureAtlasStorage(resource.manifest!, maxTextureSize,
-          this.#budget.availableBytes, targetSlots, this.#atlasAllowance(atlas));
+          this.#budget.availableBytes, targetSlots, this.#atlasAllowance(atlas), "migration");
         const rows = plan.slotCount / atlas.atlasColumns;
         if (Number.isInteger(rows) && rows <= 256 && rows * atlas.storedPageSize <= maxTextureSize) {
           plan = { ...plan, atlasColumns: atlas.atlasColumns, atlasRows: rows };
@@ -1022,7 +1079,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         atlas.blockedGrowth = fingerprint;
         return result(false);
       }
-      if (shrinking ? plan.slotCount < Math.max(1, demand) || plan.slotCount >= atlas.slotCount
+      if (shrinking ? plan.slotCount < Math.max(1, capacityLimited ? this.#atlasMinimumSlots.get(atlas.key) ?? 1 : demand) || plan.slotCount >= atlas.slotCount
         : plan.slotCount <= atlas.slotCount) {
         atlas.blockedGrowth = fingerprint;
         return result(false);
@@ -1036,12 +1093,14 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           const priority = (slot: number): number => {
             const entry = atlas.slots[slot]!;
             const owner = this.#resources.get(entry.resourceKey);
+            const coarse = entry.pageKey === virtualTexturePageKeyParts(owner!.manifest!.mipCount - 1, 0, 0);
+            if (coarse && owner!.workspace.count > 0) return 3;
             if (owner?.workspace.keys.has(entry.pageKey)) return 2;
-            return entry.pageKey === virtualTexturePageKeyParts(owner!.manifest!.mipCount - 1, 0, 0) ? 1 : 0;
+            return coarse ? 1 : 0;
           };
           return priority(b) - priority(a) || atlas.lastUsedFrames[b]! - atlas.lastUsedFrames[a]!;
         }).slice(0, replacement.slotCount) : undefined;
-        atlas.growth = { replacement, nextSlot: 0, ...(retainedSlots === undefined ? {} : { retainedSlots }) };
+        atlas.growth = { replacement, nextSlot: 0, targetSlots, capacityLimited, ...(retainedSlots === undefined ? {} : { retainedSlots }) };
         // Never query allocation errors in the submitting frame: that query
         // can synchronously wait for the entire replacement's initialization.
         return result(true);
@@ -1086,7 +1145,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     }
     // A view can change while copies are pending. Restart a shrink if it would
     // discard a newly demanded resident page; the old binding is still intact.
-    if (growth.retainedSlots !== undefined && atlas.slots.some((entry, slot) =>
+    if (!growth.capacityLimited && growth.retainedSlots !== undefined && atlas.slots.some((entry, slot) =>
       entry !== undefined && this.#protectedPoolPages.has(entry.resourceKey, entry.pageKey)
         && !growth.retainedSlots!.includes(slot))) {
       destroyGpuVirtualTextureAtlas(this.#gl, replacement, this.#budget);
@@ -1141,7 +1200,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         if (entry !== undefined) this.#resources.get(entry.resourceKey)?.gpu?.residentSlots.set(entry.pageKey, slot);
       });
     }
-    const maxTextureSize = this.#gl.getParameter(this.#gl.MAX_TEXTURE_SIZE) as number;
+    const maxTextureSize = this.#textureSizeLimit();
     for (const resource of resources) {
       const gpu = resource.gpu!;
       gpu.atlas = replacement;
@@ -1167,6 +1226,10 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     return result(false);
   }
 
+  #textureSizeLimit(): number {
+    return this.#maxTextureSize ??= this.#gl.getParameter(this.#gl.MAX_TEXTURE_SIZE) as number;
+  }
+
   #createGpuResource(
     resource: RuntimeResource,
     manifest: VirtualTextureManifest,
@@ -1175,7 +1238,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       throw new Error("Royal ETC2 KTX2 VT pages require WEBGL_compressed_texture_etc");
     }
     const atlasKey = virtualTextureAtlasKey(resource.asset, manifest);
-    const maxTextureSize = this.#gl.getParameter(this.#gl.MAX_TEXTURE_SIZE) as number;
+    const maxTextureSize = this.#textureSizeLimit();
     let atlas = this.#atlases.get(atlasKey);
     const created = atlas === undefined;
     if (atlas === undefined) {
@@ -1184,7 +1247,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         maxTextureSize,
         this.#budget.availableBytes,
         manifest.pageEncoding === "ktx2-etc2" ? Infinity : this.#targetAtlasSlots(atlasKey),
-        manifest.pageEncoding === "ktx2-etc2" ? undefined : this.#atlasAllowance(),
+        manifest.pageEncoding === "ktx2-etc2" ? undefined : this.#atlasAllowance(undefined, atlasKey),
       );
       atlas = createGpuVirtualTextureAtlas(
         this.#gl,

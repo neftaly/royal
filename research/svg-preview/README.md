@@ -210,3 +210,89 @@ the 16 MiB regression. Accounting now reserves the larger old/replacement size
 until commit. Second, any new pool could bypass shrink hysteresis even with ample
 budget. The bypass now requires a measured capacity shortage. Both regressions
 failed before the fixes and pass afterward; the 30 migration tests pass together.
+
+### Repeatable saturation and lifecycle soak
+
+`soak-probe.mjs` generates its own authored PNG pages and manifests. It needs no
+Probability assets. It uses 128px and 256px pools, alternates which appears first,
+pans, zooms out, clears the scene, and repeats three cycles. `sharedPool` instead
+uses two 128px textures in one atlas. Checks include coverage of both textures at
+phase boundaries, page/migration/context errors, the hard GPU ceiling, zero
+claims after clearing/disposal, and no rendering during the final idle window.
+The test uses a deliberately small 16 MiB root to expose saturation; this is not
+a proposed production default. It exercises residency policy rather than SVG
+rasterization or optimal page-size selection.
+
+Build `renderer-core` and `renderer-webgl`, then run:
+
+```sh
+node research/svg-preview/soak-server.mjs
+```
+
+Open the token-bearing URL printed by the server. Optional query parameters are
+`budget=16`, `cycles=3`, `dwell=6000` (milliseconds), and `shared=1`. For USB iPad
+automation, run the server with `ROYAL_SOAK_HOST` set to the host's LAN address,
+then run `soak-ipad.py` with a Python environment containing `pymobiledevice3`:
+
+```sh
+ROYAL_SOAK_URL='<printed URL>&shared=1' ROYAL_SOAK_REPORT=/tmp/soak.json \
+  python research/svg-preview/soak-ipad.py
+```
+
+Safari automation must already be enabled and the iPad trusted. The driver polls
+at ten-second intervals, saves the full report, and fails if the probe reports
+errors or does not finish within its polling window. Default runs take about two
+minutes; excessively large cycle/dwell overrides will exceed the driver window.
+
+[`soak-results.json`](soak-results.json) includes the baseline and final runs.
+The baseline lacked the later explicit phase-boundary coverage assertion; its
+empty error list must not be interpreted as a coverage pass. All three baseline
+A10 cycles left the second incompatible pool at zero resident pages in the
+`both` phase. Reversing arrival order left the later pool with only one page.
+This motivated active-pool budget sharing and admission shares within a pool.
+
+Final A10 observations (three cycles per mode, about 113 seconds each):
+
+| Observation | Mixed 128/256px pools | Shared 128px pool |
+| --- | ---: | ---: |
+| Desired / admitted pages at `both` | 258 / 74 | 402 / 114 |
+| Unresident admitted pages at each `both` / `reverse-both` phase end | 0 | 0 |
+| Peak claimed GPU bytes | 16,766,250 | 16,738,046 |
+| Page/migration/context failures | 0 | 0 |
+| Final empty-scene GPU claims | 0 | 0 |
+| Final idle frame delta | 0 | 0 |
+| Recorded maximum rAF gap | 50 ms | 96 ms |
+
+Retained page counts can remain asymmetric because useful old detail stays
+cached until its slots are needed. Admission and coarse coverage are shared;
+identical cached-resident counts are not required. Saturation deliberately
+reduces target quality instead of leaving later textures without coverage.
+
+Chromium also passed coverage and cleanup at 16 MiB with 12-second dwell, but
+still had 14 unresident admitted pages at one phase boundary and a 333 ms maximum
+rAF gap. Its earlier default-budget control likewise had pending refinement at
+six-second boundaries. These headless observations do not establish comparable
+refinement performance to native A10, and the recorded gap differences between
+runs are not an isolated performance comparison.
+
+The original 273-piece SVG fixture was rerun on A10 with the final policy and the
+unchanged 256 MiB default. It settled at 16.26 seconds (about 4.26 seconds after
+the scripted zoom), with all 172 target pages resident, 227 page requests,
+69,222,400 atlas bytes, and 72,065,793 total claimed GPU bytes. No failures,
+denials, or context losses occurred. This is consistent with the earlier
+approximately 4.1-second runs, rather than evidence for a new speedup. Startup
+still had a 270 ms maximum rAF gap. The 256px SVG/128px ordinary-raster page-size
+policy is unchanged.
+# Atlas-copy overhead follow-up
+
+The source atlas now retains its validated copy framebuffer across batches,
+and the runtime caches `MAX_TEXTURE_SIZE` until context invalidation. This
+removes repeated framebuffer creation/attachment checks and limit queries;
+binding restoration and deferred copy-error validation remain intact.
+
+The attached A10 repeated the 273-piece original SVG fixture with these changes:
+all 172 target pages settled about 4.28 seconds after zoom, with 72,065,793
+tracked GPU bytes, no failed pages, allocation denials, or context loss, and
+no further frames while idle. Text remained readable in the captured image.
+This is consistent with the previous ~4.3-second result, not evidence of an
+end-to-end speedup. Raw results: [copy-cache-a10-results.json](./copy-cache-a10-results.json).

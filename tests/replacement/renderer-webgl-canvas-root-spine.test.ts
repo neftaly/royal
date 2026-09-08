@@ -534,38 +534,54 @@ describe("clear-only canvas root", () => {
     const { callbacks, canvas, root } = harness({ readGltf });
     const transform = { position: [-1, -2, 0] as const };
     const base = gltf({ src: "/outlined.glb", transform });
-    root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 2 });
-    root.setScene(scene({
-      camera: perspectiveCamera({ position: [0, 0, 3] }),
-      nodes: [base],
-    }));
-    root.setOverlay(sceneOverlay({
-      nodes: [outlineGltf({
-        material: edgeMaterial({
-          color: [1, 0.5, 0.1, 0.75],
-          widthCssPixels: 5,
-        }),
-        src: "/outlined.glb",
-        transform,
-      })],
-    }));
-    callbacks.shift()!();
-    await waitFor(() =>
-      expect(root.getGltfAssetSnapshot(base.asset).status).toBe("ready"));
-    callbacks.shift()!();
+    let unsubscribe = () => {};
+    try {
+      root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 2 });
+      root.setScene(scene({
+        camera: perspectiveCamera({ position: [0, 0, 3] }),
+        nodes: [base],
+      }));
+      root.setOverlay(sceneOverlay({
+        nodes: [outlineGltf({
+          material: edgeMaterial({
+            color: [1, 0.5, 0.1, 0.75],
+            widthCssPixels: 5,
+          }),
+          src: "/outlined.glb",
+          transform,
+        })],
+      }));
+      callbacks.shift()!();
+      // This first glTF load also imports the preparation modules. Follow its
+      // lifecycle instead of imposing the polling helper's one-second deadline
+      // on cold module transformation under a concurrent full-suite run.
+      await new Promise<void>((resolve, reject) => {
+        const changed = () => {
+          const snapshot = root.getGltfAssetSnapshot(base.asset);
+          if (snapshot.status === "ready") resolve();
+          else if (snapshot.status === "error") reject(new Error(snapshot.error));
+        };
+        unsubscribe = root.subscribeGltfAsset(base.asset, changed);
+        changed();
+      });
+      callbacks.shift()!();
 
-    expect(readGltf).toHaveBeenCalledOnce();
-    // Position and index storage are uploaded once by the base scene. The edge
-    // lane borrows that VAO and allocates textures, never another buffer.
-    expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
-    expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
-    expect(canvas.gl.drawArrays).toHaveBeenCalledTimes(2);
-    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
-      String(source).includes("dFdx(viewPosition)"))).toBe(true);
-    expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
-      String(source).includes("center.b < neighbor.b"))).toBe(true);
-    expect(canvas.gl.uniform1f.mock.calls.some(([, value]) => value === 4.5)).toBe(true);
-    expect(canvas.gl.disable).toHaveBeenCalledWith(canvas.gl.DEPTH_TEST);
+      expect(readGltf).toHaveBeenCalledOnce();
+      // Position and index storage are uploaded once by the base scene. The edge
+      // lane borrows that VAO and allocates textures, never another buffer.
+      expect(canvas.gl.bufferData).toHaveBeenCalledTimes(2);
+      expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
+      expect(canvas.gl.drawArrays).toHaveBeenCalledTimes(2);
+      expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+        String(source).includes("dFdx(viewPosition)"))).toBe(true);
+      expect(canvas.gl.shaderSource.mock.calls.some(([, source]) =>
+        String(source).includes("center.b < neighbor.b"))).toBe(true);
+      expect(canvas.gl.uniform1f.mock.calls.some(([, value]) => value === 4.5)).toBe(true);
+      expect(canvas.gl.disable).toHaveBeenCalledWith(canvas.gl.DEPTH_TEST);
+    } finally {
+      unsubscribe();
+      root.dispose();
+    }
   });
 
   it("outlines one automatic instance member without relowering or another upload", async () => {

@@ -9,7 +9,7 @@ import { waitFor } from "./support/wait-for";
 
 afterEach(() => vi.unstubAllGlobals());
 
-const harness = async (virtualSize = 1024, budgetBytes?: number) => {
+const harness = async (virtualSize = 1024, budgetBytes?: number, maxTextureSize?: number) => {
   vi.stubGlobal("document", { baseURI: "https://example.test/" });
   vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo) => new Response(
     String(input).endsWith(".json") ? JSON.stringify({
@@ -20,6 +20,10 @@ const harness = async (virtualSize = 1024, budgetBytes?: number) => {
   vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ width: 130, height: 130, close: vi.fn() })));
   const texture = virtualTexture("https://example.test/vt.json");
   const gl = fakeGl();
+  if (maxTextureSize !== undefined) {
+    const getParameter = vi.mocked(gl.getParameter).getMockImplementation()!;
+    vi.mocked(gl.getParameter).mockImplementation(name => name === gl.MAX_TEXTURE_SIZE ? maxTextureSize : getParameter(name));
+  }
   Object.assign(gl, { texStorage2D: vi.fn() });
   const budget = new PersistentGpuBudgetOwner(budgetBytes);
   const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn(), budget);
@@ -36,6 +40,147 @@ const harness = async (virtualSize = 1024, budgetBytes?: number) => {
 };
 
 describe("demand-grown RGBA atlases", () => {
+  it("releases cached copy attachments and refreshes texture limits after context loss", async () => {
+    const { runtime, view, gl, texture } = await harness();
+    try {
+      view.viewport.width = view.viewport.height = 1024;
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.snapshot(texture).residentPages).toBe(85);
+      });
+      const limitQueries = () => vi.mocked(gl.getParameter).mock.calls.filter(([name]) => name === gl.MAX_TEXTURE_SIZE).length;
+      expect(limitQueries()).toBe(1);
+      expect(gl.createFramebuffer).toHaveBeenCalled();
+      expect(vi.mocked(gl.deleteFramebuffer).mock.calls.length).toBe(vi.mocked(gl.createFramebuffer).mock.calls.length);
+      runtime.invalidate();
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.snapshot(texture).residentPages).toBe(85);
+      });
+      expect(limitQueries()).toBe(2);
+    } finally { runtime.dispose(); }
+  });
+
+  it.each(["dispose", "invalidate", "cancel"].flatMap(action =>
+    [1, 2, 3, 4].map(frames => ({ action, frames }))))(
+    "releases a forced shrink on $action after $frames frames", async ({ action, frames }) => {
+      const { runtime, view, texture, budget, gl } = await harness(4096, 16 * 1024 * 1024);
+      try {
+        view.viewport.width = view.viewport.height = 2048;
+        await waitFor(() => {
+          runtime.update([view]);
+          expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 341, unresidentPages: 0 });
+          expect(runtime.snapshot(texture).residentPages).toBeGreaterThanOrEqual(85);
+        });
+        const binding = runtime.binding(texture);
+        const retainedBytes = budget.snapshot().retainedBytes;
+        const other = virtualTexture({ manifestUri: "https://example.test/other.json", colorSpace: "linear" });
+        const setAssets = (assets: typeof texture[]) => runtime.setScene(prepareCanonicalSurfaceScene(scene({
+          camera: perspectiveCamera({}), nodes: assets.map(asset =>
+            mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) })),
+        })));
+        const allocations = vi.mocked(gl.texStorage2D).mock.calls.length;
+        setAssets([texture, other]);
+        await waitFor(() => {
+          runtime.update([view]);
+          expect(vi.mocked(gl.texStorage2D).mock.calls.length).toBeGreaterThan(allocations);
+        });
+        for (let frame = 1; frame < frames; frame++) runtime.update([view]);
+        expect(runtime.binding(texture)).toBe(binding);
+        expect(budget.snapshot().retainedBytes).toBeLessThanOrEqual(budget.budgetBytes);
+        if (action === "cancel") {
+          setAssets([texture]);
+          runtime.update([view]);
+          expect(runtime.binding(texture)).toBe(binding);
+          expect(budget.snapshot().retainedBytes).toBe(retainedBytes);
+          await waitFor(() => {
+            runtime.update([view]);
+            expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 1, unresidentPages: 0, atlasGrowthFailures: 0 });
+          });
+        } else {
+          if (action === "dispose") runtime.dispose();
+          else runtime.invalidate();
+          expect(budget.snapshot().retainedBytes).toBe(0);
+          if (action === "invalidate") await waitFor(() => {
+            runtime.update([view]);
+            expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 2, unresidentPages: 0 });
+            expect(runtime.snapshot(other).residentPages).toBeGreaterThan(0);
+            expect(runtime.snapshot(texture).residentPages).toBeGreaterThan(0);
+          });
+        }
+      } finally { runtime.dispose(); }
+      expect(budget.snapshot().retainedBytes).toBe(0);
+    },
+  );
+
+  it("does not reserve coarse coverage for an unallocated offscreen pool", async () => {
+    const { runtime, view, texture } = await harness(1024, 16 * 1024 * 1024);
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input) => String(input).endsWith("hidden.json")
+      ? new Response(JSON.stringify({ contractVersion: 2, pageSize: 2048, borderTexels: 2,
+          virtualSize: [4096, 4096], pages: { uriTemplate: "hidden-{mip}-{x}-{y}.png" } }))
+      : original(input));
+    const hidden = virtualTexture("https://example.test/hidden.json");
+    try {
+      view.viewport.width = view.viewport.height = 1024;
+      runtime.setScene(prepareCanonicalSurfaceScene(scene({
+        camera: perspectiveCamera({}), nodes: [
+          mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture }) }),
+          mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: hidden }), transform: { position: [100, 0, 0] } }),
+        ],
+      })));
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.snapshot(hidden).status).toBe("ready");
+        expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 1, residentPages: 85, unresidentPages: 0 });
+      });
+    } finally { runtime.dispose(); }
+  });
+
+  it("shares saturated protected slots with later textures in the same pool", async () => {
+    const { runtime, view, texture } = await harness(4096, 16 * 1024 * 1024);
+    try {
+      view.viewport.width = view.viewport.height = 2048;
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 341, unresidentPages: 0 });
+      });
+      const others = ["second", "third"].map(name => virtualTexture(`https://example.test/${name}.json`));
+      runtime.setScene(prepareCanonicalSurfaceScene(scene({
+        camera: perspectiveCamera({}), nodes: [texture, ...others].map(asset =>
+          mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) })),
+      })));
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 1, unresidentPages: 0 });
+        for (const asset of [texture, ...others]) expect(runtime.snapshot(asset).residentPages).toBeGreaterThanOrEqual(21);
+      });
+    } finally { runtime.dispose(); }
+  });
+
+  it("shares a saturated budget with a newly visible incompatible pool", async () => {
+    const { runtime, view, texture } = await harness(4096, 16 * 1024 * 1024);
+    try {
+      view.viewport.width = view.viewport.height = 2048;
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 341, unresidentPages: 0 });
+      });
+      const other = virtualTexture({ manifestUri: "https://example.test/other.json", colorSpace: "linear" });
+      runtime.setScene(prepareCanonicalSurfaceScene(scene({
+        camera: perspectiveCamera({}), nodes: [texture, other].map(asset =>
+          mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) })),
+      })));
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 2, unresidentPages: 0 });
+        expect(runtime.snapshot(texture).residentPages).toBeGreaterThanOrEqual(85);
+        expect(runtime.snapshot(other).residentPages).toBeGreaterThanOrEqual(85);
+      });
+      expect(runtime.runtimeSnapshot().atlasGrowthFailures).toBe(0);
+    } finally { runtime.dispose(); }
+  });
+
   it("keeps shrink hysteresis when a new pool has ample budget", async () => {
     const { runtime, view, texture } = await harness();
     const clock = vi.spyOn(performance, "now").mockReturnValue(0);
@@ -224,9 +369,8 @@ describe("demand-grown RGBA atlases", () => {
   });
 
   it("keeps existing page coordinates and tables when growth fits below the old rows", async () => {
-    const { runtime, view, gl, texture } = await harness();
+    const { runtime, view, gl, texture } = await harness(1024, undefined, 16384);
     const original = runtime.binding(texture)!;
-    vi.mocked(gl.getParameter).mockReturnValue(16384);
     gl.texSubImage2D.mockClear();
     try {
       view.viewport.width = 1024;

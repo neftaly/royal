@@ -7,8 +7,10 @@ demand and grow through bounded GPU copies, with both allocations charged until
 the swap. The root budget remains 256 MiB; the combined atlas allowance is 75%
 of that budget. ETC2 retains its 32 MiB pool policy. RGBA shrinking with two-second hysteresis,
 compaction, and spare-capacity redistribution is implemented. Temporary initial
-budget shortages remain retryable. Forced redistribution of actively needed
-capacity and automatic default-budget calibration remain proposed.
+budget shortages remain retryable. Saturated RGBA pools now redistribute active
+capacity with coarse coverage prioritized, and logical textures share admission
+within each pool. ETC2 resizing and automatic default-budget calibration remain
+proposed.
 Sections below retain the design rationale; the specification describes current
 behavior. See [device findings](vt-capacity-a10-findings.md).
 

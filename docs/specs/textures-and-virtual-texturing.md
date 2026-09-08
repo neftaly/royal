@@ -345,6 +345,9 @@ an additional 24-page ceiling.
 
 RGBA growth copies resident GPU pages without decoding them again. Copies and
 page uploads share the four-page frame limit and upload-byte/time admission.
+Each source atlas reuses one validated read framebuffer across copy batches;
+deleting the atlas also deletes that framebuffer. Texture-size limits are
+queried once per context lifetime and refreshed after context loss.
 Growth preserves the column count when that layout fits the full planned
 capacity within legal dimensions, avoiding page-table rewrites in that case.
 The old atlas remains drawable until all copies complete, then bindings and
@@ -360,23 +363,38 @@ available capacity changes.
 RGBA pools also shrink when the rounded demand fits at most half their slots.
 A two-second low-demand delay avoids reallocating for brief camera changes;
 a single timer wakes an idle root instead of drawing continuously during the
-wait. Unmet demand in other pools bypasses that delay only when it exceeds available
-atlas allowance or unclaimed migration capacity. Pending shrink savings remain
-reserved until commit, so cancellation cannot overcommit the atlas allowance. Shrinking compacts
-resident pages into a smaller replacement, preserving currently demanded pages
-first, then coarsest coverage and recent spare pages. It never shrinks below
-current bounded desired demand. Copies use the same bounded, fenced migration
-path as growth; page tables are rebuilt for compacted slot indices. A changed
-view that needs discarded resident pages cancels the replacement. Disposal and
-context invalidation cancel the wakeup and release migration claims.
+wait. Capacity shortages can bypass the delay. Pending shrink savings remain
+reserved until commit, so cancellation cannot overcommit the atlas allowance.
+Shrinking compacts resident pages into a smaller replacement, prioritizing
+visible coarsest coverage, then demanded pages and recent spare pages. Copies
+use the bounded, fenced migration path; compacted indices rebuild page tables.
+Ordinary low-demand shrinking preserves bounded desired demand and restarts
+when the view needs discarded pages. Disposal and context invalidation cancel
+the wakeup and release migration claims.
+
+RGBA pools reserve enough budget for visible coarse coverage where capacity
+permits, then share the remaining allowance equally up to each pool's rounded
+demand. A pool above its share can shrink below its desired detail to admit
+another pool. Its replacement may temporarily be smaller than the final share
+so old-plus-new storage fits; it can grow toward the share after releasing the
+old allocation. Migration reuses page tables and can use the full unclaimed
+capacity instead of reserving those tables and initial-allocation headroom
+again. It never bypasses the persistent root budget.
+
+Visible logical textures also share the slots within each pool, reserving one
+coarse slot each where possible and distributing the remainder up to per-texture
+demand and authored limits. Demand is refitted when those shares change, so an
+earlier texture cannot protect every slot from later textures indefinitely.
+Unused resident detail may remain cached until another texture needs its slot;
+resident counts therefore need not be equal even when admission is balanced.
 
 Released storage becomes available to ordinary resources and other pools.
 An initial VT allocation blocked by current budget capacity remains retryable
-when capacity returns, rather than permanently becoming unsupported. This
-redistributes spare storage; it does not force an actively needed pool below its
-desired demand to give another pool an equal share. If even a replacement cannot
-fit alongside the old atlas, capacity remains unchanged. ETC2 resizing and
-automatic calibration of the root's default budget remain unimplemented.
+when capacity returns, rather than permanently becoming unsupported. If even a
+replacement preserving minimum coverage cannot fit alongside the old atlas,
+capacity remains unchanged. Compressed ETC2 pools retain their fixed policy and
+are accounted before dividing RGBA shares; ETC2 resizing and automatic
+calibration of the root's default budget remain unimplemented.
 
 Direct-target demand that exceeds a texture's admitted capacity is coarsened
 to complete parent targets. Collection exceeding the bounded demand workspace

@@ -15,6 +15,15 @@ const manifest = (overrides: Record<string, unknown> = {}) => parseVirtualTextur
 });
 
 describe("VT storage planning core", () => {
+  it("uses already-accounted migration headroom without reserving page tables twice", () => {
+    const source = manifest();
+    const bytes = 8 * 130 * 130 * 4;
+    const plan = planVirtualTextureAtlasStorage(source, 4096, bytes, 8, bytes, "migration");
+    expect(plan.slotCount).toBe(8);
+    expect(plan.allocationBytes).toBe(bytes);
+    expect(planVirtualTextureAtlasStorage(source, 4096, bytes, 8, bytes).slotCount).toBeLessThan(8);
+  });
+
   it("starts at demand and permits growth above 32 MiB inside the root allowance", () => {
     const source = manifest({ borderTexels: 2 });
     const available = 256 * 1024 * 1024;
