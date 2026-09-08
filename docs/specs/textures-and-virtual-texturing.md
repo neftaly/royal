@@ -299,6 +299,15 @@ variants are discarded on shader-source replacement, disposal, and context
 loss. This does not require asynchronous first draw for authored-only VT or
 on devices without the parallel compilation extension.
 
+SVG crop rasterization MUST preserve the complete authored viewport, including
+percentage geometry and preserveAspectRatio alignment. If artwork is nested
+inside a generated crop viewport, static CSS selector matching MUST retain its
+original document-root semantics and selector specificity. Viewport lengths
+must resolve against the full authored viewport, while quoted CSS strings and
+fragment identifiers remain unchanged. Browser-dependent intrinsic CSS sizing
+is feature-tested. A prepared source requiring CSS/length rewriting may retain
+one weakly owned DOM snapshot; sources requiring no rewriting retain none.
+
 Automatic SVG sources use 512px pages with 2px gutters; ordinary raster sources
 retain 128px pages and authored VT retains its declared page size. Larger SVG
 pages reduce preparation/publication overhead without changing the requested

@@ -46,10 +46,12 @@ vec4 sampleVirtualBaseColor(vec2 authoredUv) {
   vec2 residentPage = floor(residentTexel / pageSize);
   vec2 localTexel = residentTexel - residentPage * pageSize;
   float storedPageSize = virtualSettings2.w;
+  // UVs already address texel edges, just like an ordinary texture lookup.
+  // Adding a half texel here shifts artwork by half a resident-mip texel,
+  // making it move (and disagree across pages) as residency changes.
   vec2 atlasTexel = decoded.xy * storedPageSize
     + vec2(virtualSettings0.w)
-    + localTexel
-    + vec2(0.5);
+    + localTexel;
   return texture(baseColorTexture, atlasTexel / virtualSettings1.xy);
 }
 `;

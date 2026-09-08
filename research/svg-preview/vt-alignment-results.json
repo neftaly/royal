@@ -1,0 +1,471 @@
+{
+  "chromium": {
+    "alignment": [
+      {
+        "corrected": true,
+        "mip": 0,
+        "edgePosition": 32,
+        "glError": 0
+      },
+      {
+        "corrected": true,
+        "mip": 1,
+        "edgePosition": 32,
+        "glError": 0
+      },
+      {
+        "corrected": true,
+        "mip": 2,
+        "edgePosition": 32,
+        "glError": 0
+      },
+      {
+        "corrected": false,
+        "mip": 0,
+        "edgePosition": 31.498039215686276,
+        "glError": 0
+      },
+      {
+        "corrected": false,
+        "mip": 1,
+        "edgePosition": 31,
+        "glError": 0
+      },
+      {
+        "corrected": false,
+        "mip": 2,
+        "edgePosition": 30,
+        "glError": 0
+      }
+    ],
+    "parity": [
+      {
+        "mode": 0,
+        "filter": "linear",
+        "mip": 0,
+        "maxError": 0,
+        "legacyMismatches": 10279,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "linear",
+        "mip": 1,
+        "maxError": 0,
+        "legacyMismatches": 11242,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "linear",
+        "mip": 2,
+        "maxError": 0,
+        "legacyMismatches": 12829,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "linear",
+        "mip": -1,
+        "maxError": 0,
+        "legacyMismatches": 10802,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "nearest",
+        "mip": 0,
+        "maxError": 0,
+        "legacyMismatches": 6124,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "nearest",
+        "mip": 1,
+        "maxError": 0,
+        "legacyMismatches": 6317,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "nearest",
+        "mip": 2,
+        "maxError": 0,
+        "legacyMismatches": 6424,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "nearest",
+        "mip": -1,
+        "maxError": 0,
+        "legacyMismatches": 6383,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "linear",
+        "mip": 0,
+        "maxError": 0,
+        "legacyMismatches": 13265,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "linear",
+        "mip": 1,
+        "maxError": 0,
+        "legacyMismatches": 16415,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "linear",
+        "mip": 2,
+        "maxError": 0,
+        "legacyMismatches": 22024,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "linear",
+        "mip": -1,
+        "maxError": 0,
+        "legacyMismatches": 14775,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "nearest",
+        "mip": 0,
+        "maxError": 0,
+        "legacyMismatches": 8576,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "nearest",
+        "mip": 1,
+        "maxError": 0,
+        "legacyMismatches": 9808,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "nearest",
+        "mip": 2,
+        "maxError": 0,
+        "legacyMismatches": 11856,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "nearest",
+        "mip": -1,
+        "maxError": 0,
+        "legacyMismatches": 9194,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "linear",
+        "mip": 0,
+        "maxError": 0,
+        "legacyMismatches": 11283,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "linear",
+        "mip": 1,
+        "maxError": 0,
+        "legacyMismatches": 12272,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "linear",
+        "mip": 2,
+        "maxError": 0,
+        "legacyMismatches": 13990,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "linear",
+        "mip": -1,
+        "maxError": 0,
+        "legacyMismatches": 11847,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "nearest",
+        "mip": 0,
+        "maxError": 0,
+        "legacyMismatches": 7628,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "nearest",
+        "mip": 1,
+        "maxError": 0,
+        "legacyMismatches": 7702,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "nearest",
+        "mip": 2,
+        "maxError": 0,
+        "legacyMismatches": 7491,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "nearest",
+        "mip": -1,
+        "maxError": 0,
+        "legacyMismatches": 7861,
+        "glError": 0
+      }
+    ]
+  },
+  "a10": {
+    "alignment": [
+      {
+        "corrected": true,
+        "mip": 0,
+        "edgePosition": 32,
+        "glError": 0
+      },
+      {
+        "corrected": true,
+        "mip": 1,
+        "edgePosition": 32,
+        "glError": 0
+      },
+      {
+        "corrected": true,
+        "mip": 2,
+        "edgePosition": 32,
+        "glError": 0
+      },
+      {
+        "corrected": false,
+        "mip": 0,
+        "edgePosition": 31.498039215686276,
+        "glError": 0
+      },
+      {
+        "corrected": false,
+        "mip": 1,
+        "edgePosition": 31,
+        "glError": 0
+      },
+      {
+        "corrected": false,
+        "mip": 2,
+        "edgePosition": 30,
+        "glError": 0
+      }
+    ],
+    "parity": [
+      {
+        "mode": 0,
+        "filter": "linear",
+        "mip": 0,
+        "maxError": 0,
+        "legacyMismatches": 10279,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "linear",
+        "mip": 1,
+        "maxError": 0,
+        "legacyMismatches": 11244,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "linear",
+        "mip": 2,
+        "maxError": 0,
+        "legacyMismatches": 12871,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "linear",
+        "mip": -1,
+        "maxError": 0,
+        "legacyMismatches": 10804,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "nearest",
+        "mip": 0,
+        "maxError": 0,
+        "legacyMismatches": 6208,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "nearest",
+        "mip": 1,
+        "maxError": 0,
+        "legacyMismatches": 6317,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "nearest",
+        "mip": 2,
+        "maxError": 0,
+        "legacyMismatches": 6424,
+        "glError": 0
+      },
+      {
+        "mode": 0,
+        "filter": "nearest",
+        "mip": -1,
+        "maxError": 0,
+        "legacyMismatches": 6425,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "linear",
+        "mip": 0,
+        "maxError": 0,
+        "legacyMismatches": 13265,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "linear",
+        "mip": 1,
+        "maxError": 0,
+        "legacyMismatches": 16416,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "linear",
+        "mip": 2,
+        "maxError": 0,
+        "legacyMismatches": 22028,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "linear",
+        "mip": -1,
+        "maxError": 0,
+        "legacyMismatches": 14770,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "nearest",
+        "mip": 0,
+        "maxError": 0,
+        "legacyMismatches": 8768,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "nearest",
+        "mip": 1,
+        "maxError": 0,
+        "legacyMismatches": 9808,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "nearest",
+        "mip": 2,
+        "maxError": 0,
+        "legacyMismatches": 11856,
+        "glError": 0
+      },
+      {
+        "mode": 1,
+        "filter": "nearest",
+        "mip": -1,
+        "maxError": 0,
+        "legacyMismatches": 9284,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "linear",
+        "mip": 0,
+        "maxError": 0,
+        "legacyMismatches": 11282,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "linear",
+        "mip": 1,
+        "maxError": 0,
+        "legacyMismatches": 12284,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "linear",
+        "mip": 2,
+        "maxError": 0,
+        "legacyMismatches": 14013,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "linear",
+        "mip": -1,
+        "maxError": 0,
+        "legacyMismatches": 11849,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "nearest",
+        "mip": 0,
+        "maxError": 0,
+        "legacyMismatches": 7829,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "nearest",
+        "mip": 1,
+        "maxError": 0,
+        "legacyMismatches": 7702,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "nearest",
+        "mip": 2,
+        "maxError": 0,
+        "legacyMismatches": 7491,
+        "glError": 0
+      },
+      {
+        "mode": 2,
+        "filter": "nearest",
+        "mip": -1,
+        "maxError": 0,
+        "legacyMismatches": 7960,
+        "glError": 0
+      }
+    ]
+  },
+  "scope": "Synthetic native WebGL sampling parity, with 32x16 virtual image, 8px pages, 2px gutters, unrelated atlas slots, three wrap modes, linear/nearest filtering, resident mips 0/1/2 and mixed 0/1. Not an end-to-end SVG rasterizer or all-size test."
+}

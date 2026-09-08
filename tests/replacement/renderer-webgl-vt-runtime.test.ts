@@ -204,7 +204,10 @@ describe("browser virtual texture runtime", () => {
     const decode = vi.fn(async () => ({ width: Number(attributes.get("width")), height: Number(attributes.get("height")), close: vi.fn() }));
     vi.stubGlobal("createImageBitmap", decode);
     const encoded: EncodedSvgTextureSource = { blob: new Blob(["<svg/>"]), byteLength: 6, parsed: {
-      document: { documentElement: { cloneNode: () => ({ setAttribute: (name: string, value: string) => attributes.set(name, value) }) } } as unknown as XMLDocument,
+      document: {
+        documentElement: { getAttribute: () => null, cloneNode: () => ({ setAttribute: vi.fn() }) },
+        createElementNS: () => ({ appendChild: vi.fn(), setAttribute: (name: string, value: string) => attributes.set(name, value) }),
+      } as unknown as XMLDocument,
       viewBox: [0, 0, 64, 64],
     } };
     const decoded = { width: 64, height: 64, source: {} as ImageBitmap, svgPreview: { encoded, load: async () => encoded } };
@@ -250,7 +253,10 @@ describe("browser virtual texture runtime", () => {
     vi.stubGlobal("createImageBitmap", decode);
     const encoded: EncodedSvgTextureSource = {
       blob: new Blob(["<svg/>"]), byteLength: 6,
-      parsed: { document: { documentElement: { cloneNode: () => ({ setAttribute: (key: string, value: string) => attrs.set(key, value) }) } } as unknown as XMLDocument, viewBox: [0, 0, 64, 64] },
+      parsed: { document: {
+        documentElement: { getAttribute: () => null, cloneNode: () => ({ setAttribute: vi.fn() }) },
+        createElementNS: () => ({ appendChild: vi.fn(), setAttribute: (key: string, value: string) => attrs.set(key, value) }),
+      } as unknown as XMLDocument, viewBox: [0, 0, 64, 64] },
     };
     let resolve!: (value: EncodedSvgTextureSource) => void;
     const detail: { encoded?: EncodedSvgTextureSource; load: () => Promise<EncodedSvgTextureSource> } = {

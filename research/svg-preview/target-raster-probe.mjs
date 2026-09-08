@@ -34,7 +34,7 @@ export async function runTargetRasterProbe(scale = 1) {
       const pages = Array.from({ length: Math.ceil(width / pageSize) * Math.ceil(height / pageSize) }, (_, i) => ({ mip, x: i % (width / pageSize), y: Math.floor(i / (width / pageSize)) }));
       source.setDemand(pages);
       const before = decodes;
-      let maxError = 0;
+      let maxError = 0, maxErrorAt;
       const wrapPixel = (pixel, extent) => {
         if (wrap === 'clamp-to-edge') return Math.max(0, Math.min(extent - 1, pixel));
         const period = Math.floor(pixel / extent);
@@ -52,12 +52,13 @@ export async function runTargetRasterProbe(scale = 1) {
               const sx = wrapPixel(id.x * pageSize + x - 2, width);
               const sy = wrapPixel(id.y * pageSize + y - 2, height);
               for (let channel = 0; channel < 4; channel++) {
-                maxError = Math.max(maxError, Math.abs(actual[(y * storedSize + x) * 4 + channel] - pixels[(sy * width + sx) * 4 + channel]));
+                const difference = Math.abs(actual[(y * storedSize + x) * 4 + channel] - pixels[(sy * width + sx) * 4 + channel]);
+                if (difference > maxError) { maxError = difference; maxErrorAt = { id, x, y, sx, sy, channel, actual: actual[(y * storedSize + x) * 4 + channel], expected: pixels[(sy * width + sx) * 4 + channel] }; }
               }
             }
           } finally { page.close(); }
         }
-        if (maxError > 2) throw new Error(`${wrap}: pixel error ${maxError}`);
+        if (maxError > 2) throw new Error(`${wrap}: pixel error ${maxError} at ${JSON.stringify(maxErrorAt)}`);
         const expected = Math.ceil(width / (pageSize * 2)) * Math.ceil(height / pageSize);
         if (decodes - before !== expected) throw new Error(`${wrap}: expected ${expected} decodes, got ${decodes - before}`);
         results.push({ wrap, pages: pages.length, decodes: decodes - before, maxError, retainedBytes: cache.byteLength });

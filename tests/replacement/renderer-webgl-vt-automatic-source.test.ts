@@ -13,6 +13,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const svgDocument = (attributes = new Map<string, string>()): XMLDocument => ({
+  documentElement: {
+    getAttribute: () => null,
+    cloneNode: () => ({ setAttribute: vi.fn() }),
+  },
+  createElementNS: () => ({
+    setAttribute: (name: string, value: string) => attributes.set(name, value),
+    appendChild: vi.fn(),
+  }),
+}) as unknown as XMLDocument;
+
 describe("automatic virtual texture page source", () => {
   it("shares bounded regions of a large target and releases them when demand leaves", async () => {
     const attributes = new Map<string, string>();
@@ -27,7 +38,7 @@ describe("automatic virtual texture page source", () => {
     const cache = new SvgRasterCache();
     const blob = new Blob(["<svg/>"]);
     const source = createAutomaticSvgPageSource({ blob, byteLength: blob.size, parsed: {
-      document: { documentElement: { cloneNode: () => ({ setAttribute: (name: string, value: string) => attributes.set(name, value) }) } } as unknown as XMLDocument,
+      document: svgDocument(attributes),
       viewBox: [0, 0, 16, 8],
     } }, 16, 8, { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb", cache);
     const mip = source.manifest.mipCount - 4;
@@ -98,7 +109,7 @@ describe("automatic virtual texture page source", () => {
         blob,
         byteLength: blob.size,
         parsed: {
-          document: { documentElement: root } as unknown as XMLDocument,
+          document: Object.assign(svgDocument(), { documentElement: root }),
           viewBox: [0, 0, 16, 8],
         },
       },
@@ -140,7 +151,7 @@ describe("automatic virtual texture page source", () => {
     const previewImage = {} as ImageBitmap;
     const encoded = {
       blob: new Blob(["<svg/>"]), byteLength: 6,
-      parsed: { document: { documentElement: { cloneNode: () => ({ setAttribute: vi.fn() }) } } as unknown as XMLDocument, viewBox: [0, 0, 64, 64] as const },
+      parsed: { document: svgDocument(), viewBox: [0, 0, 64, 64] as const },
     };
     const load = vi.fn(async () => encoded);
     const source = createAutomaticSvgPreviewPageSource({ width: 64, height: 64, source: previewImage, svgPreview: { encoded, load } },
@@ -166,7 +177,7 @@ describe("automatic virtual texture page source", () => {
       vi.stubGlobal("createImageBitmap", decode);
       const source = createAutomaticSvgPageSource({
         blob: new Blob(["<svg/>"]), byteLength: 6,
-        parsed: { document: { documentElement: { cloneNode: () => ({ setAttribute: (key: string, value: string) => attributes.set(key, value) }) } } as unknown as XMLDocument, viewBox: [0, 0, width, height] },
+        parsed: { document: svgDocument(attributes), viewBox: [0, 0, width, height] },
       }, width, height, { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb");
       const page = await source.read({ mip: source.manifest.mipCount - 3, x, y }, new AbortController().signal);
       expect(decode).toHaveBeenCalledOnce();

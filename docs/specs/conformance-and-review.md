@@ -462,3 +462,14 @@ A review round is complete when it identifies the exact invariant, points to
 code/tests or records the absence, revises contradictory specs, and classifies
 the result as conforming, a concrete gap, deferred, or rejected. “Looks clean”
 is not an exit criterion.
+
+### 0.0.24 VT crop release size validation
+
+The reviewed crop and sampling fixes add 1,557 deployed gzip bytes versus
+`e5cb9ebd` (1,560 lazy bytes, -3 initial bytes; worker payload unchanged).
+The preceding committed VT residency, preparation, and shader changes already
+exceeded the older budget. Final initial/lazy/deployed measurements are
+141,361/125,179/266,540 gzip bytes, with a 715,799-byte renderer tarball including
+declarations and source maps. Only affected ceilings rise to the next narrow
+rounded bounds; the worker and glTF authoring-delta limits remain unchanged.
+Evidence: `research/svg-preview/release-size-results.json`.

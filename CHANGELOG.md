@@ -3,6 +3,21 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.24 - 2026-09-09
+
+- Preserve resident texture detail during zoom transitions, refresh atlas bindings
+  after resizing, and remove the half-texel sampling shift between resident mips.
+- Preserve authored SVG layout, document-root CSS selectors and specificity,
+  viewport lengths, and browser intrinsic sizing when rasterizing cropped pages.
+  Cache prepared artwork and skip repeated scans of unchanged SVG sources.
+- Include bounded atlas growth/shrinking, shared SVG raster strips, 512px automatic
+  SVG pages, concurrent authored-page transport, pipelined atlas copies, and
+  nonblocking shader publication from the preceding source checkpoints.
+- Verify crop/text fidelity on A10 Safari and Quest 2. The final instrumented A10
+  scene refined zoom in 1.735 seconds with about 70 MB tracked GPU memory;
+  individual timings are not controlled benchmark guarantees.
+- Distribute matching GitHub package tarballs; nothing is published to npm.
+
 ## 0.0.23 - 2026-09-08
 
 - Preserve camera-dependent occlusion between separated BLEND surfaces using

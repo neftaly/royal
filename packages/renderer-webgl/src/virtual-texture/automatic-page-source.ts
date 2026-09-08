@@ -9,6 +9,8 @@ import type {
 import type { ParsedSvgTextureSource } from "../texture/svg-source";
 import { decodeBrowserImageElement } from "../texture/browser-image-element";
 import { SvgRasterCache } from "./svg-raster-cache";
+import { svgRasterViewport } from "./svg-raster-viewport";
+import { svgRasterArtwork } from "./svg-raster-document";
 import {
   createGeneratedVirtualTextureManifest,
   type VirtualTexturePageId,
@@ -226,18 +228,26 @@ const rasterizeSvgRegion = async (
   signal: AbortSignal,
 ): Promise<DecodedImageTextureSource> => {
   if (signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
-  const root = source.document.documentElement.cloneNode(true) as SVGSVGElement;
-  const [viewX, viewY, viewWidth, viewHeight] = source.viewBox;
+  const [viewportWidth, viewportHeight] = await svgRasterViewport(source);
+  if (signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
+  const artwork = svgRasterArtwork(source, viewportWidth, viewportHeight);
+  artwork.setAttribute("x", "0");
+  artwork.setAttribute("y", "0");
+  artwork.setAttribute("width", String(viewportWidth));
+  artwork.setAttribute("height", String(viewportHeight));
+  const root = source.document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  root.setAttribute("preserveAspectRatio", "none");
   root.setAttribute("viewBox", [
-    viewX + x.sourceStart / logicalWidth * viewWidth,
-    viewY + y.sourceStart / logicalHeight * viewHeight,
-    x.sourceExtent / logicalWidth * viewWidth,
-    y.sourceExtent / logicalHeight * viewHeight,
+    x.sourceStart / logicalWidth * viewportWidth,
+    y.sourceStart / logicalHeight * viewportHeight,
+    x.sourceExtent / logicalWidth * viewportWidth,
+    y.sourceExtent / logicalHeight * viewportHeight,
   ].join(" "));
   const width = Math.max(1, Math.ceil(x.destinationExtent));
   const height = Math.max(1, Math.ceil(y.destinationExtent));
   root.setAttribute("width", String(width));
   root.setAttribute("height", String(height));
+  root.appendChild(artwork);
   const blob = new Blob([new XMLSerializer().serializeToString(root)], { type: "image/svg+xml" });
   try {
     const bitmap = await createImageBitmap(blob, {

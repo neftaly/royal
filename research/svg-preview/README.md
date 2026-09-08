@@ -1,5 +1,64 @@
 # Preview-first SVG consumer verification
 
+## Resolved SVG crop semantics (A10 and Quest 2)
+
+The crop wrapper now retains the complete authored viewport and SVG layout.
+Before nesting, stylesheet selector matches are captured against the original
+SVG document. Generated selectors retain each original selector's specificity,
+including selector lists, while avoiding matches against the new crop root.
+Viewport lengths are frozen in geometry/presentation attributes and CSS;
+quoted strings and identifiers such as `id="50vw"` remain untouched.
+Prepared DOMs are weakly retained only for sources that need rewriting, so
+ordinary sources do not retain a second DOM. A weak set remembers unchanged
+sources so subsequent page requests skip the rewriting scan. Shared raster strips and their
+4 MiB admission bound remain unchanged.
+
+A small, released SVG image probes whether the browser uses inline CSS for
+intrinsic image sizing. Safari and Chromium differ here; no user-agent test
+or application-specific option is used. The final implementation does not
+embed another SVG image or transform the root bitmap: those experiments were
+rejected after Safari lost image content or detailed text pixels changed.
+The original strict alpha tolerance remains in the crop probe.
+
+Both the attached A10 and USB-connected Quest 2 passed all 48 crop cases and
+10 adversarial cases, including document-root selectors, specificity, nested
+SVG selectors, authored transforms, CSS sizing, viewport units, and fragment IDs.
+The detailed text/gutter comparison had maximum channel error 2 on A10 and 1
+on Quest 2, within the existing tolerance. All 845 renderer tests passed;
+42 focused tests passed after the fragment-ID safeguard, followed by 20 focused
+tests after caching unchanged-source decisions. Type checking, renderer build,
+and lint also passed.
+
+The final instrumented A10 run of the 273-piece scene completed zoom refinement
+in 1,735 ms (35 uploads), overview in 919 ms, and return in 1,371 ms. Initial page
+completion took 6,302 ms. There were no page failures, GPU denials, or context
+losses; final tracked GPU memory was 70,071,041 bytes. A preceding run took
+2,804 ms for zoom, including one 1,179 ms asynchronous bitmap-decode outlier;
+the final run's longest zoom decode was 23 ms. These are individual runs, not
+controlled benchmarks, and do not isolate the unchanged-source cache's effect.
+Updated pixel evidence is in `fixed`, and both scene profiles are in `fullScene`
+of [svg-crop-review-results.json](./svg-crop-review-results.json).
+
+## Atlas alignment adversarial review
+
+The atlas shader previously added half a texel to an already-continuous UV
+coordinate. This predates `e5cb9ebd`. Removing that offset restores the same
+sample positions as an ordinary texture. The earlier solid-color resident-detail
+probe could not detect the shift.
+
+`vt-alignment-probe.mjs` reproduces an edge moving from x=32 to approximately
+31.5, 31, and 30 with the old offset at resident mips 0, 1, and 2. The corrected
+shader keeps it at x=32. `vt-sampling-parity-probe.mjs` compares patterned atlas
+pages against ordinary GPU textures, covering page boundaries, unrelated atlas
+slots, clamp/repeat/mirrored-repeat, linear/nearest filtering, three uniform
+resident mips, and mixed mip 0/1 residency. All 24 cases match every channel
+exactly on Chromium and A10; every old-offset control has mismatches.
+Evidence: [vt-alignment-results.json](./vt-alignment-results.json).
+
+These probes isolate sampler coordinates and gutters, not every SVG rasterizer,
+texture dimension, or full-scene transition. The focused VT/shader suite also
+passed all 153 tests. No additional blocker was found in the alignment fix.
+
 ## Nonblocking automatic VT shader publication
 
 Automatic VT now starts its required shader variant while an ordinary preview
@@ -400,3 +459,21 @@ tracked GPU bytes, no failed pages, allocation denials, or context loss, and
 no further frames while idle. Text remained readable in the captured image.
 This is consistent with the previous ~4.3-second result, not evidence of an
 end-to-end speedup. Raw results: [copy-cache-a10-results.json](./copy-cache-a10-results.json).
+
+## Historical nested SVG crop review (resolved above)
+
+The new outer crop viewport passes the 48 existing browser parity cases and
+42 focused unit tests, but introduces a supported-CSS regression: an authored
+`<style>:root > rect {fill:red}</style><rect width="100%" height="100%"/>`
+inside a 200x100 SVG renders black after its root becomes a nested SVG. The
+committed `e5cb9ebd` crop path matches the ordinary red reference exactly;
+the new path differs in 131,072 channels across a 512x256 tile. This blocks
+acceptance of the wrapper approach without preserving CSS document-root
+semantics or providing a correct fallback for affected sources.
+
+A second fixture using `50vw` also differs from ordinary rendering, but fails
+in both the committed and current implementations. It is an existing limitation,
+not a new regression. These are Chromium results; this review did not repeat
+them on A10. `svg-crop-adversarial-probe.mjs` exports the diagnostic fixtures;
+nonzero mismatches intentionally report the reproduced problems. Evidence:
+[svg-crop-review-results.json](./svg-crop-review-results.json).

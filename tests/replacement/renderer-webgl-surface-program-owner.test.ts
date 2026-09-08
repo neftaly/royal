@@ -23,6 +23,17 @@ import { VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS } from "../../packages/renderer-w
 import { transmissionShaderSource } from "../../packages/renderer-webgl/src/surface/surface-composite-owner";
 
 describe("surface program ownership", () => {
+  it("preserves continuous texel-edge coordinates when sampling the VT atlas", () => {
+    // uv * virtualSize already includes the fragment's fractional texel
+    // position. Do not snap it or add the offset used for integer texel IDs.
+    expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).toMatch(
+      /vec2 atlasTexel = decoded\.xy \* storedPageSize\s*\+ vec2\(virtualSettings0\.w\)\s*\+ localTexel;/,
+    );
+    expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).toContain(
+      "texture(baseColorTexture, atlasTexel / virtualSettings1.xy)",
+    );
+  });
+
   it("preserves framebuffer alpha only for blended material variants", () => {
     const gl = fakeGl();
     const owner = new SurfaceProgramOwner(gl);

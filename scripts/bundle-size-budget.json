@@ -12,17 +12,17 @@
     "royalWorkerGzipBytes": 56618
   },
   "_allowance": {
-    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, retained multi-view outline planning, invariant-prepass depth equality, final default-depth discard, transactional creation-loss recovery, alpha-safe AVIF fitting, retained screen-space segments, exact-budget VT atlas planning, and lazy bounded emissive volumes, extracted overlay ownership with reentrant installation guards and shared preparation policy, always-on VT, preview-first SVG refinement, indexed outline provenance, and opaque retained-presentation copies, and separated transparent bounds ordering, and full-atlas VT preparation queue liveness",
+    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, retained multi-view outline planning, invariant-prepass depth equality, final default-depth discard, transactional creation-loss recovery, alpha-safe AVIF fitting, retained screen-space segments, exact-budget VT atlas planning, and lazy bounded emissive volumes, extracted overlay ownership with reentrant installation guards and shared preparation policy, always-on VT, preview-first SVG refinement, indexed outline provenance, and opaque retained-presentation copies, and separated transparent bounds ordering, and full-atlas VT preparation queue liveness, bounded adaptive VT residency and preparation, nonblocking VT shader publication, and authored SVG crop semantics",
     "initialAndTotalGzipBytes": 8600,
     "lazyGzipBytes": 3700,
     "minidraco050GzipBytes": 3700
   },
-  "royalInitialGzipBytes": 141100,
-  "royalIncrementalGzipBytes": 81800,
-  "royalGltfInitialGzipBytes": 142050,
+  "royalInitialGzipBytes": 141400,
+  "royalIncrementalGzipBytes": 82100,
+  "royalGltfInitialGzipBytes": 142350,
   "royalGltfIncrementalGzipBytes": 1000,
-  "royalLazyGzipBytes": 118450,
-  "royalTotalIncrementalGzipBytes": 200250,
-  "royalTotalGzipBytes": 259550,
+  "royalLazyGzipBytes": 125200,
+  "royalTotalIncrementalGzipBytes": 207300,
+  "royalTotalGzipBytes": 266550,
   "royalWorkerGzipBytes": 23150
 }
