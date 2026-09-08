@@ -429,15 +429,17 @@ const createStandardProgram = (
   };
 };
 
-type PendingSurfaceProgram = Readonly<{
+type PendingSurfaceProgram = {
   pending: true;
   program: WebGLProgram;
-}>;
+  features: number;
+  complete: boolean;
+};
 
 export class SurfaceProgramOwner {
   readonly #gl: WebGL2RenderingContext;
   readonly #initializedSamplers = new Set<WebGLProgram>();
-  #parallelCompile: boolean;
+  #parallelCompile: KHR_parallel_shader_compile | null;
   readonly #programs = new Map<
     string,
     PendingSurfaceProgram | StandardProgram | UnlitProgram
@@ -448,7 +450,7 @@ export class SurfaceProgramOwner {
 
   constructor(gl: WebGL2RenderingContext) {
     this.#gl = gl;
-    this.#parallelCompile = gl.getExtension("KHR_parallel_shader_compile") !== null;
+    this.#parallelCompile = gl.getExtension("KHR_parallel_shader_compile");
   }
 
   dispose(): void {
@@ -503,10 +505,9 @@ export class SurfaceProgramOwner {
   ): void {
     if (
       !this.#parallelCompile
-      || features & (
-        SURFACE_FEATURE_TRANSMISSION_MATERIAL
-        | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
-      )
+      || features & SURFACE_FEATURE_TRANSMISSION_MATERIAL
+      || ((features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE) !== 0
+        && this.#virtualDeclarations === "")
     ) return;
     const key = surfaceProgramVariantKey(
       kind,
@@ -518,8 +519,48 @@ export class SurfaceProgramOwner {
     if (this.#programs.has(key)) return;
     this.#programs.set(key, {
       pending: true,
+      features,
+      complete: false,
       program: this.#begin(kind, features, instanced, alphaMasked, doubleSided, "deferred"),
     });
+  }
+
+  /** Starts optional detail without forcing its compile to finish this frame. */
+  virtualReady(
+    kind: "standard" | "unlit",
+    features: number,
+    instanced: boolean,
+    alphaMasked: boolean,
+    doubleSided: boolean,
+  ): boolean {
+    if (this.#parallelCompile === null || features & SURFACE_FEATURE_TRANSMISSION_MATERIAL) return true;
+    this.prewarm(kind, features, instanced, alphaMasked, doubleSided);
+    const retained = this.#programs.get(surfaceProgramVariantKey(
+      kind, features, instanced, alphaMasked, doubleSided,
+    ));
+    return retained !== undefined && (!("pending" in retained) || retained.complete);
+  }
+
+  get virtualCompilationPending(): boolean {
+    for (const retained of this.#programs.values()) {
+      if ("pending" in retained && !retained.complete
+        && (retained.features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE) !== 0) return true;
+    }
+    return false;
+  }
+
+  /** Only completion status is safe to query before linking has finished. */
+  pollVirtualCompilation(): boolean {
+    if (this.#parallelCompile === null) return false;
+    let changed = false;
+    for (const retained of this.#programs.values()) {
+      if (!("pending" in retained) || retained.complete
+        || (retained.features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE) === 0) continue;
+      if (this.#gl.getProgramParameter(retained.program, this.#parallelCompile.COMPLETION_STATUS_KHR) !== true) continue;
+      retained.complete = true;
+      changed = true;
+    }
+    return changed;
   }
 
   initializeSamplers(program: StandardProgram | UnlitProgram): void {
@@ -551,14 +592,15 @@ export class SurfaceProgramOwner {
     this.#programs.clear();
     this.#vertexShaders.clear();
     this.#initializedSamplers.clear();
-    this.#parallelCompile = this.#gl.getExtension("KHR_parallel_shader_compile") !== null;
+    this.#parallelCompile = this.#gl.getExtension("KHR_parallel_shader_compile");
   }
 
   setVirtualTextureDeclarations(declarations: string): void {
     if (this.#virtualDeclarations === declarations) return;
     for (const [key, retained] of this.#programs) {
-      if ("pending" in retained) continue;
-      if (retained.virtualPageTable === null) continue;
+      if ("pending" in retained
+        ? (retained.features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE) === 0
+        : retained.virtualPageTable === null) continue;
       this.#gl.deleteProgram(retained.program);
       this.#programs.delete(key);
       this.#initializedSamplers.delete(retained.program);

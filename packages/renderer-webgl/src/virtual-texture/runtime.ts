@@ -1112,7 +1112,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     }
     const growth = atlas.growth;
     const replacement = growth.replacement;
-    if (replacement.validationPending || replacement.validationFence !== undefined) {
+    const copyCount = growth.retainedSlots?.length ?? atlas.slotCount;
+    if ((replacement.validationPending && (growth.nextSlot === 0 || growth.nextSlot >= copyCount))
+      || replacement.validationFence !== undefined) {
       try {
         if (replacement.validationPending) {
           // WebKit can round-trip even fence creation. Submit work in the
@@ -1154,7 +1156,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     }
     const slots: number[] = [];
     const targets: number[] = [];
-    const copyCount = growth.retainedSlots?.length ?? atlas.slotCount;
     while (growth.nextSlot < copyCount) {
       const sourceSlot = growth.retainedSlots?.[growth.nextSlot] ?? growth.nextSlot;
       if (atlas.slots[sourceSlot] === undefined) {
@@ -1170,8 +1171,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         changed = true;
         copied = slots.length;
         copyVirtualTextureAtlasSlots(this.#gl, atlas, growth.replacement, slots, false, targets);
-        // First use can trigger deferred texture initialization even after the
-        // allocation fence signaled. Validate copies only after their fence.
+        // Queue bounded batches on consecutive frames. One fence after all
+        // copies covers every batch; no replacement is published before it.
         replacement.validationPending = true;
         this.#gl.flush();
         return result(true);
@@ -1184,6 +1185,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       return result(false);
     }
     if (growth.nextSlot < copyCount) return result(true);
+    // The final slots may be empty, leaving an earlier batch still unfenced.
+    if (replacement.validationPending) return result(true);
     const resources = Array.from(this.#resources.values()).filter((value) => value.gpu?.atlas === atlas);
     const layoutChanged = growth.retainedSlots !== undefined || replacement.atlasColumns !== atlas.atlasColumns;
     const tableBytes = layoutChanged ? resources.reduce((sum, resource) => sum + resource.manifest!.tableByteLength, 0) : 0;
@@ -1470,7 +1473,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         }
         return false;
       }
-      if (!usePreview && (gpu.residentSlots.size > 0 || svgPreview !== undefined) && this.#detailJobs > 0) return false;
+      if (!resource.authored && !usePreview && (gpu.residentSlots.size > 0 || svgPreview !== undefined) && this.#detailJobs > 0) return false;
       if (byteLength > MAX_PENDING_PAGE_BYTES) {
         resource.failedPages.add(key);
         this.#changed(resource);
@@ -1490,6 +1493,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         () => openAuthoredVirtualTexturePageSource(
           (resource.asset as VirtualTextureAssetRef).manifestUri,
           resource.abort.signal,
+          this.#scheduleDetail,
         ),
       );
       if (resource.abort.signal.aborted || this.#disposed) return;
@@ -1523,7 +1527,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     // Ordinary texture fallback already presents the portable preview. Even
     // the first SVG-backed VT page belongs in the background detail lane.
     const retainedSource = resource.lease?.source;
-    const detail = !preview && (resource.gpu!.residentSlots.size > 0
+    const detail = !resource.authored && !preview && (resource.gpu!.residentSlots.size > 0
       || (retainedSource !== undefined && automaticVirtualTextureHasPreview(retainedSource)));
     if (detail) this.#detailJobs += 1;
     this.#pendingPageBytes += byteLength;
@@ -1532,7 +1536,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     this.#activeJobs += 1;
     this.#pageRequests += 1;
     this.#changed(resource, false);
-    void (detail ? this.#scheduleDetail : this.#schedule)(
+    // Authored transport overlaps within the same four-page/byte reservations;
+    // its source re-enters the detail scheduler only after the bytes arrive.
+    void (resource.authored ? prepareDirectly : detail ? this.#scheduleDetail : this.#schedule)(
       controller.signal,
       () => preview ? source.readPreview!(page, controller.signal) : source.read(page, controller.signal),
     ).then((decoded) => {

@@ -12,7 +12,7 @@ import { waitFor } from "./support/wait-for";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
 import { FrameUploadBudgetOwner } from "../../packages/renderer-webgl/src/resource/frame-upload-budget";
-import type { AsyncPreparationScheduler } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
+import { AsyncPreparationOwner, type AsyncPreparationScheduler } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
 import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import type { SurfaceFrameView } from "../../packages/renderer-webgl/src/frame/surface-frame";
 import { createBrowserVirtualTextureRuntime } from "../../packages/renderer-webgl/src/virtual-texture/runtime";
@@ -142,7 +142,61 @@ describe("VT runtime activation core", () => {
 });
 
 describe("browser virtual texture runtime", () => {
-  it("consumes cached target pages before rotating through more cold SVGs than the cache can retain", async () => {
+  it.each([false, true])("overlaps authored tile transport with bounded decode (cancel: %s)", async (cancel) => {
+    const owner = new AsyncPreparationOwner(2);
+    const requests: { signal: AbortSignal; resolve: () => void }[] = [];
+    vi.stubGlobal("document", { baseURI: "https://example.test/" });
+    vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
+      if (String(input).endsWith(".json")) return new Response(JSON.stringify({
+        contractVersion: 2, pageSize: 128, borderTexels: 1, virtualSize: [256, 256],
+        pages: { uriTemplate: "{mip}-{x}-{y}.png" },
+      }));
+      if (String(input).endsWith("1-0-0.png")) return new Response(new Uint8Array([1]));
+      await new Promise<void>((resolve, reject) => {
+        requests.push({ signal: init!.signal!, resolve });
+        init!.signal!.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      });
+      return new Response(new Uint8Array([1]));
+    }));
+    let active = 0;
+    let maxActive = 0;
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => {
+      active++; maxActive = Math.max(maxActive, active);
+      await Promise.resolve();
+      active--;
+      return { width: 130, height: 130, close: vi.fn() };
+    }));
+    const asset = virtualTexture("https://example.test/stream.json");
+    const runtime = createBrowserVirtualTextureRuntime(fakeGl(), vi.fn(), undefined, owner.runForeground,
+      undefined, undefined, true, owner.run);
+    const matrix = identityMat4();
+    const view = { view: matrix, viewProjection: matrix, viewport: { width: 256, height: 256, x: 0, y: 0 } };
+    try {
+      runtime.setScene(prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}),
+        nodes: [mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) })],
+      })));
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(requests).toHaveLength(4);
+      });
+      expect(owner.snapshot().activeJobs).toBe(0);
+      expect(runtime.runtimeSnapshot().pendingPageBytes).toBe(4 * 130 * 130 * 4);
+      if (cancel) {
+        runtime.dispose();
+        await waitFor(() => expect(runtime.runtimeSnapshot().pendingPageBytes).toBe(0));
+        expect(requests.every(request => request.signal.aborted)).toBe(true);
+      } else {
+        for (const request of requests) request.resolve();
+        await waitFor(() => {
+          runtime.update([view]);
+          expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 5, pendingPages: 0, pendingPageBytes: 0 });
+        });
+      }
+      expect(maxActive).toBe(1);
+    } finally { runtime.dispose(); owner.dispose(); }
+  });
+
+  it.each([512, 1024])("rasterizes %ipx targets once per bounded region before cache eviction", async (viewportSize) => {
     const context = { clearRect: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(), save: vi.fn(), restore: vi.fn(), scale: vi.fn(), translate: vi.fn() };
     vi.stubGlobal("document", { baseURI: "https://example.test/", createElement: () => ({ getContext: () => context, width: 0, height: 0 }) });
     const attributes = new Map<string, string>();
@@ -161,16 +215,16 @@ describe("browser virtual texture runtime", () => {
       acquireDecoded: () => ({ source: decoded, release: vi.fn() }), decoded: () => decoded, onChanged: vi.fn(),
     });
     const matrix = identityMat4();
-    const view = { view: matrix, viewProjection: matrix, viewport: { width: 512, height: 512, x: 0, y: 0 } };
+    const view = { view: matrix, viewProjection: matrix, viewport: { width: viewportSize, height: viewportSize, x: 0, y: 0 } };
     try {
       runtime.setScene(prepared);
       await waitFor(() => {
         const uploaded = runtime.runtimeSnapshot().uploadedPages;
         runtime.update([view]);
         expect(runtime.runtimeSnapshot().uploadedPages - uploaded).toBeLessThanOrEqual(4);
-        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 30, unresidentPages: 0, pendingPages: 0 });
+        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: viewportSize === 512 ? 6 : 30, unresidentPages: 0, pendingPages: 0 });
       });
-      expect(decode).toHaveBeenCalledTimes(6);
+      expect(decode).toHaveBeenCalledTimes(viewportSize === 512 ? 6 : 12);
       expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(4 * 1024 * 1024 + 6 * 64 * 64 * 4);
     } finally { runtime.dispose(); }
   });
@@ -215,7 +269,7 @@ describe("browser virtual texture runtime", () => {
       decoded: () => decoded, onChanged: vi.fn(),
     });
     const matrix = identityMat4();
-    const view = { view: matrix, viewProjection: matrix, viewport: { width: 512, height: 512, x: 0, y: 0 } };
+    const view = { view: matrix, viewProjection: matrix, viewport: { width: 1024, height: 1024, x: 0, y: 0 } };
     try {
       runtime.setScene(prepared);
       await waitFor(() => {
@@ -231,14 +285,16 @@ describe("browser virtual texture runtime", () => {
         runtime.update([view]);
         expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 5, pendingPages: 0 });
       });
-      expect(sizes).toEqual([512]);
+      expect(sizes).toHaveLength(2);
+      expect(sizes.every(size => size <= 1028)).toBe(true);
       expect(runtime.runtimeSnapshot().pageRequests).toBe(5);
-      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBe(64 * 64 * 4 + 512 * 512 * 4);
+      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(64 * 64 * 4 + 4 * 1024 * 1024);
       view.viewport.width = 64;
       view.viewport.height = 64;
       await waitFor(() => {
         runtime.update([view]);
-        expect(sizes).toEqual([512, 256]);
+        expect(sizes).toHaveLength(3);
+        expect(sizes.at(-1)).toBe(512);
         expect(runtime.runtimeSnapshot().pendingPages).toBe(0);
       });
       expect(runtime.automaticBinding(asset)).toBeDefined();
@@ -247,7 +303,7 @@ describe("browser virtual texture runtime", () => {
     } finally {
       runtime.dispose();
     }
-    expect(close).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledTimes(3);
   });
 
   it.each([false, true])("restores coarse preview coverage after vector failure (already failed: %s)", async (alreadyFailed) => {

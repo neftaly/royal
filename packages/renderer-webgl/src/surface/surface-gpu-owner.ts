@@ -780,6 +780,7 @@ export class SurfaceGpuOwner {
     if (this.#virtualTexture === runtime) return;
     this.#virtualTexture?.dispose();
     this.#virtualTexture = runtime;
+    this.#programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
     this.#virtualTextureBindingRevision = runtime?.bindingRevision ?? -1;
     this.#programs.setVirtualTextureDeclarations(runtime?.shaderSource.declarations ?? "");
     runtime?.setScene(this.#scene);
@@ -975,13 +976,21 @@ export class SurfaceGpuOwner {
       }
       if (this.#virtualTextureBindingRevision !== this.#virtualTexture.bindingRevision) {
         this.#virtualTextureBindingRevision = this.#virtualTexture.bindingRevision;
+        // Atlas migration changes sampling dimensions independently of the
+        // material identity. Refresh uniforms with the newly bound textures.
+        this.#programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
         this.#dirty = true;
         this.#fullReconcileRequired = true;
       }
     }
+    if (this.#programs.pollVirtualCompilation()) {
+      this.#dirty = true;
+      this.#fullReconcileRequired = true;
+    }
     this.#reconcilePendingResources(state);
     if (scene === null) return virtualTexturePending;
     const presentationWorkPending = virtualTexturePending
+      || this.#programs.virtualCompilationPending
       || this.#admittedSurfaceCount < scene.surfaces.length;
     if (
       this.#opaqueSurfaces.length
@@ -1866,12 +1875,12 @@ export class SurfaceGpuOwner {
     sceneIndex: number,
   ): GpuSurface {
     const material = geometrySurface.surface.material;
-    const virtualTexture = material.baseColorVirtualAsset !== undefined
+    let virtualTexture = material.baseColorVirtualAsset !== undefined
       ? this.#virtualTexture?.binding(material.baseColorVirtualAsset)
       : material.baseColorAsset === undefined
         ? undefined
         : this.#virtualTexture?.automaticBinding(material.baseColorAsset);
-    const features = plannedSurfaceProgramFeatures(
+    let features = plannedSurfaceProgramFeatures(
       scene,
       geometrySurface.surface,
       sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
@@ -1882,6 +1891,22 @@ export class SurfaceGpuOwner {
         residentOrdinaryTextureMask(ordinaryBindings, bindingOffset),
       ),
     );
+    // Automatic VT has an ordinary preview to keep drawing while optional
+    // detail shaders link. Authored-only surfaces keep their existing semantics.
+    if (virtualTexture !== undefined && material.baseColorVirtualAsset === undefined
+      && ordinaryBindings[bindingOffset]!.texture !== null
+      && !this.#programs.virtualReady(
+        material.kind, features, geometrySurface.instanceCount > 0,
+        material.alphaCutoff !== undefined, canonicalSurfaceIsDoubleSided(material),
+      )) {
+      virtualTexture = undefined;
+      features = plannedSurfaceProgramFeatures(
+        scene, geometrySurface.surface,
+        sceneEnvironmentFeatures(scene, this.#environmentGpu?.binding),
+        false, this.#compositeActive,
+        presentableOrdinaryTextureMask(material, residentOrdinaryTextureMask(ordinaryBindings, bindingOffset)),
+      );
+    }
     const bindings = Array<GpuTextureBinding>(
       SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT + 1,
     );

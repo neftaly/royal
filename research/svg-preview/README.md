@@ -1,5 +1,109 @@
 # Preview-first SVG consumer verification
 
+## Nonblocking automatic VT shader publication
+
+Automatic VT now starts its required shader variant while an ordinary preview
+is drawable. With `KHR_parallel_shader_compile`, frames poll only completion
+status until linking finishes, then reconcile bindings and draw the VT variant.
+Pending compilation keeps the render loop scheduled even after page work stops.
+The fallback uses matching ordinary texture bindings and shader features.
+Authored-only surfaces, transmission variants, and devices without the extension
+retain the existing synchronous behavior. Shader-source replacement, context
+loss, and disposal discard pending variants.
+
+The A10 exposes the extension. The 273-piece fixture completed initial loading,
+zoom, overview, and return with no page failures, GPU denials, or context losses;
+final tracked GPU memory remained 70,071,041 bytes. The largest shader-status
+call was 11 ms and largest rAF gap 348 ms. Shader caches were not cleared, so
+these timings do not establish a cold-start speedup. Runtime SVG generation
+remains enabled. Evidence: [shader-compilation-results.json](./shader-compilation-results.json).
+
+Tests hold compilation unfinished while checking that the preview is drawn,
+no VT uniforms are used prematurely, another frame is requested, and VT replaces
+the preview after completion without a camera update. Owner tests prohibit
+blocking link-status queries while pending and cover pending-program cleanup.
+
+## Current 512px SVG page policy
+
+The A10 comparison now retains 512px SVG pages, with 128px ordinary raster
+pages and unchanged authored sizes. The same zoom requested 35 uploads instead
+of 151 and completed in 1,904 ms, versus 3,750 ms with the 256px copy-pipeline
+build. The final build, including shared raster strips, completed in 1,881 ms.
+Tracked final GPU memory was 70,071,041 bytes versus 72,065,793 bytes previously.
+These are individual runs on the same 273-piece fixture, not general guarantees.
+
+The final run also zoomed out and back in, completing those transitions in
+928 ms and 1,419 ms, with no page failures, GPU denials, or context losses.
+It did not exercise atlas shrinking: the 512px atlas remained at 64 slots.
+Startup still stalled (582 ms maximum rAF gap in the final run); the earlier
+512px run included a 635 ms shader-status call and a 962 ms startup gap.
+Larger pages do not solve shader startup costs or make uncached content instant.
+
+Two neighboring pages share a bounded horizontal SVG raster strip, rather than
+rasterizing the same region twice. The root cache remains 4 MiB, including
+reservations. Native Chromium pixel comparisons passed all three wrap modes
+for a one-page target with zero error; the four-page target used two strips,
+with maximum channel error one. Cache cleanup is also checked by the probe.
+The historical 256px results below describe earlier builds.
+
+Authored tile streaming had a separate bottleneck: downloads occupied the
+single detail slot. Transport and response-body reads now overlap for up to
+four pages; decode remains serialized and the existing 16 MiB reservation
+limit remains enforced. Regression tests verify overlap, decode admission,
+and cancellation. This authored-path fix does not explain the SVG timings.
+
+Evidence: [page-size-results.json](./page-size-results.json). All 831 renderer
+tests, TypeScript checking, renderer build, and production VT lint passed.
+
+## A10 loading throughput comparison
+
+The same 273-piece fixture was profiled with the original serial detail path,
+an experimental two-job detail limit, and consecutive atlas-copy batches.
+Completion below is measured from the zoom's `setScene` entry to the last page
+upload, rather than rounding to the probe's one-second samples.
+
+| Variant | Target completion after zoom | Copy calls | Fences |
+| --- | ---: | ---: | ---: |
+| Serial baseline | 4,647 ms | 76 | 21 |
+| Two detail jobs (reverted) | 4,738 ms | 76 | 20 |
+| Consecutive copy batches (retained) | 3,750 ms | 76 | 3 |
+
+The retained change queues at most four page copies per frame without waiting
+for each batch individually. Allocation is still validated first; final copy
+validation precedes the binding/page-table swap. Cancellation, allocation/copy
+failures, and context-loss tests retain their coverage.
+
+The measured completion improvement is about 19% in this single A10 comparison,
+not a universal speedup guarantee. All three runs ended with 172 admitted targets,
+227 resident pages, 72,065,793 tracked GPU bytes, and no failures or denials.
+Cloning and serialization consumed about 84 ms across the baseline run, so
+replacing the SVG parser was not justified by these measurements. New detail
+still requires rasterization and upload; resident detail can be used immediately.
+Raw reports and profiling events: [loading-throughput-results.json](./loading-throughput-results.json).
+
+## Resident detail and atlas-uniform regression
+
+`resident-detail-probe.mjs` exports `probeResidentDetail(declarations)`. Pass the
+production `VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS` string in a WebGL2 browser.
+The probe renders a missing zoom-out target with two finer resident tiles,
+coarse coverage elsewhere, and an unrelated neighboring atlas cell. It checks
+every output pixel, then publishes the requested target and checks that it
+takes priority. The old shader produces 16 mismatched channels in the missing
+target case. The fixed shader produces zero mismatches and no GL errors in
+Chromium and on the attached A10.
+
+The renderer regression also verifies that unlit and standard materials upload
+current atlas dimensions after growth and shrinking without changing material
+identity. Previously the material-uniform cache retained the old dimensions,
+allowing a newly bound atlas to be sampled at another cell's coordinates.
+
+The 273-piece A10 fixture completed zoom-out, shrink, and regrowth with no failed
+pages, denied allocations, or context loss. Atlas storage fell from 69,222,400
+to 34,611,200 bytes, then returned to 69,222,400 bytes with all 172 targets
+resident. The first zoom settled in about 5.36 seconds; this run had a 1,225 ms
+startup frame gap and does not establish a performance improvement. Saved
+evidence: [resident-detail-results.json](./resident-detail-results.json).
+
 ## Direct-target working-tree verification (2026-09-08)
 
 The current automatic path skips intermediate mips, uses supplied preview

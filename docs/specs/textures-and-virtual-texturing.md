@@ -289,7 +289,17 @@ and validated once on demand; it MUST NOT require a full ordinary SVG bitmap.
 A failed preview permits direct SVG recovery; failed optional detail keeps the
 preview. Required SVG and non-base-color uses preserve direct-source semantics.
 
-Automatic SVG sources use 256px pages with 2px gutters; ordinary raster sources
+When automatic VT has a drawable ordinary preview and parallel shader
+compilation is available, its non-transmission detail variant may link while
+that preview remains visible. Until completion, the renderer MUST retain
+ordinary bindings and matching shader features, poll only nonblocking
+completion status, and schedule another presentation frame. Completion MUST
+publish the VT variant without requiring a camera or asset update. Pending
+variants are discarded on shader-source replacement, disposal, and context
+loss. This does not require asynchronous first draw for authored-only VT or
+on devices without the parallel compilation extension.
+
+Automatic SVG sources use 512px pages with 2px gutters; ordinary raster sources
 retain 128px pages and authored VT retains its declared page size. Larger SVG
 pages reduce preparation/publication overhead without changing the requested
 texel density. The ordinary-raster eligibility threshold is unchanged.
@@ -297,7 +307,7 @@ texel density. The ordinary-raster eligibility threshold is unchanged.
 When admitted demand includes multiple pages at a mip whose whole image fits
 within 512px per axis, SVG preparation may rasterize that target once and crop
 its pages from shared pixels. Larger clamped SVG targets can share regions of
-two by two pages, at most 516px per axis including gutters. Fractional edge
+two horizontal pages, at most 1028px by 516px including gutters. Fractional edge
 regions retain per-page rasterization so rounding cannot stretch all pages in
 a group. The root-owned SVG raster cache reserves at most
 4 MiB including in-flight decodes, separately from the 16 MiB pending-page
@@ -309,6 +319,9 @@ does not rasterize intermediate levels or the full 16,384px logical extent.
 Cached target pages are scheduled before cold reads can evict their rasters;
 they still use the existing bounded detail-preparation lane.
 
+Authored page downloads and response-body reads may overlap without occupying
+the detail-preparation lane. Decode and ETC2 parsing enter that lane only after
+bytes arrive. At most four pages may be in flight or ready per root.
 At most one detail preparation executes per root. Pending page work reserves
 its decoded-pixel upper bound before starting, with a 16 MiB ceiling shared by
 in-flight and ready pages. Rejected, cancelled, stale and uploaded pages release
@@ -324,6 +337,13 @@ Atlas allocation is transactional. A slot selected for reuse cannot become
 visible for the new page until upload completes, and the old mapping cannot be
 invalidated in a way that samples new/partial bytes under the old identity.
 Failed, cancelled, or generation-stale uploads abort publication.
+
+If the requested mip is missing after zooming out, sampling consults the base
+page table for finer resident coverage before accepting a coarser fallback.
+Each pixel resolves its own resident tile; partially loaded regions keep their
+existing coarse fallback. Once the requested mip is resident it takes priority.
+This reuses existing GPU detail without requesting extra pages or preventing
+budget-driven eviction and delayed shrinking.
 
 Declaring or preparing a VT source does not itself allocate an atlas. The first
 non-empty projected demand does, so off-screen automatic and authored assets do
@@ -351,10 +371,14 @@ queried once per context lifetime and refreshed after context loss.
 Growth preserves the column count when that layout fits the full planned
 capacity within legal dimensions, avoiding page-table rewrites in that case.
 The old atlas remains drawable until all copies complete, then bindings and
-page tables switch together. Allocation and each copy batch are flushed before
-yielding a frame; their completion fence is created on a later frame, then
-polled with a zero timeout. Error validation occurs only after completion,
-including the final copy batch before publication. This separation matters on
+page tables switch together. Binding changes invalidate cached material
+uniforms as well, so an unchanged material samples with the new atlas dimensions.
+Allocation is flushed before yielding a frame; its completion fence is created
+on a later frame, then polled with a zero timeout. Copy batches are submitted
+on consecutive frames within the existing upload limits. After all copies have
+been queued, one fence covers the complete copy sequence, including any earlier
+batches followed by empty slots. Error validation occurs only after completion,
+before publication. This separation matters on
 WebKit, where creating a fence immediately after work can itself block. A
 failed fence or 120 unsuccessful frame polls abandons that replacement.
 Failed migration preserves the old atlas and retries only when demand or

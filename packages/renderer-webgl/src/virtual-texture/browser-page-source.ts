@@ -6,6 +6,9 @@ import {
 } from "./manifest";
 import { parseKtx2Etc2Page } from "./ktx2-etc2";
 import { decodeBrowserImageElement } from "../texture/browser-image-element";
+import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
+
+const prepareDirectly: AsyncPreparationScheduler = (_signal, prepare) => prepare();
 
 export type DecodedVirtualTexturePage = Readonly<{
   close(): void;
@@ -117,6 +120,7 @@ export const readVirtualTexturePage = async (
   manifest: VirtualTextureManifest,
   page: VirtualTexturePageId,
   signal: AbortSignal,
+  scheduleDecode: AsyncPreparationScheduler = prepareDirectly,
 ): Promise<DecodedVirtualTexturePage | undefined> => {
   const relative = virtualTexturePageUri(manifest, page);
   if (relative === undefined) return undefined;
@@ -126,24 +130,33 @@ export const readVirtualTexturePage = async (
   }
   const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
   if (manifest.pageEncoding === "ktx2-etc2") {
-    const parsed = parseKtx2Etc2Page(new Uint8Array(await response.arrayBuffer()));
-    if (parsed.width !== storedPageSize || parsed.height !== storedPageSize) {
-      throw new RangeError("Royal VT KTX2 page dimensions do not match the manifest");
-    }
-    return {
-      blocks: parsed.blocks,
-      close: () => undefined,
-      colorSpace: parsed.colorSpace,
-      kind: "etc2-rgba",
-    };
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return scheduleDecode(signal, async () => {
+      if (signal.aborted) throw new DOMException("VT page read was aborted", "AbortError");
+      const parsed = parseKtx2Etc2Page(bytes);
+      if (parsed.width !== storedPageSize || parsed.height !== storedPageSize) {
+        throw new RangeError("Royal VT KTX2 page dimensions do not match the manifest");
+      }
+      return {
+        blocks: parsed.blocks,
+        close: () => undefined,
+        colorSpace: parsed.colorSpace,
+        kind: "etc2-rgba",
+      };
+    });
   }
-  return decodeImagePage(await response.blob(), storedPageSize, signal);
+  const blob = await response.blob();
+  return scheduleDecode(signal, () => {
+    if (signal.aborted) throw new DOMException("VT page read was aborted", "AbortError");
+    return decodeImagePage(blob, storedPageSize, signal);
+  });
 };
 
 /** Opens an authored manifest as the same page-source contract used by generated VT. */
 export const openAuthoredVirtualTexturePageSource = async (
   manifestUri: string,
   signal: AbortSignal,
+  scheduleDecode: AsyncPreparationScheduler = prepareDirectly,
 ): Promise<VirtualTexturePageSource> => {
   const uri = absoluteUri(manifestUri);
   const response = await fetch(uri, { signal });
@@ -153,6 +166,6 @@ export const openAuthoredVirtualTexturePageSource = async (
   const manifest = parseVirtualTextureManifest(await response.json());
   return {
     manifest,
-    read: (page, pageSignal) => readVirtualTexturePage(uri, manifest, page, pageSignal),
+    read: (page, pageSignal) => readVirtualTexturePage(uri, manifest, page, pageSignal, scheduleDecode),
   };
 };

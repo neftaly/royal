@@ -40,10 +40,11 @@ describe("automatic virtual texture page source", () => {
       expect(source.hasCachedPage!(pages[2]!)).toBe(false);
       for (const page of pages.slice(1)) (await source.read(page, new AbortController().signal))!.close();
       expect(decode).toHaveBeenCalledTimes(2);
-      expect(Number(attributes.get("width"))).toBeLessThanOrEqual(516);
+      expect(source.manifest.pageSize).toBe(512);
+      expect(Number(attributes.get("width"))).toBeLessThanOrEqual(1028);
       expect(Number(attributes.get("height"))).toBeLessThanOrEqual(516);
       expect(cache.byteLength).toBeLessThanOrEqual(4 * 1024 * 1024);
-      expect(closed).not.toHaveBeenCalled();
+      expect(closed).toHaveBeenCalledTimes(1);
       source.setDemand!([]);
       expect(cache.byteLength).toBe(0);
       expect(closed).toHaveBeenCalledTimes(2);

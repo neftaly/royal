@@ -30,6 +30,8 @@ import {
   type TextureSourceRef,
 } from "../../packages/renderer-webgl/src/texture/asset-owner";
 import { WebGlStateOwner } from "../../packages/renderer-webgl/src/webgl/state-owner";
+import type { VirtualTextureRuntime } from "../../packages/renderer-webgl/src/virtual-texture/runtime-contract";
+import { VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS } from "../../packages/renderer-webgl/src/virtual-texture/shader-source";
 import { fakeGl } from "./support/canvas-root-harness";
 import { assertFuzz, forEachFuzzCase } from "../fuzz";
 
@@ -49,6 +51,56 @@ const createSurfaceGpuOwner = (
 );
 
 describe("retained surface texture publication", () => {
+  it("draws the ordinary preview until VT compilation finishes and requests the switching frame", () => {
+    const gl = fakeGl();
+    vi.mocked(gl.getExtension).mockImplementation((name) => String(name) === "KHR_parallel_shader_compile"
+      ? { COMPLETION_STATUS_KHR: 0x91b1 } as unknown as WEBGL_multi_draw : null);
+    let complete = false;
+    vi.mocked(gl.getProgramParameter).mockImplementation((_program, parameter) => parameter === 0x91b1 ? complete : true);
+    vi.mocked(gl.getUniformLocation).mockImplementation((_program, name) => ({ name }) as unknown as WebGLUniformLocation);
+    const owner = createSurfaceGpuOwner(gl);
+    const state = new WebGlStateOwner(gl);
+    const texture = imageTexture("/preview.png");
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({ geometry: planeGeometry(1), material: unlitMaterial({ texture }) })],
+    }), undefined, undefined, () => ({ width: 32, height: 32, source: {} as ImageBitmap }));
+    const binding = {
+      atlas: { texture: gl.createTexture(), sampler: null, target: gl.TEXTURE_2D },
+      pageTable: { texture: gl.createTexture(), sampler: null, target: gl.TEXTURE_2D },
+      settings0: new Float32Array(4), settings1: new Float32Array(4), settings2: new Float32Array(4),
+    };
+    const runtime = {
+      bindingRevision: 1,
+      shaderSource: { declarations: VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS },
+      automaticBinding: () => binding,
+      setScene: vi.fn(), dispose: vi.fn(),
+      update: () => ({ pending: false, webGlStateChanged: false }),
+    } as unknown as VirtualTextureRuntime;
+    const draw = () => {
+      owner.beginFrame();
+      return owner.drawViews(TEST_VIEWS, null, state, [0, 0, 0, 1]);
+    };
+    const virtualUploads = () => vi.mocked(gl.uniform4fv).mock.calls.filter(([location]) =>
+      (location as unknown as { name: string }).name === "virtualSettings0");
+    try {
+      owner.setScene(prepared);
+      owner.setVirtualTextureRuntime(runtime);
+      expect(draw()).toBe(true);
+      expect(gl.drawElements).toHaveBeenCalled();
+      expect(virtualUploads()).toHaveLength(0);
+      const links = vi.mocked(gl.linkProgram).mock.calls.length;
+      expect(draw()).toBe(true);
+      expect(virtualUploads()).toHaveLength(0);
+      expect(gl.linkProgram).toHaveBeenCalledTimes(links);
+      complete = true;
+      expect(draw()).toBe(false);
+      expect(virtualUploads()).toHaveLength(1);
+      expect(draw()).toBe(false);
+      expect(gl.linkProgram).toHaveBeenCalledTimes(links);
+    } finally { owner.dispose(); }
+  });
+
   it("invalidates blended bounds when an object moves during an unrelated pending texture batch", () => {
     const camera = orbitPerspectiveCamera({ view: { pitch: Math.PI / 2, distance: 1 } });
     const texture = imageTexture("/unrelated.png");

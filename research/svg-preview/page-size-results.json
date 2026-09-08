@@ -1,0 +1,6397 @@
+{
+  "description": "Single A10 fixture runs; times relative to probe start, milliseconds. Historical 256px copy pipeline comparison is in loading-throughput-results.json.",
+  "runs": {
+    "svg512-profile": {
+      "report": {
+        "info": {
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+          "width": 768,
+          "height": 954,
+          "dpr": 2,
+          "pieces": 273,
+          "capabilities": {
+            "maxTextureSize": 16384,
+            "etc2": true,
+            "astc": true
+          }
+        },
+        "errors": [],
+        "settledMs": 7219,
+        "last": {
+          "ms": 45262,
+          "frame": 147,
+          "copyCalls": 1,
+          "vt": {
+            "admittedUploadBytes": 1075944,
+            "atlasBytes": 68161536,
+            "atlasPools": 1,
+            "atlasGrowthFailures": 0,
+            "desiredPages": 56,
+            "admittedPages": 56,
+            "unresidentPages": 0,
+            "automaticCandidates": 60,
+            "automaticDecodedBytes": 855808,
+            "automaticIneligible": 0,
+            "automaticResources": 60,
+            "automaticWaiting": 0,
+            "deferredUploads": 0,
+            "failedPages": 0,
+            "pageRequests": 99,
+            "pendingPages": 0,
+            "pendingPageBytes": 0,
+            "pendingPageByteLimit": 16777216,
+            "residentPages": 64,
+            "uploadedPages": 99,
+            "uploadBudgetBytes": 33554432
+          },
+          "context": {
+            "generation": 1,
+            "interruptions": 0,
+            "phase": "active",
+            "recoveries": 0
+          },
+          "gpu": {
+            "budgetBytes": 268435456,
+            "deniedClaims": 0,
+            "retainedBytes": 70071041
+          },
+          "asset": {
+            "bounds": {
+              "max": [
+                0.4204990863800049,
+                0.0010000000474974513,
+                0.296999990940094
+              ],
+              "min": [
+                -0.4204990863800049,
+                -0.0010000000474974513,
+                -0.296999990940094
+              ]
+            },
+            "lightCount": 0,
+            "nodeCount": 1,
+            "primitiveCount": 3,
+            "sceneIndex": 0,
+            "scenes": [
+              {
+                "index": 0
+              }
+            ],
+            "status": "ready",
+            "timings": {
+              "externalResourceReadDurationMs": 304,
+              "firstDrawableAfterMs": 915.0000000000002,
+              "preparationQueueDurationMs": 153.9999999999999,
+              "preparationDurationMs": 351.0000000000002,
+              "sourceReadDurationMs": 103.00000000000011,
+              "sourceReadStartedAfterMs": 3,
+              "imagesCompleteAfterMs": 1692
+            },
+            "textures": {
+              "fallback": 0,
+              "failed": 0,
+              "loading": 0,
+              "ready": 2,
+              "total": 2
+            },
+            "variantNames": []
+          }
+        },
+        "gapStats": {
+          "max": 962,
+          "p95": 29,
+          "over50": 35,
+          "count": 2617,
+          "worst": [
+            {
+              "ms": 3217,
+              "duration": 962
+            },
+            {
+              "ms": 1431,
+              "duration": 353
+            },
+            {
+              "ms": 2107,
+              "duration": 273
+            },
+            {
+              "ms": 1078,
+              "duration": 169
+            },
+            {
+              "ms": 795,
+              "duration": 154
+            },
+            {
+              "ms": 2255,
+              "duration": 148
+            },
+            {
+              "ms": 4221,
+              "duration": 135
+            },
+            {
+              "ms": 3614,
+              "duration": 134
+            },
+            {
+              "ms": 1559,
+              "duration": 128
+            },
+            {
+              "ms": 1679,
+              "duration": 120
+            }
+          ]
+        }
+      },
+      "profile": {
+        "costs": {
+          "getParameter": {
+            "count": 6,
+            "total": 0,
+            "max": 0
+          },
+          "linkProgram": {
+            "count": 27,
+            "total": 0,
+            "max": 0
+          },
+          "getProgramParameter": {
+            "count": 24,
+            "total": 791.0000000000005,
+            "max": 635
+          },
+          "getUniformLocation": {
+            "count": 230,
+            "total": 16.000000000001364,
+            "max": 1.0000000000009095
+          },
+          "drawElements": {
+            "count": 6178,
+            "total": 9.000000000002274,
+            "max": 1.000000000001819
+          },
+          "drawImage": {
+            "count": 804,
+            "total": 77.00000000000682,
+            "max": 12
+          },
+          "getImageData": {
+            "count": 119,
+            "total": 413.99999999999864,
+            "max": 25
+          },
+          "texStorage2D": {
+            "count": 124,
+            "total": 0,
+            "max": 0
+          },
+          "texSubImage2D": {
+            "count": 964,
+            "total": 832.0000000000045,
+            "max": 12
+          },
+          "generateMipmap": {
+            "count": 61,
+            "total": 1,
+            "max": 1
+          },
+          "checkFramebufferStatus": {
+            "count": 2,
+            "total": 0,
+            "max": 0
+          },
+          "drawArrays": {
+            "count": 7,
+            "total": 0,
+            "max": 0
+          },
+          "getError": {
+            "count": 3,
+            "total": 0,
+            "max": 0
+          },
+          "flush": {
+            "count": 4,
+            "total": 0,
+            "max": 0
+          },
+          "fenceSync": {
+            "count": 2,
+            "total": 1,
+            "max": 1
+          },
+          "clientWaitSync": {
+            "count": 2,
+            "total": 0,
+            "max": 0
+          },
+          "copyTexSubImage2D": {
+            "count": 1,
+            "total": 0,
+            "max": 0
+          },
+          "cloneNode": {
+            "count": 98,
+            "total": 33.99999999999727,
+            "max": 3.000000000001819
+          },
+          "serializeToString": {
+            "count": 98,
+            "total": 23,
+            "max": 2
+          }
+        },
+        "slow": [
+          {
+            "method": "setScene",
+            "ms": 706,
+            "duration": 23
+          },
+          {
+            "method": "rAF callback",
+            "ms": 1638.0000000000002,
+            "duration": 78.99999999999977
+          },
+          {
+            "method": "rAF callback",
+            "ms": 1807,
+            "duration": 181
+          },
+          {
+            "method": "rAF callback",
+            "ms": 2160,
+            "duration": 61
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 1999,
+            "duration": 238
+          },
+          {
+            "method": "getImageData",
+            "ms": 2251,
+            "duration": 12
+          },
+          {
+            "method": "rAF callback",
+            "ms": 2288.0000000000005,
+            "duration": 44.999999999999545
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2000,
+            "duration": 405.00000000000045
+          },
+          {
+            "method": "rAF callback",
+            "ms": 2408,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2000,
+            "duration": 419
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2000,
+            "duration": 424
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2001,
+            "duration": 428.00000000000045
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2001,
+            "duration": 432
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2001,
+            "duration": 437
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2001,
+            "duration": 442
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2001,
+            "duration": 446
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2001,
+            "duration": 450
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2001,
+            "duration": 461
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2001,
+            "duration": 465
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2001,
+            "duration": 468
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2001,
+            "duration": 472
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2002.0000000000002,
+            "duration": 484.9999999999998
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2002.0000000000002,
+            "duration": 488.9999999999998
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2137,
+            "duration": 378
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2137,
+            "duration": 388
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2137,
+            "duration": 394
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2288.0000000000005,
+            "duration": 254
+          },
+          {
+            "method": "getImageData",
+            "ms": 2557,
+            "duration": 14.999999999999545
+          },
+          {
+            "method": "getProgramParameter",
+            "ms": 2627,
+            "duration": 29
+          },
+          {
+            "method": "getProgramParameter",
+            "ms": 2657,
+            "duration": 20.999999999999545
+          },
+          {
+            "method": "getProgramParameter",
+            "ms": 2694,
+            "duration": 18
+          },
+          {
+            "method": "rAF callback",
+            "ms": 2563,
+            "duration": 163
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2524,
+            "duration": 251
+          },
+          {
+            "method": "rAF callback",
+            "ms": 2837,
+            "duration": 113
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2772.0000000000005,
+            "duration": 199.99999999999955
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2772.0000000000005,
+            "duration": 202.99999999999955
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2772.0000000000005,
+            "duration": 206.99999999999955
+          },
+          {
+            "method": "getProgramParameter",
+            "ms": 3716,
+            "duration": 635
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 3722,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 16
+          },
+          {
+            "method": "rAF callback",
+            "ms": 2984,
+            "duration": 737
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2772.0000000000005,
+            "duration": 1154.9999999999995
+          },
+          {
+            "method": "getImageData",
+            "ms": 3943,
+            "duration": 16
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2772.0000000000005,
+            "duration": 1183.9999999999995
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2772.0000000000005,
+            "duration": 1190.9999999999995
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2773,
+            "duration": 1194
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2773,
+            "duration": 1198
+          },
+          {
+            "method": "rAF callback",
+            "ms": 3977,
+            "duration": 17
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2773,
+            "duration": 1226
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2773,
+            "duration": 1233.9999999999995
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2773,
+            "duration": 1240
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4016,
+            "duration": 16
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2773,
+            "duration": 1263.0000000000005
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2773,
+            "duration": 1271.0000000000005
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2773,
+            "duration": 1276.0000000000005
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4059,
+            "duration": 14.000000000000455
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2774,
+            "duration": 1312.9999999999995
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2965,
+            "duration": 1134
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2965,
+            "duration": 1140
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2965,
+            "duration": 1145
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2966,
+            "duration": 1148
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2966,
+            "duration": 1151
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2966,
+            "duration": 1155
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2966,
+            "duration": 1159
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2966,
+            "duration": 1162
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2966,
+            "duration": 1166
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2967,
+            "duration": 1168
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4139,
+            "duration": 14.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2967,
+            "duration": 1193
+          },
+          {
+            "method": "getImageData",
+            "ms": 4171,
+            "duration": 9.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2967,
+            "duration": 1206
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2967,
+            "duration": 1210.000000000001
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2967,
+            "duration": 1214
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2967,
+            "duration": 1218.000000000001
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 4121,
+            "duration": 79
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 4121,
+            "duration": 84
+          },
+          {
+            "method": "getProgramParameter",
+            "ms": 4293,
+            "duration": 11
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4210,
+            "duration": 103
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 4121,
+            "duration": 217
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4343,
+            "duration": 15
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 4210,
+            "duration": 155
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 4210,
+            "duration": 163
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 4337,
+            "duration": 43
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4384,
+            "duration": 15
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 4338,
+            "duration": 65.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 4338,
+            "duration": 74
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 4338,
+            "duration": 78
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 4338,
+            "duration": 81.00000000000091
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4449,
+            "duration": 13
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 4493,
+            "duration": 11
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4479,
+            "duration": 19
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4514,
+            "duration": 11
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4545,
+            "duration": 11
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4572,
+            "duration": 9
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4596,
+            "duration": 10
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4624,
+            "duration": 10
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4649,
+            "duration": 10
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4672,
+            "duration": 10
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4709.000000000001,
+            "duration": 8.99999999999909
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4735,
+            "duration": 10
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4756,
+            "duration": 10
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4782,
+            "duration": 18
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4815,
+            "duration": 109
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4950,
+            "duration": 10
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4973,
+            "duration": 19
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 4997,
+            "duration": 50
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 5101,
+            "duration": 8.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5106,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5092.000000000001,
+            "duration": 13.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5139,
+            "duration": 13
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5194,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5180,
+            "duration": 14
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5219,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5320,
+            "duration": 25
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 5374.000000000001,
+            "duration": 9.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5380,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5364,
+            "duration": 16
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5487,
+            "duration": 6
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 5527,
+            "duration": 9
+          },
+          {
+            "method": "getProgramParameter",
+            "ms": 5541,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5546,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5517,
+            "duration": 29
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5614,
+            "duration": 7
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5644,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5631,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5630,
+            "duration": 16
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5674,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5660,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5656,
+            "duration": 26
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5711,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5697,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5694,
+            "duration": 25
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 5742,
+            "duration": 8.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5747,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5732,
+            "duration": 15
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5729,
+            "duration": 41.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5784,
+            "duration": 4
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5803,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5789,
+            "duration": 13.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5815,
+            "duration": 8
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 5833,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5837,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5824,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5853,
+            "duration": 3
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5870,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5858.000000000001,
+            "duration": 11.99999999999909
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 5897,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5901,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5888,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5885,
+            "duration": 24
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 5930,
+            "duration": 10
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5934,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5920,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5917,
+            "duration": 29
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5968,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5956,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5955,
+            "duration": 25
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6008,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5995,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5994,
+            "duration": 20
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6042,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6028.000000000001,
+            "duration": 13.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6026,
+            "duration": 20
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6077,
+            "duration": 8.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6081,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6068.000000000001,
+            "duration": 12.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6067,
+            "duration": 19
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6111,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6097,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6096,
+            "duration": 21
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6137,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6144,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6128,
+            "duration": 16
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6127,
+            "duration": 27
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6175,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6179,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6165,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6163,
+            "duration": 21
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6205,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6210,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6195,
+            "duration": 15
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6193.000000000001,
+            "duration": 21.99999999999909
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6236,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6243,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6227,
+            "duration": 16
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6226,
+            "duration": 29
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6275,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6280,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6265.000000000001,
+            "duration": 14.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6263,
+            "duration": 23.00000000000091
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6308,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6312,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6298,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6296,
+            "duration": 19
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6344,
+            "duration": 11
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6349,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6332,
+            "duration": 16
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6326.000000000001,
+            "duration": 33.99999999999909
+          },
+          {
+            "method": "drawImage",
+            "ms": 6374.000000000001,
+            "duration": 9.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6393,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6378,
+            "duration": 15
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6377,
+            "duration": 23
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6426,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6411.000000000001,
+            "duration": 14.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6410,
+            "duration": 22
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6452,
+            "duration": 8.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6459.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6443.000000000001,
+            "duration": 16
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6441,
+            "duration": 29
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6491.000000000001,
+            "duration": 9.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6495,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6481,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6480,
+            "duration": 20
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6522,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6528.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6513,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6509,
+            "duration": 26
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6561,
+            "duration": 12
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6566,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6548,
+            "duration": 18
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6545,
+            "duration": 31.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6605,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6591,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6589,
+            "duration": 22
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6633,
+            "duration": 8.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6637,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6624.000000000001,
+            "duration": 12.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6620,
+            "duration": 30
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6680,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6684,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6670,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6669.000000000001,
+            "duration": 17.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6716,
+            "pages": 1,
+            "bytes": 1066396,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6704,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6697,
+            "duration": 25
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6745,
+            "duration": 10
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6749.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6734,
+            "duration": 15.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6731,
+            "duration": 30
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6786.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6774,
+            "duration": 12.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6770.000000000001,
+            "duration": 21.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6812,
+            "pages": 1,
+            "bytes": 1066396,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6801,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6800,
+            "duration": 16
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6842.000000000001,
+            "duration": 10.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6845,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6831,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6827,
+            "duration": 32
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6879,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6883,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6870,
+            "duration": 12.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6867,
+            "duration": 20
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6912,
+            "pages": 1,
+            "bytes": 1066396,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6901,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6898.000000000001,
+            "duration": 18.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6943.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6929,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6926,
+            "duration": 21
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6978,
+            "duration": 12
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6981,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6965,
+            "duration": 16
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6958,
+            "duration": 33.00000000000091
+          },
+          {
+            "method": "drawImage",
+            "ms": 7006,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7023.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7012,
+            "duration": 11.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7011,
+            "duration": 17.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7053,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7042,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7039.000000000001,
+            "duration": 21.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7087,
+            "pages": 1,
+            "bytes": 1066396,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7074,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7070,
+            "duration": 26
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7121,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7110,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7106,
+            "duration": 21
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7152,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7141,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7137,
+            "duration": 23
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7185.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7173,
+            "duration": 12.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7171,
+            "duration": 21
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7220,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7208,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7206,
+            "duration": 20
+          },
+          {
+            "method": "getImageData",
+            "ms": 7299,
+            "duration": 25
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 7319,
+            "duration": 8.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7322,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7309,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7300,
+            "duration": 35
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7369,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7356,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7346,
+            "duration": 29
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 7397,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7401,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7387,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7386,
+            "duration": 22
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7435.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7421,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7417,
+            "duration": 24
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 7464,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7468,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7454,
+            "duration": 13.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7450,
+            "duration": 23
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7502,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7490,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7485,
+            "duration": 28
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7543,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7529,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7525,
+            "duration": 26
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 7579,
+            "duration": 10
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7583,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7568.000000000001,
+            "duration": 13.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7563,
+            "duration": 24
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7632.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7605,
+            "duration": 26
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7604,
+            "duration": 32
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7677.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7668,
+            "duration": 13
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7715,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7704,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7691,
+            "duration": 32
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7747,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7732,
+            "duration": 21
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7778.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7768,
+            "duration": 10.00000000000091
+          },
+          {
+            "method": "setScene",
+            "ms": 12731,
+            "duration": 36
+          },
+          {
+            "method": "rAF callback",
+            "ms": 12769,
+            "duration": 11.000000000001819
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 12784,
+            "duration": 7
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 12857.000000000002,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 12847,
+            "duration": 10.000000000001819
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 12836,
+            "duration": 25
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 12871,
+            "duration": 8
+          },
+          {
+            "method": "drawImage",
+            "ms": 12897,
+            "duration": 12
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 12917,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 12906,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 12904,
+            "duration": 17.00000000000182
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 12990,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 12979.000000000002,
+            "duration": 10.999999999998181
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 12968,
+            "duration": 27.00000000000182
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13007,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13080,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13070,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13060,
+            "duration": 23
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13095,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13167,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13157,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13167,
+            "duration": 7
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13224,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13203,
+            "duration": 20
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13228,
+            "duration": 3
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13275,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13264.000000000002,
+            "duration": 10.999999999998181
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13276,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13323,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13311,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13324,
+            "duration": 8
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13371,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13361,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13372,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13420,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13410,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13421.000000000002,
+            "duration": 5.999999999998181
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13469,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13459,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13470,
+            "duration": 8
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13512,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13500,
+            "duration": 11.000000000001819
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13512,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13550,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13540.000000000002,
+            "duration": 9.999999999998181
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13551,
+            "duration": 7
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13600,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13588.000000000002,
+            "duration": 11.999999999998181
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13601,
+            "duration": 4
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13646,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13633,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13647,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13694,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13680,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13694,
+            "duration": 6.000000000001819
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13743,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13731,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13744,
+            "duration": 8
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13794,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13781,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13795,
+            "duration": 4
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13844,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13833,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13845,
+            "duration": 8
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13895,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13882,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13895,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13951,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13932,
+            "duration": 19
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13952,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14000,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13987,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14001,
+            "duration": 5
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 14046.000000000002,
+            "duration": 8.000000000001819
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14050,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14038,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14051,
+            "duration": 4
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14096,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14085,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14097,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14143,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14131,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14144,
+            "duration": 3
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14190,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14179,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14192,
+            "duration": 14
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14243,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14230,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14244,
+            "duration": 4.000000000001819
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14295,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14282,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14295,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14345,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14334,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14345,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14394,
+            "pages": 1,
+            "bytes": 1071856,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14382,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14394,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14444,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14432,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14445,
+            "duration": 7
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14498.000000000002,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14483,
+            "duration": 15.000000000001819
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14545,
+            "pages": 1,
+            "bytes": 1071856,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14535,
+            "duration": 10
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14592,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14582,
+            "duration": 9.000000000001819
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14635,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14626,
+            "duration": 9
+          }
+        ]
+      }
+    },
+    "svg512-final": {
+      "report": {
+        "info": {
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+          "width": 768,
+          "height": 954,
+          "dpr": 2,
+          "pieces": 273,
+          "capabilities": {
+            "maxTextureSize": 16384,
+            "etc2": true,
+            "astc": true
+          }
+        },
+        "errors": [],
+        "settledMs": 8221,
+        "last": {
+          "ms": 45293.00000000001,
+          "frame": 217,
+          "copyCalls": 0,
+          "vt": {
+            "admittedUploadBytes": 1075944,
+            "atlasBytes": 68161536,
+            "atlasPools": 1,
+            "atlasGrowthFailures": 0,
+            "desiredPages": 56,
+            "admittedPages": 56,
+            "unresidentPages": 0,
+            "automaticCandidates": 60,
+            "automaticDecodedBytes": 2977600,
+            "automaticIneligible": 0,
+            "automaticResources": 60,
+            "automaticWaiting": 0,
+            "deferredUploads": 0,
+            "failedPages": 0,
+            "pageRequests": 169,
+            "pendingPages": 0,
+            "pendingPageBytes": 0,
+            "pendingPageByteLimit": 16777216,
+            "residentPages": 64,
+            "uploadedPages": 169,
+            "uploadBudgetBytes": 33554432
+          },
+          "context": {
+            "generation": 1,
+            "interruptions": 0,
+            "phase": "active",
+            "recoveries": 0
+          },
+          "gpu": {
+            "budgetBytes": 268435456,
+            "deniedClaims": 0,
+            "retainedBytes": 70071041
+          },
+          "asset": {
+            "bounds": {
+              "max": [
+                0.4204990863800049,
+                0.0010000000474974513,
+                0.296999990940094
+              ],
+              "min": [
+                -0.4204990863800049,
+                -0.0010000000474974513,
+                -0.296999990940094
+              ]
+            },
+            "lightCount": 0,
+            "nodeCount": 1,
+            "primitiveCount": 3,
+            "sceneIndex": 0,
+            "scenes": [
+              {
+                "index": 0
+              }
+            ],
+            "status": "ready",
+            "timings": {
+              "externalResourceReadDurationMs": 543,
+              "firstDrawableAfterMs": 1344,
+              "preparationQueueDurationMs": 146.9999999999999,
+              "preparationDurationMs": 555,
+              "sourceReadDurationMs": 96.00000000000011,
+              "sourceReadStartedAfterMs": 3,
+              "imagesCompleteAfterMs": 1346
+            },
+            "textures": {
+              "fallback": 0,
+              "failed": 0,
+              "loading": 0,
+              "ready": 2,
+              "total": 2
+            },
+            "variantNames": []
+          }
+        },
+        "gapStats": {
+          "max": 582,
+          "p95": 37,
+          "over50": 54,
+          "count": 2531,
+          "worst": [
+            {
+              "ms": 1977,
+              "duration": 582
+            },
+            {
+              "ms": 4254,
+              "duration": 232
+            },
+            {
+              "ms": 2653,
+              "duration": 193
+            },
+            {
+              "ms": 2372,
+              "duration": 164
+            },
+            {
+              "ms": 2121,
+              "duration": 144
+            },
+            {
+              "ms": 812,
+              "duration": 141
+            },
+            {
+              "ms": 1395,
+              "duration": 130
+            },
+            {
+              "ms": 1072,
+              "duration": 129
+            },
+            {
+              "ms": 3189,
+              "duration": 118
+            },
+            {
+              "ms": 7077,
+              "duration": 115
+            }
+          ]
+        }
+      },
+      "profile": {
+        "costs": {
+          "getParameter": {
+            "count": 5,
+            "total": 0,
+            "max": 0
+          },
+          "drawImage": {
+            "count": 1235,
+            "total": 70.99999999999272,
+            "max": 9
+          },
+          "getImageData": {
+            "count": 119,
+            "total": 592.9999999999886,
+            "max": 58.999999999999545
+          },
+          "linkProgram": {
+            "count": 26,
+            "total": 0.9999999999995453,
+            "max": 0.9999999999995453
+          },
+          "texStorage2D": {
+            "count": 123,
+            "total": 2,
+            "max": 1
+          },
+          "texSubImage2D": {
+            "count": 1790,
+            "total": 1332.0000000000132,
+            "max": 69
+          },
+          "generateMipmap": {
+            "count": 61,
+            "total": 0,
+            "max": 0
+          },
+          "getProgramParameter": {
+            "count": 23,
+            "total": 122.99999999999818,
+            "max": 16
+          },
+          "getUniformLocation": {
+            "count": 217,
+            "total": 16.99999999999909,
+            "max": 1.0000000000004547
+          },
+          "drawElements": {
+            "count": 8905,
+            "total": 9.000000000003183,
+            "max": 1.000000000003638
+          },
+          "checkFramebufferStatus": {
+            "count": 1,
+            "total": 0,
+            "max": 0
+          },
+          "drawArrays": {
+            "count": 1,
+            "total": 0,
+            "max": 0
+          },
+          "getError": {
+            "count": 1,
+            "total": 1,
+            "max": 1
+          },
+          "cloneNode": {
+            "count": 149,
+            "total": 53.00000000001273,
+            "max": 5
+          },
+          "serializeToString": {
+            "count": 149,
+            "total": 38.99999999999454,
+            "max": 3
+          }
+        },
+        "slow": [
+          {
+            "method": "setScene",
+            "ms": 851,
+            "duration": 22
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 1801,
+            "duration": 21
+          },
+          {
+            "method": "getImageData",
+            "ms": 1835,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 1803,
+            "duration": 140
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 1942,
+            "duration": 71
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 1942,
+            "duration": 76.00000000000023
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 1943,
+            "duration": 83.00000000000023
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2038.0000000000002,
+            "duration": 31.999999999999773
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2038.0000000000002,
+            "duration": 38.99999999999977
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2056,
+            "duration": 30
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2056,
+            "duration": 34
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2059,
+            "duration": 36
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2059,
+            "duration": 40
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2059,
+            "duration": 44
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2062,
+            "duration": 44
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2065,
+            "duration": 45
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2068,
+            "duration": 50
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2068,
+            "duration": 53
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 2623,
+            "duration": 37
+          },
+          {
+            "method": "rAF callback",
+            "ms": 2268.0000000000005,
+            "duration": 387
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 2932,
+            "duration": 17
+          },
+          {
+            "method": "rAF callback",
+            "ms": 2852,
+            "duration": 91
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2843,
+            "duration": 132
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2844,
+            "duration": 137
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2844,
+            "duration": 142
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2844,
+            "duration": 146
+          },
+          {
+            "method": "rAF callback",
+            "ms": 2994,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2844,
+            "duration": 164
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2844,
+            "duration": 169
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2844,
+            "duration": 174.00000000000045
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2844,
+            "duration": 179
+          },
+          {
+            "method": "rAF callback",
+            "ms": 3027,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2845,
+            "duration": 193.00000000000045
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2845,
+            "duration": 202
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2852,
+            "duration": 204
+          },
+          {
+            "method": "getImageData",
+            "ms": 3067,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2852,
+            "duration": 217
+          },
+          {
+            "method": "getImageData",
+            "ms": 3079,
+            "duration": 10
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 3099,
+            "duration": 14
+          },
+          {
+            "method": "getProgramParameter",
+            "ms": 3119,
+            "duration": 16
+          },
+          {
+            "method": "getProgramParameter",
+            "ms": 3171.0000000000005,
+            "duration": 12
+          },
+          {
+            "method": "getProgramParameter",
+            "ms": 3181,
+            "duration": 9
+          },
+          {
+            "method": "rAF callback",
+            "ms": 3081,
+            "duration": 114.00000000000045
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2852,
+            "duration": 377
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2852,
+            "duration": 382
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2852,
+            "duration": 386
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 2852,
+            "duration": 389
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3228,
+            "duration": 30
+          },
+          {
+            "method": "getImageData",
+            "ms": 3269,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3229,
+            "duration": 41
+          },
+          {
+            "method": "getImageData",
+            "ms": 3313,
+            "duration": 43
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3229,
+            "duration": 87.00000000000045
+          },
+          {
+            "method": "rAF callback",
+            "ms": 3333,
+            "duration": 113
+          },
+          {
+            "method": "rAF callback",
+            "ms": 3526.0000000000005,
+            "duration": 53.999999999999545
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3333,
+            "duration": 263
+          },
+          {
+            "method": "getImageData",
+            "ms": 3621,
+            "duration": 25
+          },
+          {
+            "method": "rAF callback",
+            "ms": 3622,
+            "duration": 60
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3462,
+            "duration": 240
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3462,
+            "duration": 247
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3462,
+            "duration": 252
+          },
+          {
+            "method": "getImageData",
+            "ms": 3723,
+            "duration": 9
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3462,
+            "duration": 269
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3462,
+            "duration": 278
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3462,
+            "duration": 282
+          },
+          {
+            "method": "getImageData",
+            "ms": 3754,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3462,
+            "duration": 297
+          },
+          {
+            "method": "getImageData",
+            "ms": 3769,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3462,
+            "duration": 308
+          },
+          {
+            "method": "getImageData",
+            "ms": 3786,
+            "duration": 16
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 3798,
+            "duration": 9.999999999999545
+          },
+          {
+            "method": "rAF callback",
+            "ms": 3788.0000000000005,
+            "duration": 10.999999999999545
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3462,
+            "duration": 339
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3463,
+            "duration": 343
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3467,
+            "duration": 343
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3467,
+            "duration": 352
+          },
+          {
+            "method": "getImageData",
+            "ms": 3830,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3467,
+            "duration": 365.00000000000045
+          },
+          {
+            "method": "getImageData",
+            "ms": 3891,
+            "duration": 58.999999999999545
+          },
+          {
+            "method": "rAF callback",
+            "ms": 3892,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3526.0000000000005,
+            "duration": 393.99999999999955
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3526.0000000000005,
+            "duration": 399
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3758,
+            "duration": 174
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3758,
+            "duration": 179.00000000000045
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3758,
+            "duration": 182
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 3986,
+            "duration": 36.999999999999545
+          },
+          {
+            "method": "rAF callback",
+            "ms": 3945.0000000000005,
+            "duration": 77
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3758,
+            "duration": 271
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3759,
+            "duration": 277.00000000000045
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3759,
+            "duration": 282.00000000000045
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3759,
+            "duration": 286
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3945.0000000000005,
+            "duration": 107
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3945.0000000000005,
+            "duration": 112
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 3945.0000000000005,
+            "duration": 115.99999999999955
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4062.0000000000005,
+            "duration": 16.99999999999909
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4092.0000000000005,
+            "duration": 15.999999999999545
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4143,
+            "duration": 15
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4225,
+            "duration": 12
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4252,
+            "duration": 31
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4321,
+            "duration": 16
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 4439,
+            "duration": 69
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4370,
+            "duration": 77
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4477,
+            "duration": 12
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4507,
+            "duration": 16
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4539,
+            "duration": 13.00000000000091
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4569,
+            "duration": 12
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4603,
+            "duration": 13
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4627,
+            "duration": 13
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4654,
+            "duration": 13
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4684,
+            "duration": 13
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4710,
+            "duration": 12
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4733.000000000001,
+            "duration": 14.99999999999909
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4762,
+            "duration": 19
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4854,
+            "duration": 17
+          },
+          {
+            "method": "getProgramParameter",
+            "ms": 4987,
+            "duration": 10
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 4992,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 4895.000000000001,
+            "duration": 96
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5242,
+            "duration": 52.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5356,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5342.000000000001,
+            "duration": 12.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5538,
+            "duration": 15
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 5618,
+            "duration": 12
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5623,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5605,
+            "duration": 18
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 5861,
+            "duration": 18
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 5934,
+            "duration": 14
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 5939,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 5920,
+            "duration": 19
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6117,
+            "duration": 6
+          },
+          {
+            "method": "getProgramParameter",
+            "ms": 6191,
+            "duration": 11
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6196,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6169.000000000001,
+            "duration": 25.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6140.000000000001,
+            "duration": 61
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6228,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6215,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6210,
+            "duration": 22
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6259,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6246,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6244,
+            "duration": 22
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6299,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6285,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6276,
+            "duration": 29
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6333,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6319,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6316,
+            "duration": 26.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6383,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6354,
+            "duration": 29
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6351,
+            "duration": 38
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6426,
+            "duration": 14.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6432,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6410,
+            "duration": 22
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6407,
+            "duration": 43
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6477,
+            "duration": 8.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6482,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6467.000000000001,
+            "duration": 13.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6462,
+            "duration": 43
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6529,
+            "duration": 8.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6535,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6520.000000000001,
+            "duration": 14.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6519,
+            "duration": 19
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6559,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6547,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6546,
+            "duration": 22.00000000000091
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6592.000000000001,
+            "duration": 9.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6596,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6581,
+            "duration": 15
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6580,
+            "duration": 22
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6622,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6626,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6613,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6611,
+            "duration": 19
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6653.000000000001,
+            "duration": 9.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6657,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6644,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6640.000000000001,
+            "duration": 21.99999999999909
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6686,
+            "duration": 10
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6690,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6676,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6674,
+            "duration": 20
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6719,
+            "duration": 9.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6723,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6709.000000000001,
+            "duration": 12.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6704,
+            "duration": 22
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6766,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6753,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6752,
+            "duration": 17
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 6800,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6804,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6791,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6784,
+            "duration": 25
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6835,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6822,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6821,
+            "duration": 18
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6865,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6852,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6850.000000000001,
+            "duration": 24
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6895.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6883,
+            "duration": 12.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6882.000000000001,
+            "duration": 19.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6926,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6913,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6911.000000000001,
+            "duration": 24
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 6968,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6953,
+            "duration": 14.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6946,
+            "duration": 29.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7000,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 6986,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 6985,
+            "duration": 22.00000000000091
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 7037,
+            "duration": 10
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7041,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7027,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7026,
+            "duration": 22
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 7072,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7076.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7063,
+            "duration": 13.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7059,
+            "duration": 22
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7103,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7091,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7089,
+            "duration": 20
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7136,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7122,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7119,
+            "duration": 22
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7165,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7152,
+            "duration": 12.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7151,
+            "duration": 19
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7198,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7184,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7183,
+            "duration": 20
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 7226,
+            "duration": 8.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7230,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7217.000000000001,
+            "duration": 12.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7212,
+            "duration": 27
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7262,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7250,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7248,
+            "duration": 20
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7291,
+            "pages": 1,
+            "bytes": 1066396,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7281.000000000001,
+            "duration": 9.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7277,
+            "duration": 22
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 7330,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7334.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7321,
+            "duration": 13.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7320,
+            "duration": 18
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7363,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7351,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7347,
+            "duration": 21
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7392,
+            "pages": 1,
+            "bytes": 1066396,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7381,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7377,
+            "duration": 24
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 7429,
+            "duration": 9.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7436,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7419.000000000001,
+            "duration": 16.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7413,
+            "duration": 26
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7450,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7468,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7455,
+            "duration": 13
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7502,
+            "pages": 1,
+            "bytes": 1066396,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7489,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7485,
+            "duration": 22.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7533,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7520.000000000001,
+            "duration": 11.99999999999909
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7516,
+            "duration": 20.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7562,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7550,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7547.000000000001,
+            "duration": 21.99999999999909
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 7592.000000000001,
+            "duration": 9.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7595,
+            "pages": 1,
+            "bytes": 1066396,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7583,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7578,
+            "duration": 26
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 7624.000000000001,
+            "duration": 9.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7628,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7615,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7613,
+            "duration": 21
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 7663,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7667,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7654,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7653.000000000001,
+            "duration": 19
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7695,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7683,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7682,
+            "duration": 18
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7726,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7713,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7711,
+            "duration": 20
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7756,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7743,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7742,
+            "duration": 19
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 7783,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7787,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7774,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7771,
+            "duration": 20
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7814,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7803,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7801,
+            "duration": 18
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7850.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7836,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7835,
+            "duration": 21
+          },
+          {
+            "method": "getImageData",
+            "ms": 7939,
+            "duration": 26
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 7962,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7950,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7940,
+            "duration": 34
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 8000,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 7986,
+            "duration": 13.00000000000091
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 7983.000000000001,
+            "duration": 20.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 8059.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 8045.999999999999,
+            "duration": 13.000000000001819
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 8022,
+            "duration": 42.99999999999909
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 8088.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 8074.999999999999,
+            "duration": 13.000000000001819
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 8074,
+            "duration": 19
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 8103,
+            "duration": 3.9999999999990905
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 8120.000000000001,
+            "duration": 10.000000000001819
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 8124.000000000001,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 8109.999999999999,
+            "duration": 14.000000000001819
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 8159.000000000001,
+            "duration": 9.00000000000091
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 8164,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 8150,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 8145,
+            "duration": 25.99999999999909
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 8205,
+            "duration": 10
+          },
+          {
+            "method": "getProgramParameter",
+            "ms": 8222,
+            "duration": 8.999999999998181
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 8225,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 8195,
+            "duration": 30
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 8194,
+            "duration": 36
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 8263,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 1
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 8253,
+            "duration": 16
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 8289,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 1
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 8280,
+            "duration": 19
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 8328,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 8312,
+            "duration": 15
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 8351,
+            "pages": 1,
+            "bytes": 1070484,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 9931.000000000002,
+            "duration": 9.999999999998181
+          },
+          {
+            "method": "setScene",
+            "ms": 12875,
+            "duration": 47
+          },
+          {
+            "method": "rAF callback",
+            "ms": 12922,
+            "duration": 20
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 12947.000000000002,
+            "duration": 6.999999999998181
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 13022,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13026,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13012,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13004,
+            "duration": 27
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13043.000000000002,
+            "duration": 6.999999999998181
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13075.000000000002,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13066,
+            "duration": 9.000000000001819
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13062,
+            "duration": 23
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13159,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13141,
+            "duration": 23
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13208,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13198,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13216.000000000002,
+            "duration": 5.999999999998181
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13293.000000000002,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13293.000000000002,
+            "duration": 9.999999999998181
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13342,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13389.000000000002,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13381,
+            "duration": 8.000000000001819
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13390,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13439,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13427,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13440,
+            "duration": 3
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13486,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13475,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13487,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13532,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13522,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13588.000000000002,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13577,
+            "duration": 11.000000000001819
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13590,
+            "duration": 7
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13636.000000000002,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13626,
+            "duration": 10.000000000001819
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13684.000000000002,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13672,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13684.000000000002,
+            "duration": 5.999999999998181
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13730,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13719,
+            "duration": 10.000000000001819
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13731,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13777.000000000002,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13767,
+            "duration": 10.000000000001819
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13777.000000000002,
+            "duration": 11.999999999998181
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13826,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13816,
+            "duration": 10
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13875,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13866,
+            "duration": 9
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13876,
+            "duration": 12
+          },
+          {
+            "method": "drawImage",
+            "ms": 13903,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13927,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13916,
+            "duration": 10
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 13972,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 13961,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 13973,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14015,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14003,
+            "duration": 11.000000000001819
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14016,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14061,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14050,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14062.000000000002,
+            "duration": 8.999999999998181
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14109,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14100,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14158,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14148,
+            "duration": 9
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14158,
+            "duration": 10.000000000001819
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14211,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14201,
+            "duration": 10
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14264.000000000002,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14250,
+            "duration": 14.000000000001819
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14265,
+            "duration": 8
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14315,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14304,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14317,
+            "duration": 5.000000000001819
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14368,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14357.000000000002,
+            "duration": 10.999999999998181
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14369,
+            "duration": 7
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14419,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14409,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14420,
+            "duration": 4
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14469,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14456,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14470,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14518,
+            "pages": 1,
+            "bytes": 1071856,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14505,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14519,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14568,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14556.000000000002,
+            "duration": 11.999999999998181
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 14569,
+            "duration": 6.000000000001819
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14617,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14604.000000000002,
+            "duration": 12.999999999998181
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14659,
+            "pages": 1,
+            "bytes": 1071856,
+            "deferred": 1
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14706,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14697.000000000002,
+            "duration": 8.999999999998181
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 14756,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 14747,
+            "duration": 9
+          },
+          {
+            "method": "setScene",
+            "ms": 24875,
+            "duration": 62
+          },
+          {
+            "method": "rAF callback",
+            "ms": 24937,
+            "duration": 18.000000000003638
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 24956,
+            "duration": 7
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 24987.000000000004,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 24975,
+            "duration": 12.000000000003638
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 24971,
+            "duration": 19.000000000003638
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 24996.000000000004,
+            "duration": 4.999999999996362
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25012,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25002,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25020,
+            "duration": 3
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25042,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25031,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25030,
+            "duration": 15
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25052,
+            "duration": 5.000000000003638
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 25070,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25074,
+            "pages": 2,
+            "bytes": 2146428,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25058,
+            "duration": 16
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25080.000000000004,
+            "duration": 3.999999999996362
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25104,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25091,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25090,
+            "duration": 17
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25134,
+            "pages": 2,
+            "bytes": 2146428,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25118.000000000004,
+            "duration": 15.999999999996362
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25113,
+            "duration": 24
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25162,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25150.000000000004,
+            "duration": 11.999999999996362
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25148,
+            "duration": 20
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25193,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25181,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25177,
+            "duration": 26
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25226,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25215,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25210,
+            "duration": 20
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25258,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25244,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25239,
+            "duration": 21
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25266,
+            "duration": 8
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25287,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25275.000000000004,
+            "duration": 11.999999999996362
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25293,
+            "duration": 4
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 25316,
+            "duration": 8.999999999996362
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25321,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25307.000000000004,
+            "duration": 13.999999999996362
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25306,
+            "duration": 18
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25330.000000000004,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25344,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25353,
+            "duration": 8
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25380,
+            "pages": 2,
+            "bytes": 2146428,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25365.000000000004,
+            "duration": 14.999999999996362
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25389,
+            "duration": 4
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 25423,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25428,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25413,
+            "duration": 15
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25412,
+            "duration": 18
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25436,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25453,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25443,
+            "duration": 9
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25459,
+            "duration": 5.000000000003638
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25479,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25469,
+            "duration": 17
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25492,
+            "duration": 4.000000000003638
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25512,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25512,
+            "duration": 13.000000000003638
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25543,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25532,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25543,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25568,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25558,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25569,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25596,
+            "pages": 2,
+            "bytes": 2146428,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25584,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25596,
+            "duration": 9
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25610,
+            "duration": 5.000000000003638
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25627,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25616,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25638,
+            "duration": 6.000000000003638
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25654,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25645,
+            "duration": 9
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25659,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25685.000000000004,
+            "pages": 2,
+            "bytes": 2146428,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25672,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25685.000000000004,
+            "duration": 5.999999999996362
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25713,
+            "pages": 2,
+            "bytes": 2142340,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25702,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25696,
+            "duration": 20
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25723,
+            "duration": 4
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25738,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 25746.000000000004,
+            "duration": 4.999999999996362
+          },
+          {
+            "method": "texSubImage2D",
+            "ms": 25770,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25774,
+            "pages": 2,
+            "bytes": 2142340,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25757,
+            "duration": 17
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 25803,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 25789,
+            "duration": 14
+          },
+          {
+            "method": "setScene",
+            "ms": 34875,
+            "duration": 63
+          },
+          {
+            "method": "rAF callback",
+            "ms": 34942,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 34957,
+            "duration": 7
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35022,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 35011,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35002,
+            "duration": 23
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35033,
+            "duration": 4
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35046,
+            "duration": 4.000000000007276
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35100,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35101,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35147,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35196,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 35187,
+            "duration": 9
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35204,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35273,
+            "pages": 2,
+            "bytes": 2146428,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 35261,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35274,
+            "duration": 3
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35320,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 35308,
+            "duration": 12
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35321,
+            "duration": 8
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35372,
+            "pages": 2,
+            "bytes": 2146428,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 35358.00000000001,
+            "duration": 13.999999999992724
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35373,
+            "duration": 3
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35384,
+            "duration": 4
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35416.00000000001,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 35406,
+            "duration": 10.000000000007276
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35464,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 35450,
+            "duration": 14
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35468,
+            "duration": 7
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35512,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35565,
+            "pages": 2,
+            "bytes": 2146428,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 35551,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35565,
+            "duration": 7
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35579,
+            "duration": 4
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35609,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 35600,
+            "duration": 9
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35610,
+            "duration": 11
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35661,
+            "pages": 2,
+            "bytes": 2146428,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 35650,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35663.00000000001,
+            "duration": 9
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35709,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35756,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 35746,
+            "duration": 10
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35757,
+            "duration": 4
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35798,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35798,
+            "duration": 7
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35839,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35839,
+            "duration": 5
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35878,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35915,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35917,
+            "duration": 4
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 35958,
+            "pages": 2,
+            "bytes": 2146428,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 35945,
+            "duration": 13
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 35960,
+            "duration": 4
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 36008,
+            "pages": 2,
+            "bytes": 2146428,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 35993,
+            "duration": 15
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 36009,
+            "duration": 6
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 36023,
+            "duration": 3
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 36056,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 36045,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 36057,
+            "duration": 6
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 36105.00000000001,
+            "pages": 2,
+            "bytes": 2142340,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 36091,
+            "duration": 14.000000000007276
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 36107,
+            "duration": 6
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 36127,
+            "duration": 3
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 36154,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 36143,
+            "duration": 11
+          },
+          {
+            "method": "async bitmap elapsed",
+            "ms": 36155,
+            "duration": 7
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 36202,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 36192,
+            "duration": 10
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 36247,
+            "pages": 2,
+            "bytes": 2147800,
+            "deferred": 1
+          },
+          {
+            "method": "rAF callback",
+            "ms": 36235,
+            "duration": 12
+          },
+          {
+            "method": "page batch",
+            "duration": 0,
+            "ms": 36294.00000000001,
+            "pages": 1,
+            "bytes": 1075944,
+            "deferred": 0
+          },
+          {
+            "method": "rAF callback",
+            "ms": 36284,
+            "duration": 10.000000000007276
+          }
+        ]
+      }
+    }
+  },
+  "chromiumPixels": [
+    [
+      {
+        "wrap": "clamp-to-edge",
+        "pages": 1,
+        "decodes": 1,
+        "maxError": 0,
+        "retainedBytes": 0
+      },
+      {
+        "wrap": "repeat",
+        "pages": 1,
+        "decodes": 1,
+        "maxError": 0,
+        "retainedBytes": 0
+      },
+      {
+        "wrap": "mirrored-repeat",
+        "pages": 1,
+        "decodes": 1,
+        "maxError": 0,
+        "retainedBytes": 0
+      }
+    ],
+    [
+      {
+        "wrap": "clamp-to-edge",
+        "pages": 4,
+        "decodes": 2,
+        "maxError": 1,
+        "retainedBytes": 2310144
+      }
+    ]
+  ]
+}

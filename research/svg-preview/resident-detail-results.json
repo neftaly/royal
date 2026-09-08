@@ -1,0 +1,449 @@
+{
+  "chromium": [
+    {
+      "targetReady": false,
+      "mismatches": 0,
+      "glError": 0
+    },
+    {
+      "targetReady": true,
+      "mismatches": 0,
+      "glError": 0
+    }
+  ],
+  "a10": [
+    {
+      "targetReady": false,
+      "mismatches": 0,
+      "glError": 0
+    },
+    {
+      "targetReady": true,
+      "mismatches": 0,
+      "glError": 0
+    }
+  ],
+  "beforeFixChromium": [
+    {
+      "targetReady": false,
+      "mismatches": 16,
+      "glError": 0
+    },
+    {
+      "targetReady": true,
+      "mismatches": 0,
+      "glError": 0
+    }
+  ],
+  "a10Lifecycle": {
+    "info": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+      "width": 768,
+      "height": 954,
+      "dpr": 2,
+      "pieces": 273,
+      "capabilities": {
+        "maxTextureSize": 16384,
+        "etc2": true,
+        "astc": true
+      }
+    },
+    "errors": [],
+    "settledMs": 17358,
+    "last": {
+      "ms": 45370.00000000001,
+      "frame": 419,
+      "copyCalls": 332,
+      "vt": {
+        "admittedUploadBytes": 292244,
+        "atlasBytes": 69222400,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 172,
+        "admittedPages": 172,
+        "unresidentPages": 0,
+        "automaticCandidates": 60,
+        "automaticDecodedBytes": 4050880,
+        "automaticIneligible": 0,
+        "automaticResources": 60,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 326,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 227,
+        "uploadedPages": 326,
+        "uploadBudgetBytes": 33554432
+      },
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "gpu": {
+        "budgetBytes": 268435456,
+        "deniedClaims": 0,
+        "retainedBytes": 72065793
+      },
+      "asset": {
+        "bounds": {
+          "max": [
+            0.4204990863800049,
+            0.0010000000474974513,
+            0.296999990940094
+          ],
+          "min": [
+            -0.4204990863800049,
+            -0.0010000000474974513,
+            -0.296999990940094
+          ]
+        },
+        "lightCount": 0,
+        "nodeCount": 1,
+        "primitiveCount": 3,
+        "sceneIndex": 0,
+        "scenes": [
+          {
+            "index": 0
+          }
+        ],
+        "status": "ready",
+        "timings": {
+          "externalResourceReadDurationMs": 449.9999999999998,
+          "firstDrawableAfterMs": 1591,
+          "preparationQueueDurationMs": 145.9999999999999,
+          "preparationDurationMs": 901.0000000000002,
+          "sourceReadDurationMs": 89.00000000000011,
+          "sourceReadStartedAfterMs": 5,
+          "imagesCompleteAfterMs": 1594
+        },
+        "textures": {
+          "fallback": 0,
+          "failed": 0,
+          "loading": 0,
+          "ready": 2,
+          "total": 2
+        },
+        "variantNames": []
+      }
+    },
+    "gapStats": {
+      "max": 1225,
+      "p95": 45,
+      "over50": 73,
+      "count": 2257,
+      "worst": [
+        {
+          "ms": 5306,
+          "duration": 1225
+        },
+        {
+          "ms": 1667,
+          "duration": 439
+        },
+        {
+          "ms": 9350,
+          "duration": 314
+        },
+        {
+          "ms": 292,
+          "duration": 288
+        },
+        {
+          "ms": 3111,
+          "duration": 257
+        },
+        {
+          "ms": 2078,
+          "duration": 232
+        },
+        {
+          "ms": 1846,
+          "duration": 179
+        },
+        {
+          "ms": 3402,
+          "duration": 171
+        },
+        {
+          "ms": 2396,
+          "duration": 149
+        },
+        {
+          "ms": 1228,
+          "duration": 123
+        }
+      ]
+    }
+  },
+  "a10Samples": [
+    {
+      "info": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+        "width": 768,
+        "height": 954,
+        "dpr": 2,
+        "pieces": 273,
+        "capabilities": {
+          "maxTextureSize": 16384,
+          "etc2": true,
+          "astc": true
+        }
+      },
+      "errors": [],
+      "last": {
+        "ms": 9335,
+        "frame": 120,
+        "vt": {
+          "admittedUploadBytes": 292244,
+          "atlasBytes": 34611200,
+          "atlasPools": 1,
+          "atlasGrowthFailures": 0,
+          "desiredPages": 76,
+          "admittedPages": 76,
+          "unresidentPages": 12,
+          "automaticCandidates": 60,
+          "automaticDecodedBytes": 2643728,
+          "automaticIneligible": 0,
+          "automaticResources": 60,
+          "automaticWaiting": 0,
+          "deferredUploads": 0,
+          "failedPages": 0,
+          "pageRequests": 65,
+          "pendingPages": 1,
+          "pendingPageBytes": 270400,
+          "pendingPageByteLimit": 16777216,
+          "residentPages": 64,
+          "uploadedPages": 64,
+          "uploadBudgetBytes": 33554432
+        },
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "gpu": {
+          "budgetBytes": 268435456,
+          "deniedClaims": 0,
+          "retainedBytes": 37454593
+        }
+      }
+    },
+    {
+      "info": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+        "width": 768,
+        "height": 954,
+        "dpr": 2,
+        "pieces": 273,
+        "capabilities": {
+          "maxTextureSize": 16384,
+          "etc2": true,
+          "astc": true
+        }
+      },
+      "errors": [],
+      "last": {
+        "ms": 19348,
+        "frame": 245,
+        "vt": {
+          "admittedUploadBytes": 584488,
+          "atlasBytes": 69222400,
+          "atlasPools": 1,
+          "atlasGrowthFailures": 0,
+          "desiredPages": 172,
+          "admittedPages": 172,
+          "unresidentPages": 0,
+          "automaticCandidates": 60,
+          "automaticDecodedBytes": 4050880,
+          "automaticIneligible": 0,
+          "automaticResources": 60,
+          "automaticWaiting": 0,
+          "deferredUploads": 0,
+          "failedPages": 0,
+          "pageRequests": 227,
+          "pendingPages": 0,
+          "pendingPageBytes": 0,
+          "pendingPageByteLimit": 16777216,
+          "residentPages": 227,
+          "uploadedPages": 227,
+          "uploadBudgetBytes": 33554432
+        },
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "gpu": {
+          "budgetBytes": 268435456,
+          "deniedClaims": 0,
+          "retainedBytes": 72065793
+        }
+      }
+    },
+    {
+      "info": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+        "width": 768,
+        "height": 954,
+        "dpr": 2,
+        "pieces": 273,
+        "capabilities": {
+          "maxTextureSize": 16384,
+          "etc2": true,
+          "astc": true
+        }
+      },
+      "errors": [],
+      "last": {
+        "ms": 29355,
+        "frame": 313,
+        "vt": {
+          "admittedUploadBytes": 1245136,
+          "atlasBytes": 34611200,
+          "atlasPools": 1,
+          "atlasGrowthFailures": 0,
+          "desiredPages": 76,
+          "admittedPages": 76,
+          "unresidentPages": 0,
+          "automaticCandidates": 60,
+          "automaticDecodedBytes": 855808,
+          "automaticIneligible": 0,
+          "automaticResources": 60,
+          "automaticWaiting": 0,
+          "deferredUploads": 0,
+          "failedPages": 0,
+          "pageRequests": 227,
+          "pendingPages": 0,
+          "pendingPageBytes": 0,
+          "pendingPageByteLimit": 16777216,
+          "residentPages": 128,
+          "uploadedPages": 227,
+          "uploadBudgetBytes": 33554432
+        },
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "gpu": {
+          "budgetBytes": 268435456,
+          "deniedClaims": 0,
+          "retainedBytes": 37454593
+        }
+      }
+    },
+    {
+      "info": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+        "width": 768,
+        "height": 954,
+        "dpr": 2,
+        "pieces": 273,
+        "capabilities": {
+          "maxTextureSize": 16384,
+          "etc2": true,
+          "astc": true
+        }
+      },
+      "errors": [],
+      "last": {
+        "ms": 39365,
+        "frame": 419,
+        "vt": {
+          "admittedUploadBytes": 292244,
+          "atlasBytes": 69222400,
+          "atlasPools": 1,
+          "atlasGrowthFailures": 0,
+          "desiredPages": 172,
+          "admittedPages": 172,
+          "unresidentPages": 0,
+          "automaticCandidates": 60,
+          "automaticDecodedBytes": 4050880,
+          "automaticIneligible": 0,
+          "automaticResources": 60,
+          "automaticWaiting": 0,
+          "deferredUploads": 0,
+          "failedPages": 0,
+          "pageRequests": 326,
+          "pendingPages": 0,
+          "pendingPageBytes": 0,
+          "pendingPageByteLimit": 16777216,
+          "residentPages": 227,
+          "uploadedPages": 326,
+          "uploadBudgetBytes": 33554432
+        },
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "gpu": {
+          "budgetBytes": 268435456,
+          "deniedClaims": 0,
+          "retainedBytes": 72065793
+        }
+      }
+    },
+    {
+      "info": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+        "width": 768,
+        "height": 954,
+        "dpr": 2,
+        "pieces": 273,
+        "capabilities": {
+          "maxTextureSize": 16384,
+          "etc2": true,
+          "astc": true
+        }
+      },
+      "errors": [],
+      "last": {
+        "ms": 45370.00000000001,
+        "frame": 419,
+        "vt": {
+          "admittedUploadBytes": 292244,
+          "atlasBytes": 69222400,
+          "atlasPools": 1,
+          "atlasGrowthFailures": 0,
+          "desiredPages": 172,
+          "admittedPages": 172,
+          "unresidentPages": 0,
+          "automaticCandidates": 60,
+          "automaticDecodedBytes": 4050880,
+          "automaticIneligible": 0,
+          "automaticResources": 60,
+          "automaticWaiting": 0,
+          "deferredUploads": 0,
+          "failedPages": 0,
+          "pageRequests": 326,
+          "pendingPages": 0,
+          "pendingPageBytes": 0,
+          "pendingPageByteLimit": 16777216,
+          "residentPages": 227,
+          "uploadedPages": 326,
+          "uploadBudgetBytes": 33554432
+        },
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "gpu": {
+          "budgetBytes": 268435456,
+          "deniedClaims": 0,
+          "retainedBytes": 72065793
+        }
+      }
+    }
+  ]
+}

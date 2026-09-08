@@ -31,12 +31,19 @@ vec4 sampleVirtualBaseColor(vec2 authoredUv) {
   vec2 virtualTexel = uv * virtualSize;
   vec2 desiredPage = floor((virtualTexel / desiredScale) / pageSize);
   vec4 entry = texelFetch(virtualPageTable, ivec2(desiredPage), desiredMip);
+  // A fast zoom-out may request a mip that has never been loaded. The base
+  // table still resolves the finest resident page at this pixel; prefer that
+  // detail to a coarse placeholder until the requested mip arrives.
+  if (desiredMip > 0 && (entry.a < 0.5 || entry.b * 255.0 > float(desiredMip) + 0.5)) {
+    vec2 finePage = floor(virtualTexel / pageSize);
+    vec4 fineEntry = texelFetch(virtualPageTable, ivec2(finePage), 0);
+    if (fineEntry.a >= 0.5 && (entry.a < 0.5 || fineEntry.b < entry.b)) entry = fineEntry;
+  }
   if (entry.a < 0.5) return vec4(0.214041, 0.214041, 0.214041, 1.0);
   vec3 decoded = floor(entry.rgb * 255.0 + 0.5);
   float residentScale = exp2(decoded.z);
   vec2 residentTexel = virtualTexel / residentScale;
-  float ancestorSpan = residentScale / desiredScale;
-  vec2 residentPage = floor(desiredPage / ancestorSpan);
+  vec2 residentPage = floor(residentTexel / pageSize);
   vec2 localTexel = residentTexel - residentPage * pageSize;
   float storedPageSize = virtualSettings2.w;
   vec2 atlasTexel = decoded.xy * storedPageSize

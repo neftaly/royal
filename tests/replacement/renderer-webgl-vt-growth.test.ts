@@ -406,7 +406,7 @@ describe("demand-grown RGBA atlases", () => {
         runtime.update([view]);
         expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 85, unresidentPages: 0 });
       });
-      expect(gl.deleteSync).toHaveBeenCalledTimes(3);
+      expect(gl.deleteSync).toHaveBeenCalledTimes(2);
     } finally { runtime.dispose(); }
   });
 
@@ -440,6 +440,7 @@ describe("demand-grown RGBA atlases", () => {
       expect(gl.copyTexSubImage2D).toHaveBeenCalledTimes(4);
       expect(runtime.binding(texture)).toBe(original);
       vi.mocked(gl.getError).mockReturnValueOnce(0x0505);
+      runtime.update([view]);
       runtime.update([view]);
       runtime.update([view]);
       expect(runtime.binding(texture)).toBe(original);
@@ -498,7 +499,12 @@ describe("demand-grown RGBA atlases", () => {
       // Both textures are accounted until the atomic binding/page-table swap.
       expect(runtime.runtimeSnapshot().atlasBytes).toBe((8 + 128) * 130 * 130 * 4);
       expect(budget.snapshot().retainedBytes).toBeGreaterThan(runtime.runtimeSnapshot().atlasBytes);
+      const fences = vi.mocked(gl.fenceSync).mock.calls.length;
       runtime.update([view]);
+      // The next frame submits the remaining page rather than fencing and
+      // waiting for the first batch. The original binding stays drawable.
+      expect(gl.copyTexSubImage2D).toHaveBeenCalledTimes(5);
+      expect(gl.fenceSync).toHaveBeenCalledTimes(fences);
       runtime.update([view]);
       expect(gl.copyTexSubImage2D).toHaveBeenCalledTimes(5);
       expect(runtime.binding(texture)).toBe(initial);
@@ -541,7 +547,7 @@ describe("demand-grown RGBA atlases", () => {
     expect(budget.snapshot().retainedBytes).toBe(0);
   });
 
-  it.each(["dispose", "invalidate", "view"].flatMap((action) => [1, 2, 3, 4].map((frames) => ({ action, frames }))))(
+  it.each(["dispose", "invalidate", "view"].flatMap((action) => [1, 2, 3, 4, 5].map((frames) => ({ action, frames }))))(
     "releases an unfinished replacement on $action after $frames frames", async ({ action, frames }) => {
     const { runtime, view, gl, budget, texture } = await harness();
     const before = budget.snapshot().retainedBytes;
@@ -562,7 +568,7 @@ describe("demand-grown RGBA atlases", () => {
       else runtime.invalidate();
       expect(budget.snapshot().retainedBytes).toBe(0);
     }
-    if (frames % 2 === 0 && action !== "invalidate") expect(gl.deleteSync).toHaveBeenCalledTimes(deletedSyncs + 1);
+    if ((frames === 2 || frames === 5) && action !== "invalidate") expect(gl.deleteSync).toHaveBeenCalledTimes(deletedSyncs + 1);
     runtime.dispose();
     expect(budget.snapshot().retainedBytes).toBe(0);
   });

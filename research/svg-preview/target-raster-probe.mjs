@@ -58,7 +58,7 @@ export async function runTargetRasterProbe(scale = 1) {
           } finally { page.close(); }
         }
         if (maxError > 2) throw new Error(`${wrap}: pixel error ${maxError}`);
-        const expected = Math.ceil(width / 512) * Math.ceil(height / 512);
+        const expected = Math.ceil(width / (pageSize * 2)) * Math.ceil(height / pageSize);
         if (decodes - before !== expected) throw new Error(`${wrap}: expected ${expected} decodes, got ${decodes - before}`);
         results.push({ wrap, pages: pages.length, decodes: decodes - before, maxError, retainedBytes: cache.byteLength });
       } finally { source.close(); }

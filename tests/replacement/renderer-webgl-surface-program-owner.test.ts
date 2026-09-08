@@ -167,6 +167,67 @@ describe("surface program ownership", () => {
     expect(gl.linkProgram).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps optional VT pending without link-status or uniform queries until completion", () => {
+    const gl = fakeGl();
+    vi.mocked(gl.getExtension).mockReturnValue({ COMPLETION_STATUS_KHR: 0x91b1 } as unknown as WEBGL_multi_draw);
+    let complete = false;
+    vi.mocked(gl.getProgramParameter).mockImplementation((_program, parameter) => {
+      if (parameter === 0x91b1) return complete;
+      if (!complete) throw new Error("blocking link-status query");
+      return true;
+    });
+    const owner = new SurfaceProgramOwner(gl);
+    owner.setVirtualTextureDeclarations(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS);
+    const features = SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE;
+    expect(owner.virtualReady("unlit", features, false, false, false)).toBe(false);
+    expect(owner.virtualCompilationPending).toBe(true);
+    expect(owner.pollVirtualCompilation()).toBe(false);
+    expect(owner.virtualReady("unlit", features, false, false, false)).toBe(false);
+    expect(gl.linkProgram).toHaveBeenCalledTimes(1);
+    expect(gl.getUniformLocation).not.toHaveBeenCalled();
+    complete = true;
+    expect(owner.pollVirtualCompilation()).toBe(true);
+    expect(owner.virtualCompilationPending).toBe(false);
+    expect(owner.virtualReady("unlit", features, false, false, false)).toBe(true);
+    expect(owner.get("unlit", features, false, false, false).virtualPageTable).not.toBeNull();
+    expect(owner.pollVirtualCompilation()).toBe(false);
+    expect(gl.linkProgram).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases a failed optional VT link after nonblocking completion", () => {
+    const gl = fakeGl();
+    vi.mocked(gl.getExtension).mockReturnValue({ COMPLETION_STATUS_KHR: 0x91b1 } as unknown as WEBGL_multi_draw);
+    vi.mocked(gl.getProgramParameter).mockImplementation((_program, parameter) => parameter === 0x91b1);
+    vi.mocked(gl.getProgramInfoLog).mockReturnValue("VT linker failure");
+    const owner = new SurfaceProgramOwner(gl);
+    owner.setVirtualTextureDeclarations(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS);
+    const features = SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE;
+    expect(owner.virtualReady("unlit", features, false, false, false)).toBe(false);
+    expect(owner.pollVirtualCompilation()).toBe(true);
+    expect(() => owner.get("unlit", features, false, false, false)).toThrow("VT linker failure");
+    expect(owner.virtualCompilationPending).toBe(false);
+    expect(owner.pollVirtualCompilation()).toBe(false);
+    expect(gl.getUniformLocation).not.toHaveBeenCalled();
+    expect(gl.deleteProgram).toHaveBeenCalledTimes(1);
+    owner.dispose();
+    expect(gl.deleteProgram).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["declarations", "context", "dispose"])("clears unfinished VT compilation on %s changes", (change) => {
+    const gl = fakeGl();
+    vi.mocked(gl.getExtension).mockReturnValue({ COMPLETION_STATUS_KHR: 0x91b1 } as unknown as WEBGL_multi_draw);
+    const owner = new SurfaceProgramOwner(gl);
+    owner.setVirtualTextureDeclarations(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS);
+    owner.virtualReady("unlit", SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE, false, false, false);
+    expect(owner.virtualCompilationPending).toBe(true);
+    if (change === "declarations") owner.setVirtualTextureDeclarations("");
+    else if (change === "context") owner.invalidate();
+    else owner.dispose();
+    expect(owner.virtualCompilationPending).toBe(false);
+    expect(owner.pollVirtualCompilation()).toBe(false);
+    expect(gl.deleteProgram).toHaveBeenCalledTimes(change === "context" ? 0 : 1);
+  });
+
   it("does not prewarm when parallel compilation is unavailable", () => {
     const gl = fakeGl();
     const owner = new SurfaceProgramOwner(gl);
@@ -420,7 +481,7 @@ describe("surface program ownership", () => {
     );
     expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).toContain("footprintSquared");
     expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).toContain(
-      "float ancestorSpan = residentScale / desiredScale;",
+      "vec2 residentPage = floor(residentTexel / pageSize);",
     );
     expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).toContain(
       "vec2 virtualTexel = uv * virtualSize;",

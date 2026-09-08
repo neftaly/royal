@@ -19,7 +19,7 @@ import type {
 } from "./browser-page-source";
 
 const AUTOMATIC_SVG_MAX_LONG_EDGE = 16_384;
-const AUTOMATIC_SVG_PAGE_SIZE = 256;
+const AUTOMATIC_SVG_PAGE_SIZE = 512;
 
 type AxisSegment = Readonly<{
   destinationExtent: number;
@@ -403,12 +403,15 @@ export const createAutomaticSvgPageSource = (
   let originClean = false;
   const abort = new AbortController();
   const sharedMips = new Map<number, object>();
-  const regionPages = 512 / manifest.pageSize;
+  const regionColumns = 2;
+  // A two-page strip at 512px fits the existing 4 MiB cache. A 2x2
+  // region plus gutters would exceed it and silently disable raster reuse.
+  const regionRows = Math.max(1, 512 / manifest.pageSize);
   const sharedRegions = new Map<string, { x: AxisSegment; y: AxisSegment }>();
-  const regionFor = (page: VirtualTexturePageId): string => `${page.mip}:${Math.floor(page.x / regionPages)}:${Math.floor(page.y / regionPages)}`;
-  const regionAxis = (size: number, startPage: number, scale: number): AxisSegment => {
+  const regionFor = (page: VirtualTexturePageId): string => `${page.mip}:${Math.floor(page.x / regionColumns)}:${Math.floor(page.y / regionRows)}`;
+  const regionAxis = (size: number, startPage: number, pageCount: number, scale: number): AxisSegment => {
     const start = Math.max(0, (startPage * manifest.pageSize - manifest.borderTexels) * scale);
-    const end = Math.min(size, ((startPage + regionPages) * manifest.pageSize + manifest.borderTexels) * scale);
+    const end = Math.min(size, ((startPage + pageCount) * manifest.pageSize + manifest.borderTexels) * scale);
     return { sourceStart: start, sourceExtent: end - start, destinationStart: 0,
       destinationExtent: Math.ceil((end - start) / scale), reversed: false };
   };
@@ -451,8 +454,8 @@ export const createAutomaticSvgPageSource = (
         if (count <= 1 || sharedRegions.has(key)) continue;
         const scale = 2 ** page.mip;
         const region = {
-          x: regionAxis(width, Math.floor(page.x / regionPages) * regionPages, scale),
-          y: regionAxis(height, Math.floor(page.y / regionPages) * regionPages, scale),
+          x: regionAxis(width, Math.floor(page.x / regionColumns) * regionColumns, regionColumns, scale),
+          y: regionAxis(height, Math.floor(page.y / regionRows) * regionRows, regionRows, scale),
         };
         // Rounding a partial edge raster would stretch every page in its
         // group. Keep those edges on the existing per-page path instead.
