@@ -1,3 +1,4 @@
+import { LargeLightActivation } from "./large-light-activation";
 import { plannedSurfaceProgramFeatures, surfaceMaterialLodDrawable } from "./surface-publication-plan";
 import { BorrowedSurfaceSourceIndex } from "./borrowed-surface-source-index";
 import {
@@ -52,6 +53,8 @@ import {
   packCanonicalPresentationUniformsInto,
 } from "./scene-uniform-packing";
 import {
+  MAX_UNIFORM_DIRECTIONAL_LIGHTS,
+  MAX_UNIFORM_PUNCTUAL_LIGHTS,
   SURFACE_FEATURE_PREFILTERED_ENVIRONMENT,
   SURFACE_FEATURE_ROTATED_ENVIRONMENT,
   SURFACE_FEATURE_STUDIO_ENVIRONMENT,
@@ -352,6 +355,9 @@ export class SurfaceGpuOwner {
   readonly #presentationLane: SurfacePresentationLane;
   readonly #lodSelection = createDrawableLodSelectionWorkspace();
   readonly #lightUniforms = createCanonicalLightUniformStorage();
+  readonly #largeLights: LargeLightActivation;
+  #largeLightBindingDirty = false;
+  #largeLightRestorePending = false;
   readonly #sceneUniforms = createCanonicalSceneUniformStorage();
   readonly #fallbackBaseColor = new Float32Array(4);
   readonly #programs: SurfaceProgramOwner;
@@ -399,6 +405,13 @@ export class SurfaceGpuOwner {
       hasFloatColorTarget: this.#readExtension("EXT_color_buffer_float"),
     };
     this.#programs = new SurfaceProgramOwner(gl);
+    this.#largeLights = new LargeLightActivation(gl, budget, () => {
+      this.#programs.setLargeLightShader(source => this.#largeLights.shader(source));
+      this.#largeLightBindingDirty = true;
+      this.#dirty = true;
+      this.#fullReconcileRequired = true;
+      this.#onChanged();
+    });
     this.#partitionPattern = partitionPattern;
     this.#presentationLane = presentationLane;
     this.#resourceBudget = budget;
@@ -413,6 +426,7 @@ export class SurfaceGpuOwner {
   }
 
   dispose(): void {
+    this.#largeLights.dispose();
     this.#boundedVolumeLoadGeneration += 1;
     this.#boundedVolumeLoadRequested = false;
     this.#boundedVolumes?.dispose();
@@ -452,6 +466,8 @@ export class SurfaceGpuOwner {
   }
 
   invalidate(): void {
+    this.#largeLights.invalidate();
+    this.#largeLightRestorePending = this.#scene !== null;
     if (this.#boundedVolumeLoadRequested) {
       this.#boundedVolumeLoadGeneration += 1;
       this.#boundedVolumeLoadRequested = false;
@@ -612,7 +628,8 @@ export class SurfaceGpuOwner {
   ): number {
     const scene = this.#scene;
     if (scene === null) return ordinaryTextureStorageBudget(persistentBudgetBytes, 0);
-    let plannedNonTextureBytes = this.#geometryGpu.plannedRetainedBytes(scene.surfaces);
+    let plannedNonTextureBytes = this.#geometryGpu.plannedRetainedBytes(scene.surfaces)
+      + this.#largeLights.plannedByteLength;
     for (const volume of scene.volumes) {
       plannedNonTextureBytes += volume.geometry.positions.byteLength
         + volume.geometry.indices.byteLength;
@@ -664,7 +681,10 @@ export class SurfaceGpuOwner {
   }
 
   surfacePublicationsPending(): boolean {
-    return this.#admittedSurfaceCount < (this.#scene?.surfaces.length ?? 0);
+    return this.#largeLights.pending || this.#largeLightRestorePending
+      || this.#compositeLoadRequested || this.#environmentGpuLoadRequested
+      || this.#boundedVolumeLoadRequested
+      || this.#admittedSurfaceCount < (this.#scene?.surfaces.length ?? 0);
   }
 
   setScene(scene: CanonicalSurfaceScene | null): void {
@@ -689,6 +709,9 @@ export class SurfaceGpuOwner {
       this.#clearGpuSurfaces();
     } else this.#admittedSurfaceCount = retainedSurfaceCount;
     this.#scene = scene;
+    this.#largeLights.set(scene ?? { directionalLights: [], punctualLights: [] });
+    this.#largeLightBindingDirty = true;
+    this.#largeLightRestorePending = false;
     this.#borrowedSourceIndex?.invalidate();
     const volumes = scene?.volumes ?? [];
     if (volumes.length === 0) {
@@ -838,7 +861,11 @@ export class SurfaceGpuOwner {
       updateOpaqueDepthPrepassPlan(this.#depthPrepassPlan, scene.surfaces);
     }
     if (sceneGlobalsChanged) {
-      packCanonicalLightUniformsInto(
+      if (scene.directionalLights.length > MAX_UNIFORM_DIRECTIONAL_LIGHTS
+        || scene.punctualLights.length > MAX_UNIFORM_PUNCTUAL_LIGHTS) {
+        this.#largeLights.set(scene);
+        this.#largeLightBindingDirty = true;
+      } else packCanonicalLightUniformsInto(
         scene.directionalLights,
         scene.punctualLights,
         this.#lightUniforms,
@@ -865,7 +892,7 @@ export class SurfaceGpuOwner {
 
   /** Commits a bounded progressive resource batch without drawing an unchanged frame. */
   flushResourcePublications(state: WebGlStateOwner): boolean {
-    if (!this.#dirty || this.#admittedSurfaceCount === 0) return false;
+    if (!this.#dirty || this.#admittedSurfaceCount === 0 || this.#largeLights.pending) return false;
     this.#reconcilePendingResources(state);
     return true;
   }
@@ -879,6 +906,18 @@ export class SurfaceGpuOwner {
     cssScaleY = 1,
   ): boolean {
     const scene = this.#scene;
+    if (this.#largeLightRestorePending && scene !== null) {
+      this.#largeLights.set(scene);
+      this.#largeLightRestorePending = false;
+      this.#largeLightBindingDirty = true;
+    }
+    const largeLightsPending = this.#largeLights.pending;
+    if (!this.#largeLights.prepare(this.#uploadBudget)) return true;
+    if (largeLightsPending) this.#largeLightBindingDirty = true;
+    if (this.#largeLightBindingDirty) {
+      state.invalidateTextureUnit(13);
+      this.#largeLightBindingDirty = false;
+    }
     if (scene !== null && views.length !== 0) {
       cameraWorldPositionFromViewInto(this.#cameraPosition, views[0]!.view);
     }
@@ -1542,11 +1581,14 @@ export class SurfaceGpuOwner {
         }
         if (standardGlobalsProgram !== program.program) {
           gl.uniformMatrix4fv(program.viewProjection, false, viewProjection);
-          gl.uniform4fv(program.cameraWorldPosition, this.#cameraPosition);
+          if (program.cameraWorldPosition !== null) gl.uniform4fv(program.cameraWorldPosition, this.#cameraPosition);
           if (
             this.#standardProgramSceneGlobals.get(program.program)
               !== this.#sceneGlobalsRevision
           ) {
+            if (program.largeLightCounts !== null) {
+              gl.uniform2i(program.largeLightCounts, scene.directionalLights.length, scene.punctualLights.length);
+            }
             if (
               program.directionalLightColors !== null
               && program.directionalLightDirections !== null
@@ -1640,7 +1682,7 @@ export class SurfaceGpuOwner {
           }
         }
         if (materialChanged) {
-          gl.uniform4fv(
+          if (program.baseColor !== null) gl.uniform4fv(
             program.baseColor,
             presentableBaseColorInto(
               this.#fallbackBaseColor,
@@ -1712,7 +1754,7 @@ export class SurfaceGpuOwner {
             this.#materialUniforms,
           );
           gl.uniform4fv(program.emissiveFactor, this.#materialUniforms.emissiveAndF0);
-          gl.uniform4fv(program.materialFactors, this.#materialUniforms.materialFactors);
+          if (program.materialFactors !== null) gl.uniform4fv(program.materialFactors, this.#materialUniforms.materialFactors);
           if (program.specularFactors !== null) {
             packCanonicalSpecularUniformsInto(material, this.#materialUniforms);
             gl.uniform4fv(program.specularFactors, this.#materialUniforms.specularFactors);
@@ -1854,6 +1896,9 @@ export class SurfaceGpuOwner {
         : undefined,
       this.#environmentGpu?.binding,
     );
+    if (material.kind === "standard" && this.#largeLights.runtime?.texture !== undefined) {
+      bindings[13] = { target: "2d", sampler: null, texture: this.#largeLights.runtime.texture };
+    }
     if (material.kind === "unlit" && material.coverage !== undefined) {
       bindings[SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT] =
         this.#partitionPattern.binding;
@@ -1908,7 +1953,7 @@ export class SurfaceGpuOwner {
       );
     }
     const bindings = Array<GpuTextureBinding>(
-      SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT + 1,
+      SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT + 1 + (this.#largeLights.runtime === undefined ? 0 : 1),
     );
     this.#composeTextureBindings(bindings, ordinaryBindings, bindingOffset, virtualTexture, material);
     const program = this.#materialProgram(material, features, geometrySurface.instanceCount);
@@ -2054,7 +2099,8 @@ export class SurfaceGpuOwner {
       throw error;
     }
     if (scene !== null) {
-      packCanonicalLightUniformsInto(
+      if (scene.directionalLights.length <= MAX_UNIFORM_DIRECTIONAL_LIGHTS
+        && scene.punctualLights.length <= MAX_UNIFORM_PUNCTUAL_LIGHTS) packCanonicalLightUniformsInto(
         scene.directionalLights,
         scene.punctualLights,
         this.#lightUniforms,

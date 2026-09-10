@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { mesh, perspectiveCamera, planeGeometry, scene, standardMaterial, unlitMaterial, virtualTexture } from "@royal/renderer-core";
+import { directionalLight, mesh, perspectiveCamera, planeGeometry, scene, standardMaterial, unlitMaterial, virtualTexture } from "@royal/renderer-core";
 import { canvasRootHarness } from "./support/canvas-root-harness";
 import { waitFor } from "./support/wait-for";
 
@@ -22,7 +22,7 @@ it.each(["unlit", "standard"])("refreshes %s atlas dimensions after resizing wit
     root.setSize({ cssWidth: 256, cssHeight: 256, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
-      nodes: [mesh({ geometry: planeGeometry(2), material: kind === "unlit" ? unlitMaterial({ texture }) : standardMaterial({ texture }) })],
+      nodes: [mesh({ geometry: planeGeometry(2), material: kind === "unlit" ? unlitMaterial({ texture }) : standardMaterial({ texture }) }), directionalLight({ direction: [0, 0, -1] })],
     }));
     await waitFor(() => {
       flushScheduledFrames();

@@ -1,6 +1,5 @@
+import { MAX_UNIFORM_DIRECTIONAL_LIGHTS, MAX_UNIFORM_PUNCTUAL_LIGHTS } from "./surface-program-features";
 import {
-  MAX_CANONICAL_DIRECTIONAL_LIGHTS,
-  MAX_CANONICAL_PUNCTUAL_LIGHTS,
   type CanonicalDirectionalLight,
   type CanonicalPunctualLight,
 } from "./scene-lowering";
@@ -16,12 +15,12 @@ export type CanonicalLightUniformStorage = Readonly<{
 
 /** Allocates one owner-retained uniform workspace at Royal's canonical limits. */
 export const createCanonicalLightUniformStorage = (): CanonicalLightUniformStorage => ({
-  directionalColors: new Float32Array(MAX_CANONICAL_DIRECTIONAL_LIGHTS * 4),
-  directionalDirections: new Float32Array(MAX_CANONICAL_DIRECTIONAL_LIGHTS * 4),
-  punctualColors: new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4),
-  punctualDirections: new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4),
-  punctualPositions: new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4),
-  punctualSpotCones: new Float32Array(MAX_CANONICAL_PUNCTUAL_LIGHTS * 4),
+  directionalColors: new Float32Array(MAX_UNIFORM_DIRECTIONAL_LIGHTS * 4),
+  directionalDirections: new Float32Array(MAX_UNIFORM_DIRECTIONAL_LIGHTS * 4),
+  punctualColors: new Float32Array(MAX_UNIFORM_PUNCTUAL_LIGHTS * 4),
+  punctualDirections: new Float32Array(MAX_UNIFORM_PUNCTUAL_LIGHTS * 4),
+  punctualPositions: new Float32Array(MAX_UNIFORM_PUNCTUAL_LIGHTS * 4),
+  punctualSpotCones: new Float32Array(MAX_UNIFORM_PUNCTUAL_LIGHTS * 4),
 });
 
 /** Deterministically packs canonical lights into caller-owned vec4 uniform storage. */

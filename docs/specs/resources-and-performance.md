@@ -344,13 +344,22 @@ JavaScript from about 281.7 to 283.0 kB gzip and delayed the first guide by an
 extra frame. Probability uses this path, so the smaller complete static graph
 is the accepted representation.
 
-Lit fragment programs specialize their bounded directional and punctual light
-array sizes to the canonical scene counts. Absent lights compile out, static
+For at most four directional and eight punctual lights, lit fragment programs
+specialize their uniform array sizes to the canonical scene counts. Absent lights compile out, static
 loops contain no runtime count branch, and the imperative shell uploads only
 the exact prefix of its retained maximum-capacity workspace. Count changes may
 compile another cached fragment variant, while vertex variants remain shared;
 this bounded cold cost avoids reserving the four-directional/eight-punctual
-maximum in every lit fragment on constrained GPUs.
+maximum in every small-scene lit fragment on constrained GPUs.
+
+Larger scenes automatically load a root-owned RGBA32F light table, with one
+count-independent shader family and up to 512 combined records. Each record is
+64 bytes. Capacity starts at 256 records and grows to 512; replacement reserves
+simultaneous old/new GPU bytes before allocation. Uploads participate in the
+frame texture-upload budget. Returning to the small path releases the texture.
+No tile lists or approximate influence cutoff are applied: every light remains
+in its exact global loop. Device measurements and remaining spatial research are
+recorded in [the many-light investigation](../../research/many-lights/README.md).
 
 ## Hot-path vocabulary budget
 

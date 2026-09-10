@@ -9,7 +9,7 @@ consumer/device observations are retained as evidence.
 | Document | Remaining work |
 | --- | --- |
 | [Onboarding glTF capture](onboarding-static-preview-profile.md) | Linked onboarding now uses `captureImage`; evaluate VT opt-out and readback performance using original assets. The browser-only opt-out experiment changes pixels and is not accepted policy. |
-| [Unlimited lights](unlimited-lights.md) | Research scalable exact light composition, including global directional lights and clustered local lights. No architecture or higher limit accepted yet. |
+| [Unlimited lights](unlimited-lights.md) | Working branch implements a lazy 512-light global texture path; A10/Quest comparisons favor further conservative local-light list experiments. Unlimited/spatial architecture remains open. |
 | [Automatic texture memory](automatic-texture-memory.md) | Physical-device default-budget calibration; ETC2 resizing and prefetch only with demonstrated workloads. RGBA allocator/refinement work shipped in 0.0.24. |
 | [SVG refinement](preview-first-svg-refinement.md) | Profile remaining current-device hitches; alternative rasterizers/codecs require evidence. Preview-to-target behavior is implemented. |
 | [Selection-outline camera performance](selection-outline-camera-performance.md) | Fresh hardware baseline after indexing and camera-copy changes, then evaluate descriptor replacement or GPU costs. |

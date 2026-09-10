@@ -152,7 +152,17 @@ visibility, and picking identity with filled rendering.
 
 Lighting includes directional, point, spot, explicit scene environment, and
 asset-scoped fallback environment. Environment precedence is semantic and
-independent of asynchronous completion order.
+independent of asynchronous completion order. Active scenes support up to 512
+combined directional, point and spot lights; overflow fails explicitly. Light
+storage switches automatically above four directional or eight local lights,
+without changing material composition. The new path loads on demand and is part
+of readiness for stable image capture. The finite ceiling does not promise a
+particular frame rate.
+
+A standard material with no current illumination still renders its emissive
+contribution and authored alpha. Compiler-eliminated BRDF uniforms are not
+required while imported lights are preparing. Stable capture also waits for lazy
+linear-composition, environment and volume ownership requested by the scene.
 
 Once every selected material is known to be unlit, canonical lowering erases
 environment and direct-light state before resource ownership. Variant and

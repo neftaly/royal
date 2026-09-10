@@ -1,0 +1,315 @@
+{
+  "ipad": {
+    "durationMs": 5413255,
+    "cycles": 382,
+    "maxChannelDifference": 0,
+    "metric": "Batched fence completion milliseconds per draw; not an exact GPU timer",
+    "results": [
+      {
+        "kind": "dense",
+        "count": 256,
+        "mode": "texture",
+        "samples": 382,
+        "medianMs": 6.125,
+        "firstQuarterMedianMs": 6.125,
+        "lastQuarterMedianMs": 6.125
+      },
+      {
+        "kind": "dense",
+        "count": 256,
+        "mode": "tiled",
+        "samples": 382,
+        "medianMs": 6.5,
+        "firstQuarterMedianMs": 6.5,
+        "lastQuarterMedianMs": 6.5
+      },
+      {
+        "kind": "dense",
+        "count": 256,
+        "mode": "ubo",
+        "samples": 382,
+        "medianMs": 4.0625,
+        "firstQuarterMedianMs": 4.0625,
+        "lastQuarterMedianMs": 4.0625
+      },
+      {
+        "kind": "dense",
+        "count": 512,
+        "mode": "texture",
+        "samples": 382,
+        "medianMs": 11.812499999970896,
+        "firstQuarterMedianMs": 11.75,
+        "lastQuarterMedianMs": 11.8125
+      },
+      {
+        "kind": "dense",
+        "count": 512,
+        "mode": "tiled",
+        "samples": 382,
+        "medianMs": 12.5625,
+        "firstQuarterMedianMs": 12.5625,
+        "lastQuarterMedianMs": 12.531249999970896
+      },
+      {
+        "kind": "directional",
+        "count": 256,
+        "mode": "texture",
+        "samples": 382,
+        "medianMs": 3.3125,
+        "firstQuarterMedianMs": 3.374999999996362,
+        "lastQuarterMedianMs": 3.312500000014552
+      },
+      {
+        "kind": "directional",
+        "count": 256,
+        "mode": "tiled",
+        "samples": 382,
+        "medianMs": 3.6875,
+        "firstQuarterMedianMs": 3.687500000014552,
+        "lastQuarterMedianMs": 3.6875
+      },
+      {
+        "kind": "directional",
+        "count": 256,
+        "mode": "ubo",
+        "samples": 382,
+        "medianMs": 2.812500000001819,
+        "firstQuarterMedianMs": 2.812500000003638,
+        "lastQuarterMedianMs": 2.812500000029104
+      },
+      {
+        "kind": "directional",
+        "count": 512,
+        "mode": "texture",
+        "samples": 382,
+        "medianMs": 6.1875,
+        "firstQuarterMedianMs": 6.1875,
+        "lastQuarterMedianMs": 6.187499999985448
+      },
+      {
+        "kind": "directional",
+        "count": 512,
+        "mode": "tiled",
+        "samples": 382,
+        "medianMs": 6.937499999999318,
+        "firstQuarterMedianMs": 6.9375,
+        "lastQuarterMedianMs": 6.875000000058208
+      },
+      {
+        "kind": "sparse",
+        "count": 256,
+        "mode": "texture",
+        "samples": 382,
+        "medianMs": 6.125,
+        "firstQuarterMedianMs": 6.125,
+        "lastQuarterMedianMs": 6.125
+      },
+      {
+        "kind": "sparse",
+        "count": 256,
+        "mode": "tiled",
+        "samples": 382,
+        "medianMs": 0.625,
+        "firstQuarterMedianMs": 0.625,
+        "lastQuarterMedianMs": 0.625
+      },
+      {
+        "kind": "sparse",
+        "count": 256,
+        "mode": "ubo",
+        "samples": 382,
+        "medianMs": 3.75,
+        "firstQuarterMedianMs": 3.75,
+        "lastQuarterMedianMs": 3.75
+      },
+      {
+        "kind": "sparse",
+        "count": 512,
+        "mode": "texture",
+        "samples": 382,
+        "medianMs": 11.75,
+        "firstQuarterMedianMs": 11.8125,
+        "lastQuarterMedianMs": 11.75
+      },
+      {
+        "kind": "sparse",
+        "count": 512,
+        "mode": "tiled",
+        "samples": 382,
+        "medianMs": 0.874999999994543,
+        "firstQuarterMedianMs": 0.874999999996362,
+        "lastQuarterMedianMs": 0.8749999999854481
+      }
+    ]
+  },
+  "quest": {
+    "durationMs": 5421672.799999982,
+    "cycles": 192,
+    "maxChannelDifference": 0,
+    "metric": "Batched fence completion milliseconds per draw; not an exact GPU timer",
+    "results": [
+      {
+        "kind": "dense",
+        "count": 256,
+        "mode": "texture",
+        "samples": 192,
+        "medianMs": 23.52500000037253,
+        "firstQuarterMedianMs": 23.524999999441206,
+        "lastQuarterMedianMs": 23.50624999962747
+      },
+      {
+        "kind": "dense",
+        "count": 256,
+        "mode": "tiled",
+        "samples": 192,
+        "medianMs": 26.612500000745058,
+        "firstQuarterMedianMs": 26.628124999813735,
+        "lastQuarterMedianMs": 26.606250000186265
+      },
+      {
+        "kind": "dense",
+        "count": 256,
+        "mode": "ubo",
+        "samples": 192,
+        "medianMs": 22.0625,
+        "firstQuarterMedianMs": 22.0625,
+        "lastQuarterMedianMs": 22.074999999254942
+      },
+      {
+        "kind": "dense",
+        "count": 512,
+        "mode": "texture",
+        "samples": 192,
+        "medianMs": 46.15625,
+        "firstQuarterMedianMs": 46.16562499944121,
+        "lastQuarterMedianMs": 46.14687499962747
+      },
+      {
+        "kind": "dense",
+        "count": 512,
+        "mode": "tiled",
+        "samples": 192,
+        "medianMs": 52.4375,
+        "firstQuarterMedianMs": 52.42500000074506,
+        "lastQuarterMedianMs": 52.44687499944121
+      },
+      {
+        "kind": "dense",
+        "count": 512,
+        "mode": "ubo",
+        "samples": 192,
+        "medianMs": 43.409374999813735,
+        "firstQuarterMedianMs": 43.403125000186265,
+        "lastQuarterMedianMs": 43.38437499944121
+      },
+      {
+        "kind": "directional",
+        "count": 256,
+        "mode": "texture",
+        "samples": 192,
+        "medianMs": 16.78749999962747,
+        "firstQuarterMedianMs": 16.78125,
+        "lastQuarterMedianMs": 16.784374999813735
+      },
+      {
+        "kind": "directional",
+        "count": 256,
+        "mode": "tiled",
+        "samples": 192,
+        "medianMs": 18.137499999254942,
+        "firstQuarterMedianMs": 18.121875000186265,
+        "lastQuarterMedianMs": 18.137500000186265
+      },
+      {
+        "kind": "directional",
+        "count": 256,
+        "mode": "ubo",
+        "samples": 192,
+        "medianMs": 18.53749999962747,
+        "firstQuarterMedianMs": 18.52500000037253,
+        "lastQuarterMedianMs": 18.546875
+      },
+      {
+        "kind": "directional",
+        "count": 512,
+        "mode": "texture",
+        "samples": 192,
+        "medianMs": 32.69999999925494,
+        "firstQuarterMedianMs": 32.69687499944121,
+        "lastQuarterMedianMs": 32.66875000111759
+      },
+      {
+        "kind": "directional",
+        "count": 512,
+        "mode": "tiled",
+        "samples": 192,
+        "medianMs": 35.58437500055879,
+        "firstQuarterMedianMs": 35.55312500055879,
+        "lastQuarterMedianMs": 35.58750000037253
+      },
+      {
+        "kind": "directional",
+        "count": 512,
+        "mode": "ubo",
+        "samples": 192,
+        "medianMs": 36.45000000111759,
+        "firstQuarterMedianMs": 36.46875,
+        "lastQuarterMedianMs": 36.45937499962747
+      },
+      {
+        "kind": "sparse",
+        "count": 256,
+        "mode": "texture",
+        "samples": 192,
+        "medianMs": 22.53125,
+        "firstQuarterMedianMs": 22.50624999962747,
+        "lastQuarterMedianMs": 22.528125000186265
+      },
+      {
+        "kind": "sparse",
+        "count": 256,
+        "mode": "tiled",
+        "samples": 192,
+        "medianMs": 1.318749999627471,
+        "firstQuarterMedianMs": 1.318749999627471,
+        "lastQuarterMedianMs": 1.3187500005587935
+      },
+      {
+        "kind": "sparse",
+        "count": 256,
+        "mode": "ubo",
+        "samples": 192,
+        "medianMs": 20.199999999254942,
+        "firstQuarterMedianMs": 20.171874999068677,
+        "lastQuarterMedianMs": 20.200000001117587
+      },
+      {
+        "kind": "sparse",
+        "count": 512,
+        "mode": "texture",
+        "samples": 192,
+        "medianMs": 44.375,
+        "firstQuarterMedianMs": 44.371875000186265,
+        "lastQuarterMedianMs": 44.35937499906868
+      },
+      {
+        "kind": "sparse",
+        "count": 512,
+        "mode": "tiled",
+        "samples": 192,
+        "medianMs": 2.137499999254942,
+        "firstQuarterMedianMs": 2.131249999627471,
+        "lastQuarterMedianMs": 2.1343749994412065
+      },
+      {
+        "kind": "sparse",
+        "count": 512,
+        "mode": "ubo",
+        "samples": 192,
+        "medianMs": 39.77500000037253,
+        "firstQuarterMedianMs": 39.76249999925494,
+        "lastQuarterMedianMs": 39.79999999888241
+      }
+    ]
+  }
+}

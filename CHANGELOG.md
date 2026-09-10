@@ -3,6 +3,17 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## Unreleased
+
+- Add an automatic lazy texture path for up to 512 combined directional, point
+  and spot lights, including imported instance lights. Small scenes retain the
+  existing uniform path. The ceiling is finite and does not guarantee frame rate;
+  spatial light culling remains under investigation.
+- Preserve valid standard-material rendering with zero current lights while
+  imported lights prepare; unused BRDF uniforms may be eliminated by the compiler.
+- Wait for optional lighting and composition preparation before capturing a
+  stable image, including scenes that retain their geometry across replacement.
+
 ## 0.0.25 - 2026-09-11
 
 - Add per-mount `importLights` control to `gltf` and `gltfInstances`. Setting it

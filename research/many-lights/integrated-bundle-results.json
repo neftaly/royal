@@ -1,0 +1,41 @@
+{
+  "source": "Working implementation after Royal 0.0.25; see containing commit",
+  "measurements": {
+    "gltfAuthoringDeltaGzipBytes": 999,
+    "royalIncrementalGzipBytes": 83243,
+    "royalOnlyGraphGzipBytes": 209970
+  },
+  "fixtures": {
+    "environment": {
+      "initial": 142629,
+      "lazy": 126718,
+      "total": 269347,
+      "worker": 23121
+    },
+    "gltf": {
+      "initial": 143530,
+      "lazy": 126713,
+      "total": 270243,
+      "worker": 23121
+    },
+    "react": {
+      "initial": 59288,
+      "lazy": 0,
+      "total": 59288,
+      "worker": 0
+    },
+    "royal": {
+      "initial": 142531,
+      "lazy": 126727,
+      "total": 269258,
+      "worker": 23121
+    },
+    "xr": {
+      "initial": 3895,
+      "lazy": 2543,
+      "total": 6438,
+      "worker": 0
+    }
+  },
+  "releaseInitialGzipBytes": 141557
+}

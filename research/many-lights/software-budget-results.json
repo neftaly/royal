@@ -1,0 +1,10 @@
+{
+  "results": [
+    {
+      "budgetBytes": 40000,
+      "failure": "Error: Large-light GPU budget exhausted",
+      "recovered": true,
+      "maxDifference": 0
+    }
+  ]
+}

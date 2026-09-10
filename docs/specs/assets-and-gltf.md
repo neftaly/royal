@@ -266,8 +266,12 @@ Authored punctual lights lower to Royal light records by default. `gltf` and
 policy does not change asset identity, decoding, geometry, materials, textures,
 picking, or shared-resource ownership. Omitted lights consume no scene light
 budget and create no render-object light bindings or instance light-update work.
-The default and explicit `true` retain authored lights and existing overflow
-errors (four directional lights, eight point/spot lights combined).
+The default and explicit `true` retain authored lights. Scenes requiring lighting
+support at most 512 combined directional, point and spot lights, including every
+imported instance. The 513th light fails explicitly rather than being dropped.
+Scenes with at most four directional and eight local lights use the original
+uniform path; larger light sets automatically load texture storage. This finite
+limit is not a frame-rate guarantee or a shadow-map limit.
 
 Asset-scoped
 `EXT_lights_image_based` is fallback illumination only; an explicit Royal scene

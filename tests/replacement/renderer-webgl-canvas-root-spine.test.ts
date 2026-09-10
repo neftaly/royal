@@ -1436,7 +1436,7 @@ describe("clear-only canvas root", () => {
     expect(canvas.gl.drawElements).not.toHaveBeenCalled();
   });
 
-  it("uploads shared authored material uniforms once per program", async () => {
+  it.each([false, true])("uploads shared authored material uniforms once per program (lit=%s)", async (lit) => {
     const document = staticTriangleDocument();
     delete document.extensionsRequired;
     delete document.extensionsUsed;
@@ -1451,7 +1451,7 @@ describe("clear-only canvas root", () => {
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
-      nodes: [node],
+      nodes: lit ? [node, directionalLight({ direction: [0, 0, -1] })] : [node],
     }));
     callbacks.shift()!();
     await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).status).toBe("ready"));
@@ -1460,7 +1460,7 @@ describe("clear-only canvas root", () => {
     callbacks.shift()!();
 
     expect(canvas.gl.drawElements).toHaveBeenCalledTimes(2);
-    expect(canvas.gl.uniform4fv).toHaveBeenCalledTimes(5);
+    expect(canvas.gl.uniform4fv).toHaveBeenCalledTimes(lit ? 7 : 2);
     expect(canvas.gl.uniformMatrix4fv).toHaveBeenCalledTimes(2);
     expect(canvas.gl.getUniformLocation).not.toHaveBeenCalledWith(
       expect.anything(),
@@ -1470,7 +1470,7 @@ describe("clear-only canvas root", () => {
     vi.mocked(canvas.gl.uniform4fv).mockClear();
     root.invalidate();
     callbacks.shift()!();
-    expect(canvas.gl.uniform4fv).toHaveBeenCalledTimes(1);
+    expect(canvas.gl.uniform4fv).toHaveBeenCalledTimes(lit ? 1 : 0);
   });
 
   it("activates authored glTF specular factors only on their material variant", async () => {
@@ -1492,7 +1492,7 @@ describe("clear-only canvas root", () => {
     root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
     root.setScene(scene({
       camera: perspectiveCamera({ position: [0, 0, 3] }),
-      nodes: [node],
+      nodes: [node, directionalLight({ direction: [0, 0, -1] })],
     }));
     callbacks.shift()!();
     await waitFor(() => expect(root.getGltfAssetSnapshot(node.asset).status).toBe("ready"));

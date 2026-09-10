@@ -47,6 +47,39 @@ import {
 } from "../../packages/renderer-webgl/src/surface/render-object-scene-update";
 
 describe("canonical direct surface lowering", () => {
+  it("preserves 512 mixed lights and rejects the combined overflow deterministically", () => {
+    const shape = mesh({ geometry: boxGeometry(1), material: standardMaterial({ color: [1, 1, 1, 1] }) });
+    const nodes = [shape,
+      ...Array.from({ length: 256 }, () => directionalLight({ direction: [0, 0, -1] })),
+      ...Array.from({ length: 256 }, () => pointLight({ position: [0, 0, 1], intensityCandela: 1 })),
+    ];
+    const input = scene({ camera: perspectiveCamera({}), nodes });
+    const prepared = prepareCanonicalSurfaceScene(input, () => undefined);
+    expect(prepared.directionalLights).toHaveLength(256);
+    expect(prepared.punctualLights).toHaveLength(256);
+    expect(() => prepareCanonicalSurfaceScene(scene({ camera: input.camera, nodes: [...nodes, spotLight({ position: [0, 0, 1], direction: [0, 0, -1], intensityCandela: 1 })] }), () => undefined))
+      .toThrow(/at most 512 lights combined/);
+  });
+
+  it("counts every asynchronously prepared instance light toward the shared limit", () => {
+    const document = staticTriangleDocument();
+    document.extensionsUsed = ["KHR_lights_punctual"];
+    document.extensionsRequired = ["KHR_lights_punctual"];
+    delete (document.materials as Array<Record<string, unknown>>)[0]!.extensions;
+    document.extensions = { KHR_lights_punctual: { lights: [{ type: "directional" }] } };
+    (document.nodes as Array<Record<string, unknown>>)[1]!.extensions = { KHR_lights_punctual: { light: 0 } };
+    const asset = prepareStaticGlb(staticTriangleGlb(document), "many-instance-lights");
+    for (const count of [512, 513]) {
+      const instances = createGltfInstanceTransforms({ count });
+      const input = scene({ camera: perspectiveCamera({}), nodes: [gltfInstances({ src: "/lights.glb", instances })] });
+      expect(prepareCanonicalSurfaceScene(input, () => undefined).directionalLights).toHaveLength(0);
+      if (count === 512) {
+        const prepared = prepareCanonicalSurfaceScene(input, () => asset);
+        expect(prepared.directionalLights).toHaveLength(512);
+        expect(prepared.instanceLightSources.has(instances)).toBe(true);
+      } else expect(() => prepareCanonicalSurfaceScene(input, () => asset)).toThrow(/512 lights combined/);
+    }
+  });
   it("selects exactly one resident base-color representation", () => {
     expect(baseColorTextureFeatureBits(false, false)).toBe(0);
     expect(baseColorTextureFeatureBits(true, false)).toBe(SURFACE_FEATURE_BASE_COLOR_TEXTURE);
@@ -855,11 +888,7 @@ describe("canonical direct surface lowering", () => {
       const node = gltf({ src: "/lit.glb", ...(importLights === undefined ? {} : { importLights }) });
       const input = scene({ camera: perspectiveCamera({}), nodes: [...application, node] });
       const lower = () => prepareCanonicalSurfaceScene(input, () => asset);
-      if (count === 2 && importLights !== false) {
-        expect(lower).toThrow(/at most 4 directional lights/);
-      } else {
-        expect(lower().directionalLights).toHaveLength(3 + (importLights === false ? 0 : count));
-      }
+      expect(lower().directionalLights).toHaveLength(3 + (importLights === false ? 0 : count));
     }
   });
 

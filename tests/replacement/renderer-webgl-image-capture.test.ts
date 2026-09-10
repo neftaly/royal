@@ -1,6 +1,6 @@
 import { rendererAcquireExternalClock } from "../../packages/renderer-webgl/src/frame/external-frame";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { gltf, perspectiveCamera, scene } from "@royal/renderer-core";
+import { boxGeometry, directionalLight, gltf, mesh, perspectiveCamera, scene, standardMaterial } from "@royal/renderer-core";
 import { captureImage, captureImageRequest, type ImageCaptureHost } from "../../packages/renderer-webgl/src/runtime/image-capture";
 import { canvasRootHarness, emptyScene } from "./support/canvas-root-harness";
 import { staticTriangleDocument, staticTriangleGlb } from "./support/static-glb";
@@ -28,6 +28,32 @@ const hostHarness = () => {
 afterEach(() => vi.useRealTimers());
 
 describe("bounded renderer image capture", () => {
+  it("waits for the lazy linear compositor before encoding transparent standard surfaces", async () => {
+    const { root, canvas, callbacks } = canvasRootHarness({}, {
+      getExtension: vi.fn((name: string) => name === 'EXT_color_buffer_float' || name === 'EXT_float_blend' ? {} : null) as WebGL2RenderingContext['getExtension'],
+    });
+    const encode = vi.fn((callback: BlobCallback) => {
+      expect(canvas.gl.createFramebuffer).toHaveBeenCalled();
+      expect(canvas.gl.drawArrays).toHaveBeenCalled();
+      callback(new Blob(['png']));
+    });
+    Object.assign(canvas, { toBlob: encode });
+    try {
+      root.setSize({ cssWidth: 60, cssHeight: 60, pixelRatio: 1 });
+      root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 4] }), nodes: [
+        mesh({ geometry: boxGeometry(1), material: standardMaterial({ color: [1, 0.5, 0.2, 0.5] }) }),
+        directionalLight({ direction: [0, 0, -1] }),
+      ] }));
+      const result = captureImage(root); void result.catch(() => undefined);
+      expect(encode).not.toHaveBeenCalled();
+      await vi.waitFor(() => {
+        callbacks.splice(0).forEach(callback => callback());
+        expect(encode, JSON.stringify(root.getSnapshot())).toHaveBeenCalledOnce();
+      });
+      await result;
+    } finally { root.dispose(); }
+  });
+
   it("starts encoding in the draw task and reports nonoverlapping stage timings", async () => {
     const { host, callbacks, lifecycle, advance } = hostHarness();
     const result = captureImageRequest(host, {});
