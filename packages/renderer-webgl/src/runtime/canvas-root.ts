@@ -681,6 +681,7 @@ export class CanvasRoot implements RendererRoot {
   #virtualTextureRuntime: VirtualTextureRuntime | null = null;
   readonly #virtualTextureListeners = new KeyedRetainedListeners<string>();
   #worldPresentationRequired = false;
+  #cameraPresentationChanged = false;
 
   /** Canvas whose context and backing dimensions are owned by this root. */
   get canvas(): HTMLCanvasElement {
@@ -859,7 +860,10 @@ export class CanvasRoot implements RendererRoot {
           ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs)),
       }));
       this.#cameraSource = construction.own(new CameraSourceOwner({
-        onCameraChanged: () => this.#invalidatePresentation(),
+        onCameraChanged: () => {
+          this.#cameraPresentationChanged = true;
+          this.#invalidatePresentation();
+        },
         onFailure: (error) => this.#captureScheduledFailure(error),
       }));
       this.#assertConstructionContext();
@@ -1830,6 +1834,8 @@ export class CanvasRoot implements RendererRoot {
       return;
     }
     const worldPresentationRequired = this.#worldPresentationRequired;
+    const cameraChanged = this.#cameraPresentationChanged;
+    this.#cameraPresentationChanged = false;
     this.#presentationRequired = false;
     this.#worldPresentationRequired = false;
     const surfaceScene = this.#surfaceScene;
@@ -1879,7 +1885,9 @@ export class CanvasRoot implements RendererRoot {
             cssScaleY,
           );
         }
-        if (!restoredWorld && hasPresentationOverlay) {
+        // Moving cameras invalidate this copy immediately. Capture lazily on the
+        // next overlay-only frame instead of resolving/copying every scroll frame.
+        if (!restoredWorld && hasPresentationOverlay && !cameraChanged) {
           this.#retainedPresentation.capture(
             size.backingWidth,
             size.backingHeight,
