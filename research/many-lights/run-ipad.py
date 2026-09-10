@@ -35,7 +35,7 @@ async def check(service_provider: ServiceProviderDep):
                 if offset % 65536 == 0:
                     print(f"Transferred {offset+4096} bytes", flush=True)
             print(await asyncio.wait_for(driver.execute_script('eval(window.manyLightsSource); delete window.manyLightsSource; return "ready"'), 60), flush=True)
-            await driver.execute_script('window.runManyLights(' + json.dumps(options) + ').then(value=>window.manyLightsResult=value,error=>window.manyLightsError=String(error.stack));return "started"')
+            await driver.execute_script('window.runManyLights(' + json.dumps(options) + ').then(value=>window.manyLightsResult=value,error=>window.manyLightsError=String(error)+" | "+String(error.stack));return "started"')
             previous = None
             for attempt in range(1800):
                 state = await asyncio.wait_for(driver.execute_script('return {status:document.querySelector("#status")?.textContent,error:window.manyLightsError,done:!!window.manyLightsResult}'), 180)

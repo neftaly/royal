@@ -4,12 +4,12 @@ import { PersistentGpuBudgetOwner } from '../../packages/renderer-webgl/src/reso
 import type { CanonicalDirectionalLight, CanonicalPunctualLight } from '../../packages/renderer-webgl/src/surface/scene-lowering';
 import { LargeLightRuntime, largeLightShader } from '../../packages/renderer-webgl/src/surface/large-light-runtime';
 
-const vertex = `#version 300 es
+export const vertex = `#version 300 es
 out vec3 worldNormal;out vec3 worldPosition;out vec2 surfaceTextureCoordinate;
 out vec3 worldTangent;out vec3 worldBitangent;
 void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(p*2.-1.,0.,1.);worldPosition=vec3(p*2.-1.,0.);worldNormal=vec3(0.,0.,1.);surfaceTextureCoordinate=p;worldTangent=vec3(1.,0.,0.);worldBitangent=vec3(0.,1.,0.);}`;
 
-const shaderSource = (large: boolean, macros: readonly string[]) => {
+export const shaderSource = (large: boolean, macros: readonly string[]) => {
   let source = large ? largeLightShader(fragmentSource) : fragmentSource;
   source = source.replace('#version 300 es', '#version 300 es\n' + macros.map(m => `#define ${m}`).join('\n'));
   return source.replace('__MAX_DIRECTIONAL_LIGHTS__', '2').replace('__MAX_PUNCTUAL_LIGHTS__', '2')

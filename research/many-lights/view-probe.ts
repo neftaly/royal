@@ -3,6 +3,7 @@ import { PRESENTATION_GLSL } from '../../packages/renderer-webgl/src/webgl/shade
 import { PersistentGpuBudgetOwner } from '../../packages/renderer-webgl/src/resource/persistent-gpu-budget';
 import type { CanonicalPunctualLight } from '../../packages/renderer-webgl/src/surface/scene-lowering';
 import { LargeLightRuntime, largeLightShader } from '../../packages/renderer-webgl/src/surface/large-light-runtime';
+import { buildViewListsFactored } from './view-lists-factored.mjs';
 import { buildViewLists } from './view-lists.mjs';
 
 const vertex = `#version 300 es
@@ -27,7 +28,7 @@ const source = (tiled: boolean) => {
 };
 
 /** Full Royal BRDF/material with global and conservative perspective tile lists. */
-export const runViewLists = async ({ size = 128, counts = [1, 256, 512] } = {}) => {
+export const runViewLists = async ({ size = 128, counts = [1, 256, 512], factored = false } = {}) => {
   const canvas=document.createElement('canvas'); canvas.width=canvas.height=size; document.body.append(canvas);
   const gl=canvas.getContext('webgl2',{antialias:false,alpha:true,premultipliedAlpha:false})!;
   if (!gl) throw new Error('WebGL2 unavailable');
@@ -53,7 +54,7 @@ export const runViewLists = async ({ size = 128, counts = [1, 256, 512] } = {}) 
       }));
       runtime.set([],lights);
       for(const budget of [1024*1024,2048]){
-        const began=performance.now(),lists=buildViewLists(lights,matrix,{byteBudget:budget}),listMs=performance.now()-began;
+        const began=performance.now(),lists=(factored?buildViewListsFactored:buildViewLists)(lights,matrix,{byteBudget:budget}),listMs=performance.now()-began;
         let listTexture:WebGLTexture|null=null;
         if(lists.kind==='tiled'){
           const padded=new Uint32Array(Math.ceil(lists.words.length/256)*256);padded.set(lists.words);
@@ -79,6 +80,6 @@ export const runViewLists = async ({ size = 128, counts = [1, 256, 512] } = {}) 
         }} finally {gl.deleteTexture(listTexture);}
       }
     }
-    return {date:new Date().toISOString(),size,results};
+    return {date:new Date().toISOString(),size,factored,results};
   } finally {runtime.dispose();for(const program of programs)gl.deleteProgram(program);gl.getExtension('WEBGL_lose_context')?.loseContext();canvas.remove();}
 };

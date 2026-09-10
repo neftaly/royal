@@ -48,3 +48,15 @@ are research only. Representative Play scenes, tracked immersive Quest rendering
 and hardware desktop acceptance remain necessary before accepting the unlimited
 architecture. Dense/global work remains expensive, and shadow maps are separate.
 The injected iPad fixture does not test network chunk loading or external codecs.
+
+
+## Subsequent spatial and shader experiments
+
+The full-material UBO and inactive-loop comparisons did not justify changing the
+production transport or shader families. Factoring conservative frusta into row,
+column and depth tests materially reduced CPU list cost while preserving exact
+CSR output and all 216 pixel cases on both devices. The optimized builders remain
+outside production; their additional workspace and view invalidation are not yet
+integrated into renderer ownership. Research typecheck and the independent and
+paired conservative-list tests pass. See README.md for the incomplete long iPad
+shader attempt, successful smaller diagnostic and sampling limitations.

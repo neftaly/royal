@@ -136,3 +136,13 @@ draft: compare the measured two-block UBO alternative and integrate conservative
 spatial lists before treating 256+ as a practical real-time target. Actual tracked
 immersive acceptance is still outstanding; the connected headset's tracking
 prompt prevented its session request from completing.
+
+
+The factored conservative-list follow-up preserves every CSR entry and passes
+216 pixel comparisons on each device. At 512 sparse lights and a 16×16 grid,
+paired CPU medians improve from 146 to 11 ms on the iPad and 19.2 to 1.4 ms on
+Quest. This remains research code: include CPU workspace, view/motion caching,
+list-upload ownership and exact dense/global fallback before production adoption.
+Full-material transport tests do not show a broad enough UBO advantage to replace
+the common texture path, and removing inactive shader loops did not earn extra
+shader families. See the evidence report for separate methods and limitations.

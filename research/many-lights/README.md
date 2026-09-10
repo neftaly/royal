@@ -252,3 +252,62 @@ therefore contributes substantially but does not explain all of the high-count
 cost. The renderer default is unchanged; this diagnostic is not a recommendation
 to silently reduce consumer rendering quality. See
 `ipad-no-msaa-frame-results.json` for the eight measurements.
+
+## Full shader transport and CPU list follow-up
+
+`full-shader-transport.ts` compares the actual complete opaque fragment shader's
+high-precision texture fetches with two uniform blocks. It separates MSAA and
+single-sample cases and checks pixel parity before timing batched completion.
+On Quest, the single-sample 512-point case favors texture (164.20 ms/draw) over
+UBOs (220.27 ms/draw); the MSAA case is 169.88 versus 228.53. All 32 Quest cases
+pass. This reverses the slight UBO advantage in the simplified local-light
+transport fixture, demonstrating why that fixture alone cannot pick a production
+transport. This follow-up excludes scene traversal and material textures.
+
+The original conservative CPU list builder also needs optimization before
+integration. `view-lists-fast.mjs` reuses a typed plane workspace and removes
+per-candidate closures and array traversal. Eighty randomized exact comparisons
+preserve every CSR word and budget-exhaustion decision. The paired browser
+benchmark alternates implementation order. Quest's 16×16 sparse 512-light median
+falls from 20.0 to 5.5 ms, with identical output. Dense 512 falls from 21.4 to
+7.7 ms. These results still exclude upload and shading, and require further
+scene/view caching and dense/global fallback policy before production use.
+
+The iPad's single-draw 512-light MSAA diagnostic passes all four full-shader
+comparisons. Texture/UBO medians are 1,440/1,405 ms for directional and
+2,152/1,950 ms for point lighting. The full shader therefore shows only modest
+transport gains, unlike the simplified transport fixture. An earlier long,
+four-draw-batch iPad run returned an opaque Safari exception and did not complete;
+its timings are excluded. The smaller diagnostic passes, but does not establish
+the cause of that exception or prove a GPU watchdog timeout.
+
+A separate shader-family experiment removes the inactive directional/local loop
+and compares pixels against the unchanged combined shader. Both devices pass
+within one channel value. The iPad texture medians remain about 1,445 ms for
+directional and 2,152 ms for point lighting. There is no compelling gain here to
+justify additional production shader families; the working implementation keeps
+one large-count family. These diagnostic runs use only three samples and one draw
+per batch, so they are not interchangeable with the longer batched timing runs.
+
+`view-lists-factored.mjs` makes a larger exact algorithmic improvement: each sphere
+is tested against column, row and depth planes once, then the surviving row/column
+combinations produce the same CSR lists in source order. It avoids repeating the
+same plane tests for every tile. The two-pass fill adds a mask workspace and tile
+cursors; at 512 lights and a 16×16 grid these plus plane coefficients consume
+20,048 bytes beyond the CSR allocation. Production integration must account for
+this CPU workspace and reuse it rather than treating it as free.
+
+| Device, 16×16 grid, 512 lights | Reference ms | No candidate allocations ms | Factored ms |
+| --- | ---: | ---: | ---: |
+| iPad, sparse | 146 | 119 | 11 |
+| iPad, dense | 312 | 258 | 13 |
+| Quest, sparse | 19.2 | 4.7 | 1.4 |
+| Quest, dense | 21.5 | 7.6 | 2.7 |
+
+These are paired 15-sample CPU measurements with rotating implementation order,
+not frame times. Exact randomized comparisons cover 80 inputs including resource
+exhaustion; the device benchmarks also compare every emitted CSR word. Both devices'
+216 pixel cases pass with the factored builder. Even after this improvement,
+11 ms of CPU list building alone is substantial on the iPad. Per-view caching,
+motion invalidation, upload budgeting and an inexpensive global/dense path are
+still required before integrating spatial lighting into the renderer.
