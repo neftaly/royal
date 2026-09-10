@@ -44,6 +44,24 @@ const camera = perspectiveCamera({
 });
 
 describe("renderer-core descriptor contract", () => {
+  it("keeps imported-light policy on mounts and validates both glTF constructors", () => {
+    const instances = createGltfInstanceTransforms({ count: 2 });
+    for (const importLights of [undefined, true, false]) {
+      const node = gltf({ src: "/lit.glb", ...(importLights === undefined ? {} : { importLights }) });
+      const batch = gltfInstances({ src: "/lit.glb", instances, ...(importLights === undefined ? {} : { importLights }) });
+      expect(node.importLights).toBe(importLights);
+      expect(batch.importLights).toBe(importLights);
+      expect(node.asset).toEqual({ src: "/lit.glb" });
+      expect(batch.asset).toEqual(node.asset);
+    }
+    for (const invalid of [null, 0, 1, "false", {}]) {
+      const importLights = invalid as boolean;
+      expect(() => gltf({ src: "/lit.glb", importLights })).toThrow(/importLights must be a boolean/);
+      expect(() => gltfInstances({ src: "/lit.glb", instances, importLights }))
+        .toThrow(/importLights must be a boolean/);
+    }
+  });
+
   it("uses stable JavaScript error classes at public authoring boundaries", () => {
     expect(() => perspectiveCamera({
       fovY: "wide" as unknown as number,

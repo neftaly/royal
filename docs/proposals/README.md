@@ -1,29 +1,34 @@
 # Royal proposals and decisions
 
-Reviewed against `main` at `01ef7187` on 2026-09-08. Shipped behaviour belongs in
-[the specifications](../specs) and [changelog](../../CHANGELOG.md). Open documents
-may contain both implemented work and experiments; their status identifies what
-remains. Consumer observations are historical evidence, not a current audit of
-Probability.
+Reconciled for Royal 0.0.25 on 2026-09-11. Implemented behavior belongs in
+[the specifications](../specs) and [changelog](../../CHANGELOG.md). Historical
+consumer/device observations are retained as evidence.
 
-## Open Royal follow-ups
+## Open follow-ups
 
 | Document | Remaining work |
 | --- | --- |
-| [Automatic texture memory](automatic-texture-memory.md) | Direct-target refinement, bounded small-raster reuse, and demand-grown RGBA atlases implemented in the working tree; RGBA shrinking, active-pool redistribution, and shared-slot admission implemented; ETC2 resizing, default-budget calibration, and optional prefetch remain proposals. |
-| [VT capacity and A10 iPad findings](vt-capacity-a10-findings.md) | Uncommitted budget-sized atlas and authoritative coarse SVG refinement; physical-device results and remaining refinement hitches. |
-| [Preview-first SVG refinement](preview-first-svg-refinement.md) | Use preview-supported finer mips and measure physical-device responsiveness; alternative rasterizers/codecs require evidence. Basic preview consumption and the full-atlas queue fix have landed. |
-| [Selection-outline camera performance](selection-outline-camera-performance.md) | Hardware measurements, equivalent descriptor replacement, and GPU submission investigation. Retained source indexing has landed. |
-| [Screen-space tolerant picking](screen-space-tolerant-picking.md) | Research semantics, approaches, fixtures, and costs before accepting an API. |
+| [Onboarding glTF capture](onboarding-static-preview-profile.md) | Linked onboarding now uses `captureImage`; evaluate VT opt-out and readback performance using original assets. The browser-only opt-out experiment changes pixels and is not accepted policy. |
+| [Unlimited lights](unlimited-lights.md) | Research scalable exact light composition, including global directional lights and clustered local lights. No architecture or higher limit accepted yet. |
+| [Automatic texture memory](automatic-texture-memory.md) | Physical-device default-budget calibration; ETC2 resizing and prefetch only with demonstrated workloads. RGBA allocator/refinement work shipped in 0.0.24. |
+| [SVG refinement](preview-first-svg-refinement.md) | Profile remaining current-device hitches; alternative rasterizers/codecs require evidence. Preview-to-target behavior is implemented. |
+| [Selection-outline camera performance](selection-outline-camera-performance.md) | Fresh hardware baseline after indexing and camera-copy changes, then evaluate descriptor replacement or GPU costs. |
+| [Screen-space tolerant picking](screen-space-tolerant-picking.md) | Consumer device trials, semantics and competing experiments before accepting an API. |
 
-## Completed work and retained decisions
+## Implemented work and retained decisions
 
 | Document | Disposition |
 | --- | --- |
-| [Always-on automatic VT](archive/always-on-automatic-virtual-texturing.md) | Implemented in `a1b4961d`, included in 0.0.23. |
-| [Bounded-volume colour parity](archive/bounded-volume-composite-color-parity.md) | Fixed in 0.0.19 (`5bb9ab6c`); original 0.0.18 report retained. |
-| [BLEND mat occlusion](archive/alpha-blend-mat-occlusion.md) | Separated-bounds fix shipped in 0.0.23 (`fd045a7b`); intersecting geometry retains documented limitations. |
-| [Historical scene previews](archive/historical-scene-previews.md) | Keep the consumer's two-root design. No new Royal API; reconsider only with measured renderer costs. |
+| [Imported-light composition](archive/composed-directional-light-budget.md) | `importLights: false` included per glTF mount in 0.0.25; defaults and light limits unchanged. |
+| [VT capacity/A10 observations](archive/vt-capacity-a10-findings.md) | Historical intermediate experiments, superseded by 0.0.24. |
+| [Original automatic-memory design](archive/automatic-texture-memory-2026-09-08.md) | Shipped allocator rationale and intermediate measurements. |
+| [Original preview-first design](archive/preview-first-svg-refinement-2026-09-08.md) | Historical producer contract, implemented scheduling and profiling observations. |
+| [Original selection-outline investigation](archive/selection-outline-camera-performance-2026-09-11.md) | Historical full-scan design and software measurements; retained lookup has shipped. |
+| [Original onboarding investigation](archive/onboarding-static-preview-profile-2026-09-11.md) | Consumer measurements and rejected encoder experiments; capture API included in 0.0.25. |
+| [Always-on automatic VT](archive/always-on-automatic-virtual-texturing.md) | Implemented in 0.0.23; remains the default policy. |
+| [Bounded-volume colour parity](archive/bounded-volume-composite-color-parity.md) | Fixed in 0.0.19. |
+| [BLEND mat occlusion](archive/alpha-blend-mat-occlusion.md) | Separated-bounds fix shipped in 0.0.23; intersecting geometry retains documented limitations. |
+| [Historical scene previews](archive/historical-scene-previews.md) | Retain the consumer's two-root design; no new Royal API without measured costs. |
 
-Archived reports preserve their original investigation and reproduction details.
-Their opening status takes precedence over pre-fix descriptions below it.
+Archived opening statuses take precedence over their historical implementation
+claims. Do not reimplement shipped work from an old experimental section.

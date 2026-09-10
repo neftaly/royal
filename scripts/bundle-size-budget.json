@@ -12,17 +12,18 @@
     "royalWorkerGzipBytes": 56618
   },
   "_allowance": {
-    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, retained multi-view outline planning, invariant-prepass depth equality, final default-depth discard, transactional creation-loss recovery, alpha-safe AVIF fitting, retained screen-space segments, exact-budget VT atlas planning, and lazy bounded emissive volumes, extracted overlay ownership with reentrant installation guards and shared preparation policy, always-on VT, preview-first SVG refinement, indexed outline provenance, and opaque retained-presentation copies, and separated transparent bounds ordering, and full-atlas VT preparation queue liveness, bounded adaptive VT residency and preparation, nonblocking VT shader publication, and authored SVG crop semantics",
+    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, retained multi-view outline planning, invariant-prepass depth equality, final default-depth discard, transactional creation-loss recovery, alpha-safe AVIF fitting, retained screen-space segments, exact-budget VT atlas planning, and lazy bounded emissive volumes, extracted overlay ownership with reentrant installation guards and shared preparation policy, always-on VT, preview-first SVG refinement, indexed outline provenance, and opaque retained-presentation copies, and separated transparent bounds ordering, and full-atlas VT preparation queue liveness, bounded adaptive VT residency and preparation, nonblocking VT shader publication, and authored SVG crop semantics, per-mount imported-light control and optional image-capture capability",
     "initialAndTotalGzipBytes": 8600,
     "lazyGzipBytes": 3700,
-    "minidraco050GzipBytes": 3700
+    "minidraco050GzipBytes": 3700,
+    "captureCapabilityAndImportedLightsGzipBytes": 250
   },
-  "royalInitialGzipBytes": 141400,
-  "royalIncrementalGzipBytes": 82100,
-  "royalGltfInitialGzipBytes": 142350,
-  "royalGltfIncrementalGzipBytes": 1000,
+  "royalInitialGzipBytes": 141650,
+  "royalIncrementalGzipBytes": 82350,
+  "royalGltfInitialGzipBytes": 142600,
+  "royalGltfIncrementalGzipBytes": 1050,
   "royalLazyGzipBytes": 125200,
-  "royalTotalIncrementalGzipBytes": 207300,
-  "royalTotalGzipBytes": 266550,
+  "royalTotalIncrementalGzipBytes": 207550,
+  "royalTotalGzipBytes": 266800,
   "royalWorkerGzipBytes": 23150
 }

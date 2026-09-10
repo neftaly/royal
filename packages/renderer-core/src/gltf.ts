@@ -64,6 +64,8 @@ export type GltfMaterialVariantName = string;
 export interface GltfNode {
   readonly kind: 'gltf';
   readonly asset: GltfAssetRef;
+  /** Include authored KHR_lights_punctual lights. Set false to use application lighting. @defaultValue true */
+  readonly importLights?: boolean;
   /** Exact triangle proxy in this node's local space, available before the asset loads. */
   readonly pickingGeometry?: Geometry;
   readonly pickingId?: PickingId;
@@ -76,6 +78,8 @@ export interface GltfNode {
 }
 
 export interface GltfOptions extends GltfAssetOptions {
+  /** Include authored KHR_lights_punctual lights. Set false to use application lighting. @defaultValue true */
+  readonly importLights?: boolean;
   /** Exact triangle proxy in this node's local space, available before the asset loads. */
   readonly pickingGeometry?: Geometry;
   /** Stable application id returned from renderer picking. */
@@ -142,7 +146,7 @@ export const transformGltfAssetBounds = (
 };
 
 const GLTF_FIELDS = [
-  'bounds', 'materialVariant', 'pickingGeometry', 'pickingId', 'ref', 'sceneIndex', 'src', 'tint', 'transform', 'version',
+  'bounds', 'importLights', 'materialVariant', 'pickingGeometry', 'pickingId', 'ref', 'sceneIndex', 'src', 'tint', 'transform', 'version',
 ] as const;
 const GLTF_ASSET_FIELDS = ['bounds', 'sceneIndex', 'src', 'version'] as const;
 
@@ -194,6 +198,9 @@ export function gltf(input: GltfInput): GltfNode {
   if (options.pickingGeometry !== undefined) {
     validateGeometry(options.pickingGeometry, 'glTF pickingGeometry');
   }
+  if (options.importLights !== undefined && typeof options.importLights !== 'boolean') {
+    throw new TypeError('glTF importLights must be a boolean');
+  }
   const asset = resolveGltfAsset(options);
   const pickingId = resolvePickingId(options.pickingId, 'glTF pickingId');
   const materialVariant = validateGltfMaterialVariantName(options.materialVariant);
@@ -201,6 +208,7 @@ export function gltf(input: GltfInput): GltfNode {
   const node = {
     kind: 'gltf',
     asset,
+    ...(options.importLights === undefined ? {} : { importLights: options.importLights }),
     ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
     ...(pickingId === undefined ? {} : { pickingId }),
     ...(options.ref === undefined ? {} : { ref: options.ref }),

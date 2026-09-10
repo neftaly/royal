@@ -197,7 +197,7 @@ The existing native root probes also passed refinement, optional-detail failure,
 last-claim cancellation, restoration, and failure/restoration. Failure retained
 pixel-identical preview coverage. These are browser correctness checks, not
 device performance claims. A10 workload results are recorded in
-[the capacity findings](../../docs/proposals/vt-capacity-a10-findings.md).
+[the capacity findings](../../docs/proposals/archive/vt-capacity-a10-findings.md).
 
 Working-tree implementation, 2026-09-08, based on `5bb9ab6c`.
 

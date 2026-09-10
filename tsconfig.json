@@ -37,6 +37,12 @@
       ],
       "@royal/react/scene": [
         "./packages/react/src/scene.ts"
+      ],
+      "@royal/renderer-webgl/capture": [
+        "./packages/renderer-webgl/src/capture.ts"
+      ],
+      "@royal/react/capture": [
+        "./packages/react/src/capture.ts"
       ]
     },
     "isolatedModules": true,

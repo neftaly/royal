@@ -260,7 +260,16 @@ multiplier applied after base/variant/LOD selection. It does not participate in
 asset identity, source preparation, geometry ownership, or texture ownership;
 equal source-material/tint values share one canonical material identity.
 
-Authored punctual lights lower to Royal light records. Asset-scoped
+Authored punctual lights lower to Royal light records by default. `gltf` and
+`gltfInstances` accept `importLights: false` to omit that mount's authored
+`KHR_lights_punctual` directional, point, and spot lights. This presentation
+policy does not change asset identity, decoding, geometry, materials, textures,
+picking, or shared-resource ownership. Omitted lights consume no scene light
+budget and create no render-object light bindings or instance light-update work.
+The default and explicit `true` retain authored lights and existing overflow
+errors (four directional lights, eight point/spot lights combined).
+
+Asset-scoped
 `EXT_lights_image_based` is fallback illumination only; an explicit Royal scene
 environment wins regardless of load order.
 

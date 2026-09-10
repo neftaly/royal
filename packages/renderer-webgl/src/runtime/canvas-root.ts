@@ -1,3 +1,4 @@
+import { rendererBeginImageCapture, type RootImageCaptureHost } from "./image-capture-host";
 import {
   type GltfInstanceTransforms,
   type GltfAssetRef,
@@ -654,6 +655,7 @@ export class CanvasRoot implements RendererRoot {
   readonly #screenSpacePartitionPattern: ScreenSpacePartitionPatternOwner;
   readonly #surfaceGpu: SurfaceGpuOwner;
   readonly #surfacePicker = new SurfacePicker(this.#getDecodedAlpha);
+  #capturePending = false;
   #surfaceResourcesPending = false;
   readonly #textureAssets: TextureAssetOwner;
   #textureResourcesPending = false;
@@ -967,6 +969,28 @@ export class CanvasRoot implements RendererRoot {
     this.#listeners.clear();
     this.#sizeListeners.clear();
     this.#virtualTextureListeners.clear();
+  }
+
+  /** @internal The optional capture module borrows readiness, not GPU ownership. */
+  [rendererBeginImageCapture](): RootImageCaptureHost {
+    this.#assertLive("capture an image");
+    if (this.#capturePending) throw new Error("Royal image capture already in progress");
+    this.#capturePending = true;
+    return {
+      root: this,
+      intent: () => this.#surfaceSceneInput,
+      hasOverlay: () => this.#overlayInput !== null,
+      hasExternalClock: () => this.#clock.hasExternalClock,
+      scene: () => this.#surfaceScene,
+      pending: () => this.#gltfSceneDirty || this.#pendingTexturePublicationKeys.size > 0
+        || this.#virtualTextureActivation.phase === "loading"
+        || this.#surfaceResourcesPending || this.#textureResourcesPending,
+      environmentSnapshot: (environment) => this.#environmentAssets.getSnapshot(environment),
+      textureSnapshot: this.#getTextureSnapshot,
+      now: this.#platform.now ?? (() => performance.now()),
+      requestFrame: (callback) => this.#platform.requestFrame(callback),
+      release: () => { this.#capturePending = false; },
+    };
   }
 
   flushInvalidated(): void {

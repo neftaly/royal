@@ -473,3 +473,13 @@ exceeded the older budget. Final initial/lazy/deployed measurements are
 declarations and source maps. Only affected ceilings rise to the next narrow
 rounded bounds; the worker and glTF authoring-delta limits remain unchanged.
 Evidence: `research/svg-preview/release-size-results.json`.
+
+## Working-tree additions (2026-09-11)
+
+- **conforms:** per-mount `importLights` control; descriptor validation and
+  canonical tests cover default/explicit behavior, all light types, overflow,
+  shared geometry, picking and render-object transforms.
+- **partial:** `captureImage` supports stable canvas scenes without overlays or
+  external/XR clocks. Deterministic lifecycle tests and the native capture probe
+  cover the supported path. Physical-device performance and separate GPU readback
+  timing remain unverified; current-coverage captures can contain previews.

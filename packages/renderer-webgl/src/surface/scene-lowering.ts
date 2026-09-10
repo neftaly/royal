@@ -546,12 +546,13 @@ export const prepareCanonicalSurfaceScene = (
       }
       const prepared = preparedGltf(node);
       if (prepared === undefined) continue;
-      if (requiresLighting && node.kind === "gltf-instances" && prepared.lights.length > 0) {
+      const importLights = requiresLighting && node.importLights !== false;
+      if (importLights && node.kind === "gltf-instances" && prepared.lights.length > 0) {
         instanceLightSources.add(node.instances);
       }
       geometryLodGroupIds.length = 0;
       for (const light of prepared.lights) {
-        if (!requiresLighting) break;
+        if (!importLights) break;
         const color: LinearRgba = [
           light.color[0] * light.intensity,
           light.color[1] * light.intensity,

@@ -801,6 +801,68 @@ describe("canonical direct surface lowering", () => {
     expect(prepared.surfaces[0]!.model[12]).toBe(21);
   });
 
+  it.each(["directional", "point", "spot"] as const)(
+    "omits imported %s lights per mount while sharing prepared geometry and preserving handles",
+    (kind) => {
+      const document = staticTriangleDocument();
+      document.extensionsRequired = ["KHR_lights_punctual"];
+      document.extensionsUsed = ["KHR_lights_punctual"];
+      delete (document.materials as Array<Record<string, unknown>>)[0]!.extensions;
+      document.extensions = { KHR_lights_punctual: { lights: [{ type: kind }] } };
+      (document.nodes as Array<Record<string, unknown>>)[1]!.extensions = {
+        KHR_lights_punctual: { light: 0 },
+      };
+      const asset = prepareStaticGlb(staticTriangleGlb(document), "shared-lit-asset");
+      const ref: { current: RenderObjectHandle | null } = { current: null };
+      const enabled = gltf({ src: "/lit.glb" });
+      const disabled = gltf({ src: "/lit.glb", importLights: false, pickingId: "piece", ref });
+      const instances = createGltfInstanceTransforms({ count: 10 });
+      const batch = gltfInstances({ src: "/lit.glb", instances, importLights: false });
+      const input = scene({ camera: perspectiveCamera({}), nodes: [enabled, disabled, batch] });
+      // The same scene intent is lowered before and after asynchronous preparation.
+      const pending = prepareCanonicalSurfaceScene(input, () => undefined);
+      expect(pending.directionalLights).toHaveLength(0);
+      expect(pending.punctualLights).toHaveLength(0);
+      const prepared = prepareCanonicalSurfaceScene(input, () => asset);
+      expect(prepared.directionalLights).toHaveLength(kind === "directional" ? 1 : 0);
+      expect(prepared.punctualLights).toHaveLength(kind === "directional" ? 0 : 1);
+      expect(prepared.instanceLightSources.has(instances)).toBe(false);
+      expect(prepared.surfaces).toHaveLength(3);
+      expect(prepared.surfaces.every((surface) => surface.geometry === asset.primitives[0]!.geometry)).toBe(true);
+      expect(prepared.surfaces[1]!.materialSource).toBe(prepared.surfaces[0]!.materialSource);
+      expect(prepared.pickSurfaces.filter((surface) => surface.node === disabled)).toHaveLength(1);
+      const binding = updateCanonicalRenderObjectTransform(prepared, disabled, {
+        position: [20, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1],
+      }, createCanonicalRenderObjectUpdateWorkspace());
+      expect(binding?.lights).toHaveLength(0);
+      expect(prepared.surfaces[1]!.model[12]).toBe(21);
+      expect(asset.lights).toHaveLength(1);
+    },
+  );
+
+  it.each([0, 1, 2])("composes three application lights with %i imported directional lights", (count) => {
+    const document = staticTriangleDocument();
+    document.extensionsRequired = ["KHR_lights_punctual"];
+    document.extensionsUsed = ["KHR_lights_punctual"];
+    delete (document.materials as Array<Record<string, unknown>>)[0]!.extensions;
+    document.extensions = { KHR_lights_punctual: { lights: [{ type: "directional" }] } };
+    const nodes = document.nodes as Array<Record<string, unknown>>;
+    nodes[0]!.children = [1, ...Array.from({ length: count }, (_, index) => index + 2)];
+    for (let index = 0; index < count; index++) nodes.push({ extensions: { KHR_lights_punctual: { light: 0 } } });
+    const asset = prepareStaticGlb(staticTriangleGlb(document), "directional-budget");
+    const application = Array.from({ length: 3 }, () => directionalLight({ direction: [0, -1, 0] }));
+    for (const importLights of [undefined, true, false]) {
+      const node = gltf({ src: "/lit.glb", ...(importLights === undefined ? {} : { importLights }) });
+      const input = scene({ camera: perspectiveCamera({}), nodes: [...application, node] });
+      const lower = () => prepareCanonicalSurfaceScene(input, () => asset);
+      if (count === 2 && importLights !== false) {
+        expect(lower).toThrow(/at most 4 directional lights/);
+      } else {
+        expect(lower().directionalLights).toHaveLength(3 + (importLights === false ? 0 : count));
+      }
+    }
+  });
+
   it("retains the instance sources whose pose changes require light relowering", () => {
     const document = staticTriangleDocument();
     document.extensionsRequired = ["KHR_lights_punctual"];

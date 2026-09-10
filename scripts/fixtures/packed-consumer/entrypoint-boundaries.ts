@@ -35,3 +35,10 @@ export type EntrypointBoundaries = readonly [
   AsyncPreparationSnapshot,
   FrameUploadBudgetSnapshot,
 ];
+
+
+// Capture remains an optional entry point and accepts the ordinary renderer root.
+import { captureImage, type RendererImageCaptureOptions } from '@royal/react/capture';
+import type { RendererRoot } from '@royal/react';
+const captureOptions: RendererImageCaptureOptions = { refinement: 'settled', timeoutMs: 1000 };
+export const captureFixture = (root: RendererRoot) => captureImage(root, captureOptions);

@@ -357,6 +357,8 @@ export interface GltfInstancesNode {
   readonly asset: GltfAssetRef;
   readonly instances: GltfInstanceTransforms;
   readonly kind: 'gltf-instances';
+  /** Include authored KHR_lights_punctual lights. Set false to use application lighting. @defaultValue true */
+  readonly importLights?: boolean;
   /** Exact triangle proxy repeated in each instance's local space. */
   readonly pickingGeometry?: Geometry;
   /** Stable application identity shared by the instance collection. */
@@ -375,6 +377,8 @@ export interface GltfInstancesOptions {
   readonly bounds?: GltfAssetBounds;
   /** Versioned bulk-transform source retained by renderer roots. */
   readonly instances: GltfInstanceTransforms;
+  /** Include authored KHR_lights_punctual lights. Set false to use application lighting. @defaultValue true */
+  readonly importLights?: boolean;
   /** Exact triangle proxy repeated in each instance's local space, available before asset load. */
   readonly pickingGeometry?: Geometry;
   /** Stable application identity returned with every picked instance. */
@@ -392,7 +396,7 @@ export interface GltfInstancesOptions {
 }
 
 const GLTF_INSTANCES_FIELDS = [
-  'bounds', 'instances', 'materialVariant', 'pickingGeometry', 'pickingId', 'sceneIndex', 'src', 'tint', 'version',
+  'bounds', 'importLights', 'instances', 'materialVariant', 'pickingGeometry', 'pickingId', 'sceneIndex', 'src', 'tint', 'version',
 ] as const;
 
 /** Creates one instanced glTF node using the canonical glTF material and picking path. */
@@ -401,6 +405,9 @@ export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode 
   const instances = validateInstanceTransforms(options.instances);
   if (options.pickingGeometry !== undefined) {
     validateGeometry(options.pickingGeometry, 'glTF instances pickingGeometry');
+  }
+  if (options.importLights !== undefined && typeof options.importLights !== 'boolean') {
+    throw new TypeError('glTF importLights must be a boolean');
   }
   const asset = resolveGltfAsset(options);
   const pickingId = resolvePickingId(options.pickingId, 'glTF instances pickingId');
@@ -412,6 +419,7 @@ export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode 
     asset,
     instances,
     kind: 'gltf-instances',
+    ...(options.importLights === undefined ? {} : { importLights: options.importLights }),
     ...(options.pickingGeometry === undefined ? {} : { pickingGeometry: options.pickingGeometry }),
     ...(pickingId === undefined ? {} : { pickingId }),
     ...(materialVariant === undefined ? {} : { materialVariant }),

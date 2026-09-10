@@ -439,6 +439,42 @@ render, non-visual glTF claims, invalidate, pick, focused asset/texture
 observation, lifecycle/frame observation, bounded diagnostics, snapshot, and
 idempotent dispose operations.
 
+### Image capture
+
+Import `captureImage` from `@royal/react/capture` (or
+`@royal/renderer-webgl/capture` for a non-React consumer). This optional entry point
+keeps capture orchestration out of the normal renderer import graph.
+
+`await captureImage(root, { signal, timeoutMs: 60000, refinement: "settled" })`
+returns `{ blob, timings }` with an `image/png` blob. It waits for scene glTF,
+texture and environment preparation, GPU publications and geometry admission,
+then redraws and calls canvas encoding in the same task. The root remains owned
+by the caller and can be reused for subsequent captures.
+
+`refinement: "settled"` (default) waits for the current **admitted** VT demand to
+be resident; this is budget- and view-dependent, not a promise of maximum source
+resolution. `refinement: "current"` skips that detail wait after source/GPU
+preparation and may capture preview or fallback coverage. It is not a guarantee
+that all authored VT target pages have arrived.
+
+`timings` reports `preparationMs`, `drawSubmissionMs`,
+`readbackAndEncodingMs`, and `totalMs` from capture invocation. Draw submission is
+CPU time; readback/encoding includes browser callback scheduling. Asset fetches
+started before invocation and later DOM image decoding/presentation are outside
+these timing boundaries. `toBlob` does not expose separate GPU/readback/encoder
+times, and the API does not invent them.
+
+One capture may run per root. Keep scene, size, camera, transforms and resources
+stable until completion. Scene/size replacement, root disposal, context loss,
+source failure, encoding failure, cancellation and the deadline reject the
+request. Late encoding callbacks cannot publish a cancelled result. A failed VT
+page or insufficient admission can remain pending until the deadline. Cancelling
+capture stops observation/waiting; dispose the root to cancel its asset work.
+
+This initial API supports sized canvas scenes without overlays. Overlay capture
+and external/XR frame clocks are explicitly unsupported. The helper does not
+capture an XR framebuffer, introduce a new texture policy or dispose the root.
+
 The optional stable dependency `gltfResourceReader(resource, signal)` reads
 complete bytes for glTF root documents, referenced buffers, and external
 images. `resource.kind` distinguishes `root`, `buffer`, and `image`; `uri` is

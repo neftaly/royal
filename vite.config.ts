@@ -38,6 +38,7 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     lib: {
       entry: {
         index: 'src/index.ts',
+        capture: 'src/capture.ts',
         ktx2: 'src/ktx2.ts',
         xr: 'src/xr.ts'
       },
@@ -50,11 +51,13 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
       '@royal/renderer-core',
       '@royal/renderer-core/render-object',
       '@royal/renderer-webgl',
+      '@royal/renderer-webgl/capture',
       'react'
     ],
     lib: {
       entry: {
         index: 'src/index.ts',
+        capture: 'src/capture.ts',
         scene: 'src/scene.ts',
         xr: 'src/xr.ts'
       },
@@ -72,6 +75,8 @@ const isAppPackage = manifest.name === undefined ? false : appPackageNames.has(m
 const repoRoot = fileURLToPath(new URL('.', import.meta.url));
 const appBase = process.env.BASE_PATH ?? '/';
 export const sourceAliases = [
+  { find: '@royal/renderer-webgl/capture', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/capture.ts') },
+  { find: '@royal/react/capture', replacement: path.join(repoRoot, 'packages/react/src/capture.ts') },
   { find: '@royal/renderer-webgl/xr', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/xr.ts') },
   { find: '@royal/renderer-webgl/ktx2', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/ktx2.ts') },
   { find: '@royal/react/xr', replacement: path.join(repoRoot, 'packages/react/src/xr.ts') },

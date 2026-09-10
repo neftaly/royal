@@ -16,13 +16,14 @@ const packages = [
     cwd: 'packages/renderer-webgl',
     specifiers: [
       '@royal/renderer-webgl',
+      '@royal/renderer-webgl/capture',
       '@royal/renderer-webgl/ktx2',
       '@royal/renderer-webgl/xr'
     ]
   },
   {
     cwd: 'packages/react',
-    specifiers: ['@royal/react', '@royal/react/scene', '@royal/react/xr']
+    specifiers: ['@royal/react', '@royal/react/capture', '@royal/react/scene', '@royal/react/xr']
   }
 ];
 

@@ -1,10 +1,12 @@
+> Historical A10 experiments, archived 2026-09-11. The 32 MiB fixed-pool and 256px SVG-page experiments below were superseded by 0.0.24. Current policy is in the texture specifications; preserve these observations as evidence, not pending implementation.
+
 # VT capacity and A10 iPad findings (2026-09-08)
 
 ## Review status
 
 The fixed 32 MiB allocation below is an uncommitted experiment, not the accepted
 automatic memory policy. Preserve its measurements and implementation for
-comparison. [Automatic texture memory](automatic-texture-memory.md) defines the
+comparison. [Automatic texture memory](../automatic-texture-memory.md) defines the
 proposed direction and separates the correctness fixes from allocator work.
 Its preview-to-target policy supersedes requiring a vector coarsest page as
 an intermediate step: coarse source authority is needed when coarse is the
@@ -28,7 +30,7 @@ context interruptions. Final tracked GPU bytes remained 40,102,721; automatic
 decoded storage increased from 855,808 to 2,395,904 bytes with raster sharing.
 Captured text retained source-rendered detail; page reduction does not come
 from lowering target resolution. Raw observations are retained in
-[`direct-target-a10.json`](../../research/svg-preview/direct-target-a10.json).
+[`direct-target-a10.json`](../../../research/svg-preview/direct-target-a10.json).
 
 These are repeated observations, not a controlled speedup claim. The second
 run still had a 306 ms maximum initial frame gap and a 104 ms refinement gap.
@@ -272,7 +274,7 @@ statistical estimates. Extra yielded frames deliberately favor responsiveness
 over minimum migration latency.
 
 Raw reports and timing aggregates, including intermediate experiments, are in
-[`growth-sync-a10.json`](../../research/svg-preview/growth-sync-a10.json).
+[`growth-sync-a10.json`](../../../research/svg-preview/growth-sync-a10.json).
 The approach retains allocation error checks while avoiding immediate queries,
 consistent with [WebGL guidance on blocking APIs](https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices#avoid_blocking_api_calls_in_production).
 
@@ -317,4 +319,4 @@ These are individual workload observations, not a statistical speed guarantee
 or a claim that general renderer startup is hitch-free. Both final runs have
 zero page failures, growth failures, denied claims, and context interruptions.
 Raw reports and API timing aggregates, including intermediate experiments, are
-in [`refinement-a10.json`](../../research/svg-preview/refinement-a10.json).
+in [`refinement-a10.json`](../../../research/svg-preview/refinement-a10.json).

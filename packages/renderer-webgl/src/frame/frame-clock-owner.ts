@@ -55,6 +55,10 @@ export class FrameClockOwner {
     this.#options = options;
   }
 
+  get hasExternalClock(): boolean {
+    return this.#current.externalToken !== 0;
+  }
+
   acquireExternalClock(): ExternalFrameClock {
     if (!this.#apply(ACQUIRE_EXTERNAL_EVENT)) {
       throw new Error("Royal renderer already has an external frame clock or is disposed");

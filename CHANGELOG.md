@@ -3,6 +3,19 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.25 - 2026-09-11
+
+- Add per-mount `importLights` control to `gltf` and `gltfInstances`. Setting it
+  to false omits embedded directional, point, and spot lights while preserving
+  shared model resources. Defaults and scene light limits are unchanged.
+
+- Add `captureImage(root)` for bounded PNG capture of stable canvas scenes,
+  with renderer-owned readiness, cancellation, context-loss handling and honest
+  preparation/draw-submission/readback-and-encoding timings.
+- Avoid retained world copies during camera movement.
+- Reconcile implemented proposals and record the remaining unlimited-light and
+  capture-performance investigations. Release packages remain GitHub tarballs.
+
 ## 0.0.24 - 2026-09-09
 
 - Preserve resident texture detail during zoom transitions, refresh atlas bindings

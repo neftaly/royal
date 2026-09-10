@@ -1,0 +1,157 @@
+{
+  "source": {
+    "buildId": "cf6ebcf7cfef-dirty-mtvkz1r8",
+    "builtAt": "2026-09-10T13:46:16.751Z",
+    "dirty": true,
+    "revision": "cf6ebcf7cfef8fc72ed6f69b96485313d3be3ead"
+  },
+  "policy": "default",
+  "browser": "Chromium SwiftShader; correctness and exploratory measurements only",
+  "runtimeRequests": [
+    "http://127.0.0.1:4581/@fs/home/neftaly/dev/royal/packages/renderer-webgl/src/virtual-texture/runtime.ts"
+  ],
+  "results": {
+    "triangle": [
+      {
+        "pixelRatio": 1,
+        "width": 60,
+        "height": 60,
+        "painted": 480,
+        "pngBytes": 517,
+        "timings": {
+          "preparationMs": 355.60000002384186,
+          "drawSubmissionMs": 0.5,
+          "readbackAndEncodingMs": 120,
+          "totalMs": 476.10000002384186
+        }
+      },
+      {
+        "pixelRatio": 2,
+        "width": 120,
+        "height": 120,
+        "painted": 1860,
+        "pngBytes": 1109,
+        "timings": {
+          "preparationMs": 0.800000011920929,
+          "drawSubmissionMs": 1.5999999642372131,
+          "readbackAndEncodingMs": 10.699999988079071,
+          "totalMs": 13.099999964237213
+        }
+      }
+    ],
+    "classicDie": {
+      "pixelHash": "67e1c16db53e1ee4e7d5b90b1e23596fba531711f41af172a84e3a780531ec84",
+      "width": 60,
+      "height": 60,
+      "painted": 3568,
+      "pngBytes": 2732,
+      "timings": {
+        "preparationMs": 698.5,
+        "drawSubmissionMs": 0.40000003576278687,
+        "readbackAndEncodingMs": 791.5,
+        "totalMs": 1490.4000000357628
+      },
+      "resources": {
+        "asyncPreparation": {
+          "activeJobs": 0,
+          "jobLimit": 8,
+          "queuedDetailJobs": 0,
+          "queuedForegroundJobs": 0,
+          "queuedJobs": 0
+        },
+        "geometryUploads": {
+          "admittedBytes": 0,
+          "budgetBytes": 4194304,
+          "deferredUploads": 0,
+          "pendingSurfaces": 0
+        },
+        "gltfSharedGeometry": {
+          "pendingPreparationTasks": 0,
+          "preparedTaskBytes": 3720,
+          "preparedTasks": 1,
+          "preparationTaskClaims": 1,
+          "primitiveClaims": 1,
+          "retainedBytes": 3720,
+          "reusedClaims": 0,
+          "reusedPreparationClaims": 0,
+          "taskProducerPreparationDurationMs": 411.0999999642372,
+          "uniqueGeometries": 1
+        },
+        "gltfSourceReads": {
+          "activeReads": 0,
+          "queuedReads": 0,
+          "sourceReservationLimit": 64,
+          "sourceReservations": 0,
+          "stagedBytes": 0,
+          "stagedByteThreshold": 33554432
+        },
+        "imageTexturePreparation": {
+          "activePreparations": 0,
+          "browserStageTimings": {
+            "sourceCount": 3,
+            "totals": {
+              "decodeDurationMs": 226.79999995231628,
+              "decodeQueueDurationMs": 0.3999999761581421,
+              "transportDurationMs": 132.4000000357628,
+              "transportQueueDurationMs": 1.4999999403953552
+            }
+          },
+          "decodedHandoffBytes": 0,
+          "decodedHandoffThresholdBytes": 67108864,
+          "encodedSourceReads": {
+            "activeReads": 0,
+            "queuedReads": 0,
+            "sourceReservationLimit": 128,
+            "sourceReservations": 0,
+            "stagedBytes": 0,
+            "stagedByteThreshold": 33554432
+          },
+          "pendingStorageRepresentations": 0,
+          "retainedEncodedSourceBytes": 0,
+          "sourceReservationLimit": 64,
+          "sourceReservations": 0
+        },
+        "imageTextureUploads": {
+          "admittedBytes": 0,
+          "budgetBytes": 33554432,
+          "deferredUploads": 0
+        },
+        "imageTextures": {
+          "compressedBytes": 0,
+          "compressedTextures": 0,
+          "fittedTextures": 0,
+          "residentBytes": 29999204,
+          "residentTextures": 3
+        },
+        "persistentGpu": {
+          "budgetBytes": 268435456,
+          "deniedClaims": 0,
+          "retainedBytes": 30282772
+        },
+        "virtualTextures": {
+          "admittedUploadBytes": 0,
+          "atlasBytes": 278784,
+          "atlasPools": 1,
+          "atlasGrowthFailures": 0,
+          "desiredPages": 3,
+          "admittedPages": 3,
+          "unresidentPages": 0,
+          "automaticCandidates": 2,
+          "automaticDecodedBytes": 11231232,
+          "automaticIneligible": 1,
+          "automaticResources": 1,
+          "automaticWaiting": 0,
+          "deferredUploads": 0,
+          "failedPages": 0,
+          "pageRequests": 3,
+          "pendingPages": 0,
+          "pendingPageBytes": 0,
+          "pendingPageByteLimit": 16777216,
+          "residentPages": 3,
+          "uploadedPages": 3,
+          "uploadBudgetBytes": 33554432
+        }
+      }
+    }
+  }
+}
