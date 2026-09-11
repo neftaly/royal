@@ -120,8 +120,15 @@ vec3 brdfContribution(
   vec3 diffuseColor,
   float normalView,
   float alphaSquared
+#ifdef LARGE_LIGHT_ZERO_REJECTION
+  , float lightWeight
+#endif
 ) {
   float normalLight = max(dot(normal, lightDirection), 0.0);
+#ifdef LARGE_LIGHT_ZERO_REJECTION
+  // Reuse the BRDF early return; loop-level continue regresses dense lighting.
+  normalLight *= float(lightWeight != 0.0);
+#endif
   if (normalLight <= 0.0) return vec3(0.0);
   vec3 halfwayInput = lightDirection + viewDirection;
   vec3 halfway = dot(halfwayInput, halfwayInput) <= 0.00000001
@@ -235,6 +242,9 @@ void main() {
       diffuseColor,
       normalView,
       alphaSquared
+#ifdef LARGE_LIGHT_ZERO_REJECTION
+      , 1.0
+#endif
     ) * directionalLightColors[index].rgb;
   }
 #endif
@@ -267,6 +277,9 @@ void main() {
       diffuseColor,
       normalView,
       alphaSquared
+#ifdef LARGE_LIGHT_ZERO_REJECTION
+      , attenuation
+#endif
     ) * punctualLightColors[index].rgb * attenuation;
   }
 #endif

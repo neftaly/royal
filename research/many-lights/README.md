@@ -320,3 +320,111 @@ research tab, navigate only that tab and close it afterward, including on
 failure. They fail if the browser cannot create a target; they never fall back
 to an existing tab. Cleanup verifies closure and reports failures. Externally
 connected browsers remain running.
+
+## Equal-count mode overhead and zero-contribution rejection
+
+The follow-up `light-rejection.ts` uses the complete opaque material shader to
+compare the existing large-light texture transport, an experimental early exit
+for exactly zero local-light contribution, and exact-count uniform shaders for
+counts up to 16. Uniform counts above the shipping small-path limits are research
+comparators only. No production rendering behavior changes in this experiment.
+
+Both physical devices pass 44 local-light and 15 directional comparisons at
+512×512 without MSAA. Texture/reference versus rejection pixels are identical;
+uniform comparisons differ by at most one channel value. Nine samples of eight
+draws measure submission-to-fence completion divided by eight, not application
+frame time. Mode order alternates by count, not by sample. Timer quantization,
+fixed within-case order and short runs limit close comparisons.
+
+At five directional lights, the existing texture and forced uniform paths are
+both about 1.05 ms on Quest and 0.625 ms on iPad. Four/eight dense point lights are
+also similar across transports. These fixtures provide no evidence of a large
+performance cliff caused solely by crossing the lazy-path threshold. They do not
+measure first-load network or shader-compilation latency.
+
+For 256 lights, the experimental range/cone rejection gives these completion
+medians (ms/draw):
+
+| Device / distribution | Existing | Rejection |
+| --- | ---: | ---: |
+| iPad sparse bounded | 9.375 | 4.000 |
+| Quest sparse bounded | 18.463 | 7.188 |
+| iPad dense unbounded | 9.250 | 9.250 |
+| Quest dense unbounded | 18.463 | 20.063 |
+| iPad spot | 12.125 | 9.250 |
+| Quest spot | 23.075 | 14.350 |
+
+The sparse improvement is promising, but the roughly 9% dense Quest regression
+means the rejection shader is not adopted universally. The production shader is
+unchanged. Spatial lists remain the next larger opportunity for bounded lights;
+directional and unbounded lights still require their contributions to be shaded.
+
+Evidence: [iPad local](ipad-light-rejection-results.json),
+[Quest local](quest-light-rejection-results.json),
+[iPad directional](ipad-light-threshold-results.json),
+[Quest directional](quest-light-threshold-results.json).
+
+Build with `node research/many-lights/build-light-rejection.mjs`. Set
+`LIGHTS_INLINE_FILE=/tmp/royal-light-rejection/probe.js` for the existing device
+runners. Local comparisons use
+`LIGHTS_OPTIONS='{"size":512,"counts":[4,8,16,256],"samples":9,"batch":8}'`;
+directional comparisons use
+`LIGHTS_OPTIONS='{"size":512,"counts":[4,5,8,9,16],"kinds":["directional"],"samples":9,"batch":8}'`.
+Use a separate `LIGHTS_REPORT` destination for each run. The research build and
+research TypeScript check pass. Review confirmed that the candidate only skips
+contributions already zero under the existing attenuation formula, retains
+missing-range lights, and does not alter production or small-scene shaders.
+
+## Dense-regression follow-up: integrated scalar gate
+
+The subsequent fix uses a zero attenuation value to mask `normalLight` to zero
+inside the existing BRDF early-return test. It adds no loop `continue`, keeps
+light order and accumulation unchanged, and passes a constant one for directional
+lights. The lazy adapter defines `LARGE_LIGHT_ZERO_REJECTION`; small-light shaders
+compile the added blocks out. Removing those blocks reproduces the committed
+pre-change shader byte-for-byte, also preserving the benchmark's old reference.
+
+This is a more conservative optimization than the original rejection experiment.
+It reduces, but does not universally eliminate, its dense-scene cost. The exact
+integrated shader versus the pre-change reference measured:
+
+| Device / 256 lights | MSAA | Reference | Integrated | Change |
+| --- | --- | ---: | ---: | ---: |
+| Quest dense unbounded | off | 18.063 | 18.513 | +2.5% |
+| Quest dense unbounded | on | 18.463 | 18.475 | approximately unchanged |
+| Quest dense bounded | on | 18.488 | 18.463 | approximately unchanged |
+| Quest sparse bounded | on | 18.488 | 15.387 | -16.8% |
+| Quest spot | on | 23.087 | 18.475 | -20.0% |
+| iPad dense unbounded | on | 275.0 | 276.5 | +0.5% |
+| iPad dense bounded | on | 275.0 | 275.0 | unchanged |
+| iPad sparse bounded | on | 275.5 | 274.0 | -0.5% |
+
+Values are 512×512 batched fence completion normalized by submitted draws.
+Quest uses ten samples/batches of eight; iPad uses six samples/batches of two.
+Mode order rotates within every sample. Compare modes within the same run;
+absolute normalized values vary substantially with batching and do not represent
+application frame time. The iPad gain is marginal and the remaining 2.5% Quest
+non-MSAA dense cost is not described as a complete regression elimination.
+
+Both final 16-case device matrices have zero pixel differences. Earlier broader
+60-case matrices per device covered mixed and dense-spot scenes for the BRDF
+predicate candidate; those are exploratory evidence, not validation of the final
+scalar gate. Other candidates included a guarded call, combined BRDF predicate,
+explicit weight early return, masked direction and a per-light function. The
+larger sparse gains retained larger dense regressions; they remain research only.
+The results are saved under `*-rejection-*-results.json`, with final evidence in
+[iPad integrated results](ipad-rejection-production-results.json) and
+[Quest integrated results](quest-rejection-production-results.json).
+
+Reproduce the final probe with `variants:["reference","production"]`,
+`counts:[256]`, `kinds:["dense","dense-bounded","sparse","spot"]` and
+`antialiasModes:[false,true]` in `LIGHTS_OPTIONS`, using the build and device
+runners above. Previous variants remain available for comparison. Inputs require
+an explicit original reference and reject unknown variant names.
+
+Verification: 53 targeted tests, 21 built-package integration cases, 48 material
+comparisons, package build, lint, research typecheck and bundle-size gate pass.
+The bundle budget records a 100-byte gzip allowance for this change. The follow-up
+review checked exact-zero behavior, directional calls, disabled small-path blocks,
+compressed production shader compilation and truthful benchmark baselines. The
+remaining dense cost and lack of a useful iPad speedup are known limitations.

@@ -82,3 +82,14 @@ failure. The second review covered upload rollback, retry recovery, target
 ownership, attachment failures and cleanup races; no further actionable
 findings remain in these fixes. Physical devices were not rerun for this
 follow-up; the earlier measurements above remain historical evidence.
+
+## Zero-contribution performance follow-up
+
+The integrated scalar gate replaces the experimental loop-level rejection with
+reuse of the existing BRDF early return. It preserves reference pixels and the
+small-light shader; the built-package and full material comparisons pass. The
+review found no new correctness issue in the integrated change. Performance is
+a tradeoff: about 17–20% faster sparse/spot Quest shading in the final MSAA
+fixture, negligible iPad gain, and approximately 2.5% residual non-MSAA dense
+Quest overhead. README.md records final and rejected-candidate evidence; no claim
+of universal dense-regression elimination or application frame rate is made.

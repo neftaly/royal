@@ -1,0 +1,533 @@
+{
+  "date": "2026-09-11T03:49:18.446Z",
+  "userAgent": "Mozilla/5.0 (iPad; CPU OS 17_7_11 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+  "size": 512,
+  "batch": 2,
+  "samples": 6,
+  "kinds": [
+    "dense",
+    "dense-bounded",
+    "sparse",
+    "spot"
+  ],
+  "variants": [
+    "reference",
+    "production"
+  ],
+  "sampleOrder": "rotated each sample",
+  "source": "Full Royal opaque shader; same-count zero-attenuation rejection versus existing texture path; no scene traversal",
+  "results": [
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 38.5,
+        "p95": 39.50000000000023,
+        "samples": [
+          36.5,
+          37.50000000000023,
+          38.5,
+          39.5,
+          38,
+          39.50000000000023
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.5,
+        "samples": [
+          0,
+          0.5,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense",
+      "count": 256,
+      "mode": "production",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 37.5,
+        "p95": 38,
+        "samples": [
+          37,
+          37.5,
+          35.99999999999977,
+          36.5,
+          38,
+          38
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense-bounded",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 37.499999999999545,
+        "p95": 38.5,
+        "samples": [
+          37.000000000000455,
+          37.5,
+          37,
+          38.5,
+          37.499999999999545,
+          37
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.5,
+        "samples": [
+          0,
+          0.5,
+          0,
+          0.49999999999954525,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense-bounded",
+      "count": 256,
+      "mode": "production",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 37.500000000000455,
+        "p95": 39,
+        "samples": [
+          37,
+          37.5,
+          39,
+          37.500000000000455,
+          37.000000000000455,
+          38.499999999999545
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.49999999999954525,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.49999999999954525
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "sparse",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 37.49999999999909,
+        "p95": 39,
+        "samples": [
+          37.49999999999909,
+          36.99999999999909,
+          37,
+          38,
+          39,
+          37
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "sparse",
+      "count": 256,
+      "mode": "production",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 37,
+        "p95": 38.5,
+        "samples": [
+          34.5,
+          36.50000000000091,
+          37,
+          36.5,
+          38,
+          38.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "spot",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 48.5,
+        "p95": 49,
+        "samples": [
+          47.00000000000091,
+          48.99999999999909,
+          49,
+          47.50000000000091,
+          48,
+          48.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.5,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.5
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "spot",
+      "count": 256,
+      "mode": "production",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 48,
+        "p95": 49.5,
+        "samples": [
+          46.99999999999909,
+          47.50000000000091,
+          49.5,
+          47,
+          48.99999999999909,
+          48
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 275,
+        "p95": 277,
+        "samples": [
+          276.4999999999991,
+          272.9999999999982,
+          277,
+          274.5000000000018,
+          272.9999999999982,
+          275
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense",
+      "count": 256,
+      "mode": "production",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 276.5,
+        "p95": 277,
+        "samples": [
+          276.5,
+          275.5000000000018,
+          273.5,
+          277,
+          276.5000000000018,
+          275.9999999999982
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.499999999998181,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.499999999998181
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense-bounded",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 275,
+        "p95": 276.9999999999982,
+        "samples": [
+          276.9999999999982,
+          274.5,
+          275,
+          276.5,
+          274,
+          275
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense-bounded",
+      "count": 256,
+      "mode": "production",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 275,
+        "p95": 276,
+        "samples": [
+          276,
+          273.5,
+          275,
+          275.5,
+          274.5000000000018,
+          274.4999999999982
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "sparse",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 275.5,
+        "p95": 277.5,
+        "samples": [
+          276,
+          275.5,
+          277.5,
+          274.5,
+          275,
+          274
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.500000000003638,
+        "samples": [
+          0,
+          0.500000000003638,
+          0,
+          0,
+          0.5,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "sparse",
+      "count": 256,
+      "mode": "production",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 274,
+        "p95": 275,
+        "samples": [
+          275,
+          274.5,
+          273.5,
+          273.5,
+          274,
+          273
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "spot",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 364,
+        "p95": 364.5,
+        "samples": [
+          363.50000000000364,
+          363.00000000000364,
+          364,
+          364.5,
+          364,
+          363.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "spot",
+      "count": 256,
+      "mode": "production",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 364.5,
+        "p95": 365,
+        "samples": [
+          364.99999999999636,
+          365,
+          362.50000000000364,
+          363.99999999999636,
+          361.5,
+          364.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  ]
+}

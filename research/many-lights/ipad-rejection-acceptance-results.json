@@ -1,0 +1,2423 @@
+{
+  "date": "2026-09-11T03:42:17.633Z",
+  "userAgent": "Mozilla/5.0 (iPad; CPU OS 17_7_11 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+  "size": 512,
+  "batch": 4,
+  "samples": 10,
+  "kinds": [
+    "dense",
+    "dense-bounded",
+    "dense-spot",
+    "mixed",
+    "sparse",
+    "spot"
+  ],
+  "variants": [
+    "reference",
+    "brdf-gate"
+  ],
+  "sampleOrder": "rotated each sample",
+  "source": "Full Royal opaque shader; same-count zero-attenuation rejection versus existing texture path; no scene traversal",
+  "results": [
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense",
+      "count": 16,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 3.75,
+        "p95": 4.750000000000114,
+        "samples": [
+          3.5,
+          3.75,
+          3.5,
+          3.75,
+          3.5,
+          3.75,
+          4.25,
+          4.5,
+          4.75,
+          4.750000000000114
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense",
+      "count": 16,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 3.7499999999998863,
+        "p95": 4.749999999999886,
+        "samples": [
+          3.5,
+          3.7499999999998863,
+          3.5,
+          3.5,
+          3.4999999999998863,
+          3.25,
+          4.5,
+          4.25,
+          3.75,
+          4.749999999999886
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense",
+      "count": 16,
+      "mode": "uniform16",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 7.75,
+        "p95": 8.25,
+        "samples": [
+          7.000000000000114,
+          5.75,
+          7,
+          7.750000000000114,
+          7.75,
+          7,
+          7.75,
+          8.25,
+          8.25,
+          8
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18.749999999999773,
+        "p95": 19,
+        "samples": [
+          18.25,
+          18.25,
+          18.500000000000227,
+          18.75,
+          18.75,
+          18.5,
+          18.5,
+          18.750000000000227,
+          18.749999999999773,
+          19
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.25
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense",
+      "count": 256,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18.75,
+        "p95": 19,
+        "samples": [
+          18.25,
+          18.5,
+          18.999999999999773,
+          19,
+          17.75,
+          18.5,
+          18.75,
+          18.5,
+          18.75,
+          18.75
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense-bounded",
+      "count": 16,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 2.75,
+        "p95": 3.5,
+        "samples": [
+          3.5,
+          2.25,
+          2.25,
+          2.5,
+          2.75,
+          3,
+          2.25,
+          2.75,
+          3.25,
+          3
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense-bounded",
+      "count": 16,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 2.75,
+        "p95": 3.75,
+        "samples": [
+          3.75,
+          3.5,
+          2.5,
+          2.75,
+          2.5,
+          2.25,
+          2.75,
+          2.5,
+          3.75,
+          3.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0.25,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense-bounded",
+      "count": 16,
+      "mode": "uniform16",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 5.75,
+        "p95": 7,
+        "samples": [
+          6.5,
+          7,
+          5.75,
+          5.75,
+          5.75,
+          5.5,
+          4.5,
+          5.25,
+          5.25,
+          6.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense-bounded",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18.500000000000455,
+        "p95": 19.5,
+        "samples": [
+          18.249999999999545,
+          17.5,
+          18.5,
+          19.5,
+          18.75,
+          18.500000000000455,
+          18.5,
+          18.75,
+          18.750000000000455,
+          18.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense-bounded",
+      "count": 256,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18.749999999999545,
+        "p95": 19.25,
+        "samples": [
+          18.5,
+          18.25,
+          18.5,
+          19,
+          19.25,
+          18.25,
+          18.749999999999545,
+          19,
+          18.749999999999545,
+          18.75
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.24999999999954525,
+          0.25,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense-spot",
+      "count": 16,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 4.750000000000455,
+        "p95": 6,
+        "samples": [
+          4.750000000000455,
+          4.500000000000455,
+          5.000000000000455,
+          5.5,
+          3.5,
+          3.75,
+          4.25,
+          6,
+          3.9999999999995453,
+          5.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.2500000000009095,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.2500000000009095
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense-spot",
+      "count": 16,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 5.25,
+        "p95": 5.75,
+        "samples": [
+          5.5,
+          3.4999999999995453,
+          4.499999999999545,
+          4.749999999999545,
+          4.750000000000455,
+          5,
+          5.25,
+          5.75,
+          5.500000000000455,
+          5.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.25
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense-spot",
+      "count": 16,
+      "mode": "uniform16",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 7.25,
+        "p95": 8,
+        "samples": [
+          8,
+          7.25,
+          6.999999999999545,
+          7.500000000000455,
+          7.25,
+          6.999999999999545,
+          8,
+          7.25,
+          7.25,
+          7.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense-spot",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 23.75000000000091,
+        "p95": 24.75,
+        "samples": [
+          23.75000000000091,
+          24.24999999999909,
+          24.75,
+          24.5,
+          23.25,
+          23.5,
+          24.5,
+          23.50000000000091,
+          23.25,
+          23.49999999999909
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.25,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "dense-spot",
+      "count": 256,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 24.24999999999909,
+        "p95": 24.50000000000091,
+        "samples": [
+          24.24999999999909,
+          24.50000000000091,
+          24.5,
+          23,
+          23.5,
+          24.5,
+          23.25,
+          24,
+          24.49999999999909,
+          23.50000000000091
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.2499999999990905,
+        "samples": [
+          0.2499999999990905,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "mixed",
+      "count": 16,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 4.5,
+        "p95": 4.75,
+        "samples": [
+          4.75,
+          3.5,
+          4.75,
+          4.75,
+          4.2500000000009095,
+          3.5,
+          4.75,
+          4.5,
+          4,
+          4.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "mixed",
+      "count": 16,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 4,
+        "p95": 4.5,
+        "samples": [
+          3.5,
+          4.5,
+          4,
+          3.7500000000009095,
+          3.5,
+          4.5,
+          4.5,
+          3.75,
+          3.75,
+          4.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "mixed",
+      "count": 16,
+      "mode": "uniform16",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 7.7499999999990905,
+        "p95": 8.25,
+        "samples": [
+          8,
+          8,
+          8,
+          7.7499999999990905,
+          7,
+          7.7499999999990905,
+          7.5,
+          7.5,
+          8.25,
+          7.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "mixed",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18.75,
+        "p95": 19,
+        "samples": [
+          18.25,
+          18.75000000000091,
+          18.49999999999909,
+          19,
+          18.75,
+          18.75,
+          17.25,
+          17.75,
+          18.75,
+          18.75
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0.25,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "mixed",
+      "count": 256,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18,
+        "p95": 18.75,
+        "samples": [
+          18.25,
+          17.75,
+          18.75,
+          17.75,
+          17.75000000000091,
+          18.74999999999909,
+          18,
+          17.5,
+          17.75,
+          18
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.25,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "sparse",
+      "count": 16,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 3,
+        "p95": 4.25,
+        "samples": [
+          3.5,
+          2.4999999999990905,
+          2.25,
+          2.5,
+          2.5,
+          3.0000000000009095,
+          2.75,
+          4.25,
+          3,
+          4.2499999999990905
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "sparse",
+      "count": 16,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 3.25,
+        "p95": 4.25,
+        "samples": [
+          3.75,
+          3.25,
+          2.25,
+          3.5,
+          2.25,
+          2.4999999999990905,
+          3.5000000000009095,
+          3,
+          3.0000000000009095,
+          4.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0.25,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "sparse",
+      "count": 16,
+      "mode": "uniform16",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 5.25,
+        "p95": 7,
+        "samples": [
+          7,
+          6.7500000000009095,
+          5.75,
+          5,
+          4.75,
+          5.25,
+          5.2499999999990905,
+          5.25,
+          5.25,
+          6.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "sparse",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18.74999999999818,
+        "p95": 19.00000000000091,
+        "samples": [
+          18.25,
+          17.99999999999818,
+          19.00000000000091,
+          18.74999999999818,
+          18.5,
+          18.5,
+          19,
+          18,
+          18.75,
+          18.75
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.25,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "sparse",
+      "count": 256,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18.25,
+        "p95": 19.5,
+        "samples": [
+          18.25,
+          18.75000000000091,
+          19.5,
+          18.75000000000182,
+          17.5,
+          17.75,
+          17.75,
+          18.75,
+          17.5,
+          17.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "spot",
+      "count": 16,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 4.5,
+        "p95": 4.75,
+        "samples": [
+          3.75,
+          4.5,
+          4.5,
+          4.5,
+          4.25,
+          4,
+          4.499999999998181,
+          3.5,
+          4.75,
+          4.75
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "spot",
+      "count": 16,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 5,
+        "p95": 5.5,
+        "samples": [
+          4.5,
+          4.5,
+          4.75,
+          5,
+          5.25,
+          4.250000000001819,
+          5,
+          4.749999999998181,
+          5.5,
+          5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "spot",
+      "count": 16,
+      "mode": "uniform16",
+      "maxDifference": 1,
+      "completionMs": {
+        "median": 7.250000000001819,
+        "p95": 8.5,
+        "samples": [
+          7,
+          7,
+          7.25,
+          7,
+          7.75,
+          6.5,
+          7.250000000001819,
+          7.5,
+          7.75,
+          8.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "spot",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 24.5,
+        "p95": 25.25000000000182,
+        "samples": [
+          24,
+          25.25000000000182,
+          24.24999999999818,
+          24.5,
+          23.25,
+          24.75,
+          23.5,
+          24.5,
+          24.75000000000182,
+          23.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.25,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "spot",
+      "count": 256,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 23.75000000000182,
+        "p95": 24.25,
+        "samples": [
+          23.75000000000182,
+          24.24999999999818,
+          24,
+          24.25,
+          23.75,
+          24,
+          23.5,
+          23.5,
+          23.49999999999818,
+          23.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0.25,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense",
+      "count": 16,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18.5,
+        "p95": 18.75000000000182,
+        "samples": [
+          18.25,
+          18.75,
+          18.5,
+          18.75,
+          18.5,
+          18.75000000000182,
+          18,
+          18.5,
+          18.5,
+          18.75
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0.25,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense",
+      "count": 16,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18.75,
+        "p95": 19.25,
+        "samples": [
+          18.25,
+          18.5,
+          19.25,
+          19,
+          18.75,
+          19,
+          18.5,
+          18.5,
+          18.5,
+          18.75
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense",
+      "count": 16,
+      "mode": "uniform16",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 30.25,
+        "p95": 30.75,
+        "samples": [
+          29.75,
+          30.75,
+          30.25,
+          30,
+          30.5,
+          30.25,
+          30.75,
+          30.25,
+          30.25,
+          30
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.250000000001819,
+        "samples": [
+          0,
+          0.250000000001819,
+          0.250000000001819,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 273.7499999999982,
+        "p95": 274.4999999999982,
+        "samples": [
+          274.4999999999982,
+          273.5,
+          272.75,
+          274,
+          273.7499999999982,
+          272.7500000000018,
+          273.7499999999982,
+          273.25,
+          273.25,
+          273.99999999999636
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0.249999999998181,
+          0.25,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense",
+      "count": 256,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 273.75,
+        "p95": 275.0000000000018,
+        "samples": [
+          275.0000000000018,
+          273.4999999999982,
+          274.7500000000018,
+          273.7499999999982,
+          273.75,
+          273.25,
+          274.5,
+          273.75,
+          273.5,
+          274.00000000000364
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.25,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense-bounded",
+      "count": 16,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18.75,
+        "p95": 19.5,
+        "samples": [
+          18.25,
+          18.25,
+          19.5,
+          18.249999999996362,
+          18.75,
+          19,
+          18.25,
+          18.75,
+          19.25,
+          18.75
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense-bounded",
+      "count": 16,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 19.25,
+        "p95": 19.749999999996362,
+        "samples": [
+          18.75,
+          19.25,
+          19.250000000003638,
+          18.5,
+          19.749999999996362,
+          18.25,
+          19.25,
+          19.5,
+          18.75,
+          19.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense-bounded",
+      "count": 16,
+      "mode": "uniform16",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 30.250000000003638,
+        "p95": 31,
+        "samples": [
+          30.75,
+          31,
+          29.5,
+          30.250000000003638,
+          29.75,
+          30.5,
+          29.75,
+          29.75,
+          30.25,
+          30.75
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense-bounded",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 273.75,
+        "p95": 274.75,
+        "samples": [
+          274.25,
+          273,
+          273.25,
+          273.5,
+          273.75,
+          274.5,
+          273.5,
+          273.75,
+          274.25,
+          274.75
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.25,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense-bounded",
+      "count": 256,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 273.75000000000364,
+        "p95": 274.5,
+        "samples": [
+          273.75,
+          274.25,
+          274,
+          274.5,
+          273.75000000000364,
+          273.74999999999636,
+          273.75,
+          273.25,
+          273.75000000000364,
+          273.99999999999636
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense-spot",
+      "count": 16,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 24,
+        "p95": 24.75,
+        "samples": [
+          24,
+          24,
+          23.250000000003638,
+          23.25,
+          23.25,
+          23.5,
+          24.5,
+          24.5,
+          24.75,
+          24
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense-spot",
+      "count": 16,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 24,
+        "p95": 24.75,
+        "samples": [
+          24,
+          24.5,
+          23.249999999996362,
+          23.25,
+          23.25,
+          23.75,
+          24.25,
+          23.5,
+          24.75,
+          24.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense-spot",
+      "count": 16,
+      "mode": "uniform16",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 30.25,
+        "p95": 30.5,
+        "samples": [
+          30.25,
+          30.25,
+          30.25,
+          30,
+          30.25,
+          30.25,
+          30,
+          30.25,
+          30.25,
+          30.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense-spot",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 362.75,
+        "p95": 365,
+        "samples": [
+          363,
+          362.25,
+          365,
+          362.75,
+          362,
+          363.75,
+          363,
+          362.25,
+          362.25,
+          361.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "dense-spot",
+      "count": 256,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 362.7499999999927,
+        "p95": 364,
+        "samples": [
+          363,
+          362.5,
+          362.5,
+          364,
+          361.75,
+          362.75,
+          362,
+          362,
+          362.7500000000073,
+          362.7499999999927
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.5,
+        "samples": [
+          0,
+          0.25,
+          0,
+          0.5,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "mixed",
+      "count": 16,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18.75,
+        "p95": 20.25,
+        "samples": [
+          18.25,
+          18.75,
+          18.75,
+          19,
+          18.25,
+          19,
+          20.25,
+          18.5,
+          19.25,
+          18.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "mixed",
+      "count": 16,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18.5,
+        "p95": 19.25,
+        "samples": [
+          18.5,
+          19,
+          19.25,
+          19,
+          18.5,
+          18.5,
+          18.25,
+          18.999999999992724,
+          18.5,
+          18
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0,
+          0.25,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "mixed",
+      "count": 16,
+      "mode": "uniform16",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 30.5,
+        "p95": 31.25,
+        "samples": [
+          29.5,
+          30.5,
+          30.75,
+          31.25,
+          30,
+          30.5,
+          30.250000000007276,
+          30.75,
+          30.75,
+          29.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0.25,
+          0.25,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "mixed",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 274,
+        "p95": 275.5,
+        "samples": [
+          273.5,
+          275.5,
+          273.5,
+          273.5,
+          273.75,
+          273.75,
+          275.5,
+          275.25,
+          274.25,
+          274
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.25
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "mixed",
+      "count": 256,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 272.25,
+        "p95": 273.25,
+        "samples": [
+          271.25,
+          273.25,
+          272.25,
+          271.5,
+          271.75,
+          272.25,
+          272.25,
+          271,
+          271.5000000000073,
+          273.2499999999927
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "sparse",
+      "count": 16,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 19,
+        "p95": 19.25,
+        "samples": [
+          17.999999999992724,
+          19.25,
+          18.5,
+          19.25,
+          19.25,
+          18.25,
+          19,
+          19,
+          18.749999999992724,
+          18.75
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0.25,
+          0,
+          0,
+          0.25,
+          0,
+          0.25,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "sparse",
+      "count": 16,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 18.25,
+        "p95": 19.25,
+        "samples": [
+          18.25,
+          18.000000000007276,
+          19.25,
+          19,
+          17.75,
+          19,
+          18.25,
+          18.25,
+          19.25,
+          18.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "sparse",
+      "count": 16,
+      "mode": "uniform16",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 30,
+        "p95": 30.750000000007276,
+        "samples": [
+          30.5,
+          29.499999999992724,
+          30.5,
+          30,
+          30,
+          30,
+          30.5,
+          30,
+          30.750000000007276,
+          30
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.25,
+          0,
+          0.25,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "sparse",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 273.7500000000073,
+        "p95": 275.25,
+        "samples": [
+          273.75,
+          274.25,
+          275.25,
+          273.2499999999927,
+          273.25,
+          274.75,
+          273.5,
+          273.75,
+          273.7500000000073,
+          274
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "sparse",
+      "count": 256,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 271.75,
+        "p95": 272.5,
+        "samples": [
+          271.5,
+          272.5,
+          270.75,
+          270.2500000000073,
+          271.75,
+          272.25,
+          270.75,
+          272.25,
+          271.2499999999927,
+          272
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.25,
+          0,
+          0.25
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "spot",
+      "count": 16,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 24.250000000007276,
+        "p95": 25,
+        "samples": [
+          24.25,
+          24.250000000007276,
+          23.749999999992724,
+          25,
+          24.25,
+          24.5,
+          23.75,
+          24.749999999992724,
+          24.25,
+          24.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "spot",
+      "count": 16,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 24,
+        "p95": 24.75,
+        "samples": [
+          23,
+          23,
+          24.5,
+          24.5,
+          24.000000000007276,
+          23.5,
+          24,
+          24,
+          24.75,
+          23.75
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "spot",
+      "count": 16,
+      "mode": "uniform16",
+      "maxDifference": 1,
+      "completionMs": {
+        "median": 30.25,
+        "p95": 30.5,
+        "samples": [
+          29.75,
+          29.75,
+          29.75,
+          30,
+          30.249999999992724,
+          30.25,
+          30.25,
+          30.250000000007276,
+          30.5,
+          30.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "spot",
+      "count": 256,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 363,
+        "p95": 364.5,
+        "samples": [
+          362.5000000000073,
+          363,
+          363.25,
+          363.5,
+          361.75,
+          363,
+          362.25,
+          364.5,
+          363.0000000000073,
+          361.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.25,
+        "samples": [
+          0,
+          0.25,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "spot",
+      "count": 256,
+      "mode": "brdf-gate",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 361.7499999999927,
+        "p95": 362.2499999999927,
+        "samples": [
+          361.2499999999927,
+          361,
+          361.75,
+          360.75,
+          362,
+          361.5,
+          362.0000000000073,
+          361.7499999999927,
+          362.2499999999927,
+          360.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.24999999999272404,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.24999999999272404,
+          0,
+          0
+        ]
+      }
+    }
+  ]
+}

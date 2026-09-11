@@ -1,0 +1,583 @@
+{
+  "date": "2026-09-11T03:23:00.265Z",
+  "userAgent": "Mozilla/5.0 (iPad; CPU OS 17_7_11 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+  "size": 512,
+  "batch": 8,
+  "samples": 9,
+  "kinds": [
+    "directional"
+  ],
+  "source": "Full Royal opaque shader; same-count zero-attenuation rejection versus existing texture path; no scene traversal",
+  "results": [
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 4,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 0.625,
+        "p95": 1.125,
+        "samples": [
+          0.75,
+          0.625,
+          1.125,
+          0.625,
+          0.5,
+          0.625,
+          0.625,
+          0.625,
+          0.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.125,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.125,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 4,
+      "mode": "reject",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 0.625,
+        "p95": 0.875,
+        "samples": [
+          0.875,
+          0.625,
+          0.6250000000000568,
+          0.6249999999999432,
+          0.625,
+          0.625,
+          0.75,
+          0.625,
+          0.625
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 4,
+      "mode": "uniform4",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 0.625,
+        "p95": 1.125,
+        "samples": [
+          0.75,
+          0.625,
+          0.625,
+          1.125,
+          0.6250000000000568,
+          0.6249999999999432,
+          0.625,
+          0.625,
+          0.6250000000000568
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 5,
+      "mode": "reject",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 0.625,
+        "p95": 1.25,
+        "samples": [
+          1.25,
+          0.625,
+          0.625,
+          0.625,
+          0.625,
+          0.75,
+          0.7500000000000568,
+          0.49999999999994316,
+          0.625
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.125,
+        "samples": [
+          0.125,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 5,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 0.625,
+        "p95": 1.125,
+        "samples": [
+          1.125,
+          0.625,
+          0.625,
+          0.625,
+          0.6250000000001137,
+          0.7499999999998863,
+          0.625,
+          0.5000000000001137,
+          0.8749999999998863
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 5,
+      "mode": "uniform5",
+      "maxDifference": 1,
+      "completionMs": {
+        "median": 0.625,
+        "p95": 1.125,
+        "samples": [
+          0.625,
+          0.75,
+          0.625,
+          0.625,
+          1.125,
+          0.625,
+          1.125,
+          0.625,
+          0.75
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.2500000000001137,
+        "samples": [
+          0,
+          0.2500000000001137,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 8,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 1.1250000000001137,
+        "p95": 1.2500000000001137,
+        "samples": [
+          1.25,
+          1.125,
+          1.25,
+          0.625,
+          1.2500000000001137,
+          1.1249999999998863,
+          1.25,
+          1.125,
+          1.1250000000001137
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 8,
+      "mode": "reject",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 1.25,
+        "p95": 1.25,
+        "samples": [
+          1.25,
+          1.25,
+          1.25,
+          1.125,
+          1.25,
+          1.125,
+          1.25,
+          1.1250000000001137,
+          1.1249999999998863
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.125,
+        "samples": [
+          0.125,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 8,
+      "mode": "uniform8",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 1.1250000000002274,
+        "p95": 1.25,
+        "samples": [
+          1.125,
+          1.25,
+          1.125,
+          1.25,
+          1.25,
+          1.125,
+          1.125,
+          1.25,
+          1.1250000000002274
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 9,
+      "mode": "reject",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 1.125,
+        "p95": 1.2500000000002274,
+        "samples": [
+          1.125,
+          1.125,
+          1.2500000000002274,
+          1.2499999999997726,
+          1.25,
+          1.125,
+          1.125,
+          1.125,
+          1.125
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 9,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 1.125,
+        "p95": 1.375,
+        "samples": [
+          1.1250000000002274,
+          1.1249999999997726,
+          1.25,
+          1.125,
+          1.125,
+          1.375,
+          1.25,
+          1.125,
+          1.125
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 9,
+      "mode": "uniform9",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 1.125,
+        "p95": 1.2500000000002274,
+        "samples": [
+          1.125,
+          1.125,
+          1.25,
+          1.25,
+          1.125,
+          1.25,
+          1,
+          1.2500000000002274,
+          1.1249999999997726
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.125,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.125,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 16,
+      "mode": "reference",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 1.625,
+        "p95": 1.875,
+        "samples": [
+          1.625,
+          1.625,
+          1.375,
+          1.75,
+          1.75,
+          1.7500000000002274,
+          1.2499999999997726,
+          1.875,
+          1.25
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 16,
+      "mode": "reject",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 1.7499999999997726,
+        "p95": 2,
+        "samples": [
+          1.1249999999997726,
+          1.75,
+          1.1250000000002274,
+          2,
+          1.8749999999997726,
+          1.7500000000002274,
+          1.7499999999997726,
+          1.25,
+          1.125
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 16,
+      "mode": "uniform16",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 1.75,
+        "p95": 2,
+        "samples": [
+          1.7500000000002274,
+          1.7499999999997726,
+          1.75,
+          1.75,
+          1.75,
+          1.375,
+          2,
+          1.875,
+          1.625
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.125,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.125,
+          0
+        ]
+      }
+    }
+  ]
+}

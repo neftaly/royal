@@ -5,6 +5,10 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+- Skip zero-contribution large lights through the existing material early return,
+  avoiding the larger dense-scene cost of loop-level rejection. Small-light
+  shaders retain their existing path.
+
 - Add an automatic lazy texture path for up to 512 combined directional, point
   and spot lights, including imported instance lights. Small scenes retain the
   existing uniform path. The ceiling is finite and does not guarantee frame rate;

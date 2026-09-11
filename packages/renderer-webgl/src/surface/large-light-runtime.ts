@@ -133,5 +133,5 @@ vec4 punctualRecord(int index, int field) { return texelFetch(largeLightData, iv
     || !result.includes('index < largeLightCounts.x')
     || !result.includes('index < largeLightCounts.y')
     || /(?:directional|punctual)Light(?:Colors|Directions|Positions|SpotCones)\[/.test(result)) throw new Error('Large-light shader replacement failed');
-  return result;
+  return result.replace('#version 300 es', '#version 300 es\n#define LARGE_LIGHT_ZERO_REJECTION');
 };
