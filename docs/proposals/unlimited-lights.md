@@ -1,8 +1,13 @@
 # Unlimited authored lights
 
-Status: requested research proposal, 2026-09-11. No higher light limit or new
-lighting architecture is implemented. Current limits remain four directional
-lights and eight point/spot lights combined.
+Status: active implementation and research, 2026-09-11. The working branch adds a
+lazy global texture path with a finite 512-light combined ceiling. Royal 0.0.25
+still has the four-directional/eight-local limits. The unlimited architecture
+remains open; spatial acceleration is not integrated or accepted.
+
+See [device evidence and implementation review](../../research/many-lights/README.md)
+for physical A10 Safari and Quest 2 comparisons, exactness checks, lifecycle tests
+and remaining acceptance work.
 
 ## Goal and meaning of unlimited
 
@@ -35,16 +40,19 @@ If an optional split duplicates rendering ownership or harms correctness, a
 single shared implementation may be preferable. No lazy-loading requirement
 justifies dropping lights while the module prepares.
 
-## Current constraints to remove
+## Original constraints and current branch changes
 
-- `surface/scene-lowering.ts` validates four directional and eight local lights,
-  including imported lights expanded through model/instance transforms.
-- `surface/light-uniform-packing.ts` allocates fixed-size uniform arrays.
+- `surface/scene-lowering.ts` now validates 512 combined lights on the working
+  branch, including imported lights expanded through model/instance transforms.
+- `surface/light-uniform-packing.ts` retains the original small uniform arrays;
+  the lazy runtime owns larger texture storage.
 - `surface/surface-program-features.ts` packs exact directional/local counts into
   three/four bits. Simply raising the directional constant to eight corrupts
-  that representation by overlapping the local-light count field.
+  that representation by overlapping the local-light count field. The working
+  branch uses a separate large-light feature flag instead.
 - `surface/surface-program-owner.ts` specializes fragment shaders for exact counts;
-  `webgl/shaders/surface.frag` evaluates each light for each shaded fragment.
+  `webgl/shaders/surface.frag` evaluates each light for each shaded fragment. The
+  larger texture path keeps one count-independent shader family.
 - Render-object handles and bulk-instance updates retain bindings into light
   arrays. A new storage plan must preserve ownership and update semantics.
 
@@ -114,6 +122,27 @@ small-count path may be appropriate if it stays one coherent renderer with share
 material, resource and lifecycle ownership. Do not introduce Play-only light rules
 or require consumers to choose rendering architectures.
 
-API names, transport layout, allocation policy and any interim finite limit
-remain undecided. The next deliverable is comparative evidence and a reviewed
-architecture decision, not an arbitrary larger constant.
+The branch's automatic 512-light texture path is an intermediate implementation,
+not resolution of unbounded scene authoring. The next architecture decision is
+whether conservative spatial lists earn their CPU, upload and maintenance costs
+on representative scenes. Dense/global cost and explicit failure remain part of
+that decision.
+
+
+Physical acceptance now passes 326 cases on each A10 iPad and Quest 2, and both
+90-minute transport soaks retain exact parity. Full-renderer frame pacing on the
+A10 remains too slow for large globally shaded scenes. The finite path stays a
+draft: compare the measured two-block UBO alternative and integrate conservative
+spatial lists before treating 256+ as a practical real-time target. Actual tracked
+immersive acceptance is still outstanding; the connected headset's tracking
+prompt prevented its session request from completing.
+
+
+The factored conservative-list follow-up preserves every CSR entry and passes
+216 pixel comparisons on each device. At 512 sparse lights and a 16×16 grid,
+paired CPU medians improve from 146 to 11 ms on the iPad and 19.2 to 1.4 ms on
+Quest. This remains research code: include CPU workspace, view/motion caching,
+list-upload ownership and exact dense/global fallback before production adoption.
+Full-material transport tests do not show a broad enough UBO advantage to replace
+the common texture path, and removing inactive shader loops did not earn extra
+shader families. See the evidence report for separate methods and limitations.

@@ -18,7 +18,9 @@ export const SURFACE_FEATURE_PREFILTERED_ENVIRONMENT = 65536;
 export const SURFACE_FEATURE_VERTEX_COLOR = 131072;
 export const SURFACE_FEATURE_IDENTITY_TEXTURE_COORDINATES = 262144;
 export const SURFACE_FEATURE_ROTATED_ENVIRONMENT = 524288;
-// Bit 20 is intentionally free: exact packed light counts are also presence.
+export const SURFACE_FEATURE_LARGE_LIGHTS = 1048576;
+export const MAX_UNIFORM_DIRECTIONAL_LIGHTS = 4;
+export const MAX_UNIFORM_PUNCTUAL_LIGHTS = 8;
 export const SURFACE_FEATURE_ALPHA_BLEND = 2097152;
 export const SURFACE_FEATURE_VOLUME_MATERIAL = 4194304;
 export const SURFACE_FEATURE_VERTEX_NORMAL = 8388608;
@@ -28,11 +30,12 @@ const SURFACE_DIRECTIONAL_LIGHT_COUNT_MASK = 0b111;
 const SURFACE_PUNCTUAL_LIGHT_COUNT_SHIFT = 27;
 const SURFACE_PUNCTUAL_LIGHT_COUNT_MASK = 0b1111;
 
-/** Packs exact bounded light counts into the fragment-program identity. */
+/** Keeps exact small counts; larger scenes share one count-independent shader identity. */
 export const surfaceLightCountFeatureBits = (
   directionalLightCount: number,
   punctualLightCount: number,
-): number => (
+): number => directionalLightCount > MAX_UNIFORM_DIRECTIONAL_LIGHTS || punctualLightCount > MAX_UNIFORM_PUNCTUAL_LIGHTS
+  ? SURFACE_FEATURE_LARGE_LIGHTS : (
   (directionalLightCount << SURFACE_DIRECTIONAL_LIGHT_COUNT_SHIFT)
   | (punctualLightCount << SURFACE_PUNCTUAL_LIGHT_COUNT_SHIFT)
 );

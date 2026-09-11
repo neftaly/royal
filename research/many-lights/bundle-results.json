@@ -1,0 +1,23 @@
+{
+  "scope": "Isolated candidate lifecycle and lazy runtime, not an integrated Royal bundle delta",
+  "chunks": [
+    {
+      "file": "entry.js",
+      "entry": true,
+      "bytes": 2363,
+      "gzipBytes": 819,
+      "imports": [],
+      "dynamicImports": [
+        "large-light-runtime.js"
+      ]
+    },
+    {
+      "file": "large-light-runtime.js",
+      "entry": false,
+      "bytes": 4724,
+      "gzipBytes": 1694,
+      "imports": [],
+      "dynamicImports": []
+    }
+  ]
+}

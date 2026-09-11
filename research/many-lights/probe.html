@@ -1,0 +1,12 @@
+<!doctype html><meta name="viewport" content="width=device-width"><title>Royal many-light research</title><link rel="icon" href="data:,"><style>body{font:16px monospace;background:#222;color:white}canvas{width:min(90vw,768px)}pre{white-space:pre-wrap}</style><h1>Royal many-light research</h1><p id="status">Ready</p><script type="module">
+import { run } from './probe.mjs';
+window.runManyLights = run;
+if (new URLSearchParams(location.search).has('auto')) {
+ const query = new URLSearchParams(location.search);
+ run({samples:Number(query.get('samples')||9),size:Number(query.get('size')||256)}).then(async result => {
+  window.manyLightsResult=result;
+  document.querySelector('#status').textContent='Complete';
+  const pre=document.createElement('pre');pre.textContent=JSON.stringify(result,null,2);document.body.append(pre);
+ }).catch(error=>{window.manyLightsError=String(error.stack);document.querySelector('#status').textContent=error.stack;});
+}
+</script>

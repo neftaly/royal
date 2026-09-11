@@ -1,0 +1,3349 @@
+{
+  "date": "2026-09-10T14:51:45.329Z",
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/149.1.0.10.52.1018773329 Chrome/149.0.7827.197 VR Safari/537.36",
+  "size": 1024,
+  "samples": 9,
+  "batch": 4,
+  "orderSeed": 0,
+  "capabilities": {
+    "renderer": "Adreno (TM) 650",
+    "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+    "maxUniformBlockSize": 65536,
+    "maxFragmentUniformVectors": 256,
+    "maxFragmentUniformBlocks": 14,
+    "maxTextureUnits": 16,
+    "maxTextureSize": 8192,
+    "timerQuery": false
+  },
+  "source": "Royal 0.0.25 BRDF; research transport and orthographic fixture only",
+  "results": [
+    {
+      "count": 4,
+      "kind": "directional",
+      "mode": "texture",
+      "capacity": 4,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 256,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.02499999850988388,
+          0,
+          0,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 2.25,
+        "p95": 3.2000000029802322,
+        "samples": [
+          2.1750000044703484,
+          2.100000001490116,
+          2.1749999970197678,
+          3.2000000029802322,
+          3.1749999970197678,
+          2.25,
+          3.350000001490116,
+          3.1749999970197678,
+          2.1500000059604645
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "directional",
+      "mode": "uniform",
+      "capacity": 4,
+      "compileAndLinkMs": 2.5999999940395355,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 256,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.02499999850988388,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 3.149999998509884,
+        "p95": 3.1750000044703484,
+        "samples": [
+          2.3000000044703484,
+          3.1999999955296516,
+          2.149999998509884,
+          3.1750000044703484,
+          3.149999998509884,
+          3.1749999970197678,
+          2.1500000059604645,
+          2.2249999940395355,
+          3.1500000059604645
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "directional",
+      "mode": "tiled",
+      "capacity": 4,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 256,
+      "listBytes": 5120,
+      "listMs": 0.20000001788139343,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0.02499999850988388,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 2.225000001490116,
+        "p95": 3.2000000029802322,
+        "samples": [
+          2.125,
+          2.3250000029802322,
+          3.1999999955296516,
+          3.2000000029802322,
+          2.125,
+          2.149999998509884,
+          2.225000001490116,
+          2.149999998509884,
+          3.25
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "directional",
+      "mode": "ubo",
+      "capacity": 256,
+      "compileAndLinkMs": 4.299999982118607,
+      "uploadSubmissionMs": 0.6000000238418579,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0,
+          0.025000005960464478,
+          0,
+          0.02499999850988388,
+          0.02499999850988388,
+          0,
+          0,
+          0.02499999850988388,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 3.149999998509884,
+        "p95": 3.1750000044703484,
+        "samples": [
+          3.149999998509884,
+          3.2000000029802322,
+          2.125,
+          3.149999998509884,
+          2.125,
+          3.1750000044703484,
+          3.125,
+          2.100000001490116,
+          3.1749999970197678
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "sparse",
+      "mode": "texture",
+      "capacity": 4,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0.10000002384185791,
+      "lightBytes": 256,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.025000005960464478,
+        "samples": [
+          0.02499999850988388,
+          0.02499999850988388,
+          0.025000005960464478,
+          0,
+          0.025000005960464478,
+          0.05000000447034836,
+          0,
+          0,
+          0.02499999850988388
+        ]
+      },
+      "completionMs": {
+        "median": 3.1999999955296516,
+        "p95": 3.274999998509884,
+        "samples": [
+          3.149999998509884,
+          3.1999999955296516,
+          3.2000000029802322,
+          3.1749999970197678,
+          3.225000001490116,
+          3.274999998509884,
+          3.4000000059604645,
+          3.1999999955296516,
+          3.1750000044703484
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "sparse",
+      "mode": "uniform",
+      "capacity": 4,
+      "compileAndLinkMs": 2.5999999940395355,
+      "uploadSubmissionMs": 0,
+      "lightBytes": 256,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 3.1999999955296516,
+        "p95": 3.3000000044703484,
+        "samples": [
+          2.1749999970197678,
+          3.2000000029802322,
+          3.1999999955296516,
+          3.1750000044703484,
+          3.25,
+          3.3249999955296516,
+          3.1750000044703484,
+          3.1999999955296516,
+          3.3000000044703484
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "sparse",
+      "mode": "tiled",
+      "capacity": 4,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 256,
+      "listBytes": 5120,
+      "listMs": 0.7999999821186066,
+      "meanListCount": 0.06640625,
+      "maxListCount": 1,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.02499999850988388,
+          0.02499999850988388,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 1.0750000029802322,
+        "p95": 1.125,
+        "samples": [
+          1.0750000029802322,
+          2.125,
+          1.0749999955296516,
+          1.0500000044703484,
+          1.0749999955296516,
+          1.1000000014901161,
+          1.0750000029802322,
+          1.125,
+          1.0499999970197678
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "sparse",
+      "mode": "ubo",
+      "capacity": 256,
+      "compileAndLinkMs": 4.299999982118607,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 3.2000000029802322,
+        "p95": 3.2999999970197678,
+        "samples": [
+          3.375,
+          3.2249999940395355,
+          3.125,
+          3.2000000029802322,
+          2.125,
+          3.2000000029802322,
+          3.2999999970197678,
+          2.100000001490116,
+          3.149999998509884
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "dense",
+      "mode": "texture",
+      "capacity": 4,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0,
+      "lightBytes": 256,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0,
+          0,
+          0,
+          0.025000005960464478,
+          0.02499999850988388,
+          0.02499999850988388,
+          0,
+          0,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 3.125,
+        "p95": 3.1750000044703484,
+        "samples": [
+          3.125,
+          2.1749999970197678,
+          3.149999998509884,
+          3.1500000059604645,
+          2.225000001490116,
+          3.2249999940395355,
+          2.100000001490116,
+          3.1750000044703484,
+          2.2249999940395355
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "dense",
+      "mode": "uniform",
+      "capacity": 4,
+      "compileAndLinkMs": 2.5999999940395355,
+      "uploadSubmissionMs": 0,
+      "lightBytes": 256,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0,
+          0.02499999850988388,
+          0,
+          0,
+          0,
+          0,
+          0.02499999850988388,
+          0,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 3.1500000059604645,
+        "p95": 3.2000000029802322,
+        "samples": [
+          3.2000000029802322,
+          3.2000000029802322,
+          3.149999998509884,
+          3.149999998509884,
+          3.1500000059604645,
+          3.149999998509884,
+          3.1999999955296516,
+          2.225000001490116,
+          4.274999998509884
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "dense",
+      "mode": "tiled",
+      "capacity": 4,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.10000002384185791,
+      "lightBytes": 256,
+      "listBytes": 5120,
+      "listMs": 0.5,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0,
+          0,
+          0.02499999850988388,
+          0.02499999850988388,
+          0.02499999850988388,
+          0,
+          0,
+          0.02499999850988388,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 3.1750000044703484,
+        "p95": 3.225000001490116,
+        "samples": [
+          2.125,
+          4.200000002980232,
+          3.1749999970197678,
+          3.2000000029802322,
+          3.1999999955296516,
+          3.1750000044703484,
+          3.125,
+          3.225000001490116,
+          3.1749999970197678
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "dense",
+      "mode": "ubo",
+      "capacity": 256,
+      "compileAndLinkMs": 4.299999982118607,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.025000005960464478,
+        "samples": [
+          0.02499999850988388,
+          0.025000005960464478,
+          0,
+          0,
+          0.07499999552965164,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 3.1749999970197678,
+        "p95": 3.225000001490116,
+        "samples": [
+          3.2249999940395355,
+          3.1750000044703484,
+          3.1749999970197678,
+          3.1500000059604645,
+          2.375,
+          3.6999999955296516,
+          3.225000001490116,
+          3.1749999970197678,
+          2.225000001490116
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "mixed",
+      "mode": "texture",
+      "capacity": 4,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0.20000001788139343,
+      "lightBytes": 256,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0,
+          0,
+          0.02499999850988388,
+          0.02499999850988388,
+          0,
+          0.02499999850988388,
+          0,
+          0,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 2.149999998509884,
+        "p95": 3.2249999940395355,
+        "samples": [
+          2.125,
+          3.225000001490116,
+          2.125,
+          3.2249999940395355,
+          2.2000000029802322,
+          2.125,
+          2.149999998509884,
+          3.1750000044703484,
+          2.125
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "mixed",
+      "mode": "uniform",
+      "capacity": 4,
+      "compileAndLinkMs": 2.5999999940395355,
+      "uploadSubmissionMs": 0,
+      "lightBytes": 256,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0.02499999850988388,
+          0,
+          0,
+          0.025000005960464478,
+          0,
+          0,
+          0,
+          0.02499999850988388,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 2.1749999970197678,
+        "p95": 3.2000000029802322,
+        "samples": [
+          2.1749999970197678,
+          2.100000001490116,
+          3.1749999970197678,
+          3.2000000029802322,
+          2.100000001490116,
+          2.100000001490116,
+          3.25,
+          2.1749999970197678,
+          2.1750000044703484
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "mixed",
+      "mode": "tiled",
+      "capacity": 4,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 256,
+      "listBytes": 5120,
+      "listMs": 0.4000000059604645,
+      "meanListCount": 1.03515625,
+      "maxListCount": 2,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0,
+          0.025000005960464478,
+          0.02499999850988388,
+          0,
+          0,
+          0,
+          0.02499999850988388,
+          0.02499999850988388,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 1.1000000014901161,
+        "p95": 2.125,
+        "samples": [
+          1.0749999955296516,
+          1.0750000029802322,
+          1.0750000029802322,
+          2.0999999940395355,
+          2.125,
+          1.1000000014901161,
+          1.1000000014901161,
+          1.25,
+          2.149999998509884
+        ]
+      }
+    },
+    {
+      "count": 4,
+      "kind": "mixed",
+      "mode": "ubo",
+      "capacity": 256,
+      "compileAndLinkMs": 4.299999982118607,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 4,
+      "maxListCount": 4,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0.05000000447034836,
+          0,
+          0,
+          0,
+          0,
+          0.02499999850988388,
+          0,
+          0.02499999850988388,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 3.1749999970197678,
+        "p95": 3.1750000044703484,
+        "samples": [
+          3.225000001490116,
+          2.225000001490116,
+          3.1749999970197678,
+          3.1750000044703484,
+          2.1749999970197678,
+          2.125,
+          3.1750000044703484,
+          2.274999998509884,
+          3.1749999970197678
+        ]
+      }
+    },
+    {
+      "count": 64,
+      "kind": "directional",
+      "mode": "texture",
+      "capacity": 64,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 4096,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 64,
+      "maxListCount": 64,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.025000005960464478,
+        "samples": [
+          0.02499999850988388,
+          0.02499999850988388,
+          0.10000000149011612,
+          0.025000005960464478,
+          0.02499999850988388,
+          0,
+          0,
+          0.02499999850988388,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 18.80000000447035,
+        "p95": 19.07499999552965,
+        "samples": [
+          18.100000001490116,
+          18.799999997019768,
+          19,
+          18.900000005960464,
+          19.07499999552965,
+          18.725000001490116,
+          18.774999998509884,
+          18.80000000447035,
+          19.07499999552965
+        ]
+      }
+    },
+    {
+      "count": 64,
+      "kind": "directional",
+      "mode": "tiled",
+      "capacity": 64,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 4096,
+      "listBytes": 66560,
+      "listMs": 0.30000001192092896,
+      "meanListCount": 64,
+      "maxListCount": 64,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.025000005960464478,
+        "samples": [
+          0,
+          0.07500000298023224,
+          0,
+          0.025000005960464478,
+          0.02499999850988388,
+          0,
+          0.025000005960464478,
+          0,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 19.799999997019768,
+        "p95": 20.875,
+        "samples": [
+          19,
+          20.875,
+          19.799999997019768,
+          20.92500000447035,
+          19.799999997019768,
+          19.774999998509884,
+          19.825000002980232,
+          20.850000001490116,
+          19.57499999552965
+        ]
+      }
+    },
+    {
+      "count": 64,
+      "kind": "directional",
+      "mode": "ubo",
+      "capacity": 256,
+      "compileAndLinkMs": 4.299999982118607,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 64,
+      "maxListCount": 64,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0.025000005960464478,
+          0.02499999850988388,
+          0,
+          0.02499999850988388,
+          0.02499999850988388
+        ]
+      },
+      "completionMs": {
+        "median": 19.700000002980232,
+        "p95": 19.825000002980232,
+        "samples": [
+          19.725000001490116,
+          20.099999994039536,
+          19.825000002980232,
+          19.049999997019768,
+          19.700000002980232,
+          19.649999998509884,
+          19.67500000447035,
+          19.049999997019768,
+          19.75
+        ]
+      }
+    },
+    {
+      "count": 64,
+      "kind": "sparse",
+      "mode": "texture",
+      "capacity": 64,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 4096,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 64,
+      "maxListCount": 64,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.05000000447034836,
+        "samples": [
+          0.02499999850988388,
+          0.07499999552965164,
+          0.02499999850988388,
+          0.02499999850988388,
+          0.05000000447034836,
+          0.02499999850988388,
+          0.02499999850988388,
+          0.02499999850988388,
+          0.025000005960464478
+        ]
+      },
+      "completionMs": {
+        "median": 24.649999998509884,
+        "p95": 25,
+        "samples": [
+          25.25,
+          24.174999997019768,
+          25,
+          23.899999998509884,
+          24.875,
+          24.100000001490116,
+          24.649999998509884,
+          24.649999998509884,
+          23.950000002980232
+        ]
+      }
+    },
+    {
+      "count": 64,
+      "kind": "sparse",
+      "mode": "tiled",
+      "capacity": 64,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 4096,
+      "listBytes": 66560,
+      "listMs": 0.30000001192092896,
+      "meanListCount": 2.0234375,
+      "maxListCount": 5,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0,
+          0.02499999850988388,
+          0,
+          0,
+          0.02499999850988388,
+          0,
+          0.02499999850988388,
+          0,
+          0.02499999850988388
+        ]
+      },
+      "completionMs": {
+        "median": 2.125,
+        "p95": 2.149999998509884,
+        "samples": [
+          2.125,
+          2.149999998509884,
+          2.0750000029802322,
+          2.100000001490116,
+          2.100000001490116,
+          2.100000001490116,
+          2.1749999970197678,
+          2.125,
+          2.149999998509884
+        ]
+      }
+    },
+    {
+      "count": 64,
+      "kind": "sparse",
+      "mode": "ubo",
+      "capacity": 256,
+      "compileAndLinkMs": 4.299999982118607,
+      "uploadSubmissionMs": 0,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 64,
+      "maxListCount": 64,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.025000005960464478,
+        "p95": 0.07500000298023224,
+        "samples": [
+          0,
+          0.07499999552965164,
+          0.02499999850988388,
+          0.07500000298023224,
+          0.04999999701976776,
+          0.02499999850988388,
+          0.10000000149011612,
+          0,
+          0.025000005960464478
+        ]
+      },
+      "completionMs": {
+        "median": 21.19999999552965,
+        "p95": 21.875,
+        "samples": [
+          20.80000000447035,
+          21.399999998509884,
+          21,
+          21.075000002980232,
+          21.19999999552965,
+          21.875,
+          21,
+          21.899999998509884,
+          21.275000005960464
+        ]
+      }
+    },
+    {
+      "count": 64,
+      "kind": "dense",
+      "mode": "texture",
+      "capacity": 64,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 4096,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 64,
+      "maxListCount": 64,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0.02499999850988388,
+          0,
+          0.02499999850988388,
+          0.04999999701976776,
+          0,
+          0,
+          0,
+          0,
+          0.02499999850988388
+        ]
+      },
+      "completionMs": {
+        "median": 25.975000001490116,
+        "p95": 26.32499999552965,
+        "samples": [
+          25.174999997019768,
+          26.275000005960464,
+          25.5,
+          24.224999994039536,
+          26.325000002980232,
+          25.975000001490116,
+          26.32499999552965,
+          24.100000001490116,
+          26.274999998509884
+        ]
+      }
+    },
+    {
+      "count": 64,
+      "kind": "dense",
+      "mode": "tiled",
+      "capacity": 64,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.19999998807907104,
+      "lightBytes": 4096,
+      "listBytes": 66560,
+      "listMs": 0.30000001192092896,
+      "meanListCount": 64,
+      "maxListCount": 64,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.04999999701976776,
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0.04999999701976776,
+          0,
+          0.04999999701976776,
+          0.04999999701976776,
+          0.025000005960464478
+        ]
+      },
+      "completionMs": {
+        "median": 28.424999997019768,
+        "p95": 29.07499999552965,
+        "samples": [
+          29.07499999552965,
+          28.80000000447035,
+          28.399999998509884,
+          29.375,
+          29.049999997019768,
+          28.05000000447035,
+          28.274999998509884,
+          28.424999997019768,
+          28.325000002980232
+        ]
+      }
+    },
+    {
+      "count": 64,
+      "kind": "dense",
+      "mode": "ubo",
+      "capacity": 256,
+      "compileAndLinkMs": 4.299999982118607,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 64,
+      "maxListCount": 64,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.025000005960464478,
+        "samples": [
+          0.02499999850988388,
+          0.02499999850988388,
+          0.025000005960464478,
+          0.025000005960464478,
+          0.04999999701976776,
+          0.02499999850988388,
+          0,
+          0.02499999850988388,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 23.125,
+        "p95": 23.32499999552965,
+        "samples": [
+          23.225000001490116,
+          23.049999997019768,
+          23.25,
+          22.900000005960464,
+          23.125,
+          23.32499999552965,
+          22.625,
+          24,
+          23.024999998509884
+        ]
+      }
+    },
+    {
+      "count": 64,
+      "kind": "mixed",
+      "mode": "texture",
+      "capacity": 64,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0,
+      "lightBytes": 4096,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 64,
+      "maxListCount": 64,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.025000005960464478,
+        "samples": [
+          0.02499999850988388,
+          0.02499999850988388,
+          0.07499999552965164,
+          0,
+          0.02499999850988388,
+          0.02499999850988388,
+          0.025000005960464478,
+          0.02499999850988388,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 23.325000002980232,
+        "p95": 23.924999997019768,
+        "samples": [
+          23.924999997019768,
+          23.325000002980232,
+          23,
+          23.94999999552965,
+          22.850000001490116,
+          23.924999997019768,
+          22.850000001490116,
+          22.825000002980232,
+          23.875
+        ]
+      }
+    },
+    {
+      "count": 64,
+      "kind": "mixed",
+      "mode": "tiled",
+      "capacity": 64,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 4096,
+      "listBytes": 66560,
+      "listMs": 0.29999998211860657,
+      "meanListCount": 14.640625,
+      "maxListCount": 17,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.025000005960464478,
+        "samples": [
+          0.02499999850988388,
+          0.025000005960464478,
+          0.02499999850988388,
+          0.05000000447034836,
+          0,
+          0,
+          0.02499999850988388,
+          0.025000005960464478,
+          0.025000005960464478
+        ]
+      },
+      "completionMs": {
+        "median": 6.324999995529652,
+        "p95": 7.425000004470348,
+        "samples": [
+          6.299999997019768,
+          6.325000002980232,
+          6.274999998509884,
+          5.325000002980232,
+          7.699999995529652,
+          6.300000004470348,
+          6.324999995529652,
+          6.375,
+          7.425000004470348
+        ]
+      }
+    },
+    {
+      "count": 64,
+      "kind": "mixed",
+      "mode": "ubo",
+      "capacity": 256,
+      "compileAndLinkMs": 4.299999982118607,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 64,
+      "maxListCount": 64,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.04999999701976776,
+        "samples": [
+          0,
+          0,
+          0.04999999701976776,
+          0,
+          0.02499999850988388,
+          0,
+          0,
+          0.04999999701976776,
+          0.02499999850988388
+        ]
+      },
+      "completionMs": {
+        "median": 21.024999998509884,
+        "p95": 21.225000001490116,
+        "samples": [
+          20.875,
+          20.825000002980232,
+          20.774999998509884,
+          21.825000002980232,
+          21.024999998509884,
+          21.225000001490116,
+          20.799999997019768,
+          21.075000002980232,
+          21.149999998509884
+        ]
+      }
+    },
+    {
+      "count": 256,
+      "kind": "directional",
+      "mode": "texture",
+      "capacity": 256,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 256,
+      "maxListCount": 256,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0.02499999850988388,
+          0,
+          0.02499999850988388,
+          0,
+          0.02499999850988388,
+          0,
+          0.02499999850988388,
+          0,
+          0.05000000447034836
+        ]
+      },
+      "completionMs": {
+        "median": 67.375,
+        "p95": 67.97500000149012,
+        "samples": [
+          66.64999999850988,
+          67.07500000298023,
+          67.44999999552965,
+          67.42500000447035,
+          66.125,
+          67.97500000149012,
+          68.69999999552965,
+          67.375,
+          67.10000000149012
+        ]
+      }
+    },
+    {
+      "count": 256,
+      "kind": "directional",
+      "mode": "tiled",
+      "capacity": 256,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 16384,
+      "listBytes": 263168,
+      "listMs": 0.5999999940395355,
+      "meanListCount": 256,
+      "maxListCount": 256,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.05000000447034836,
+        "p95": 0.14999999850988388,
+        "samples": [
+          0.04999999701976776,
+          0.10000000149011612,
+          0.14999999850988388,
+          0.17500000447034836,
+          0.05000000447034836,
+          0.05000000447034836,
+          0.05000000447034836,
+          0.02499999850988388,
+          0.02499999850988388
+        ]
+      },
+      "completionMs": {
+        "median": 72.92500000447035,
+        "p95": 73.125,
+        "samples": [
+          71.97499999403954,
+          72.95000000298023,
+          71.64999999850988,
+          72.92500000447035,
+          71.625,
+          73.125,
+          72.97500000149012,
+          72.75,
+          73.27499999850988
+        ]
+      }
+    },
+    {
+      "count": 256,
+      "kind": "directional",
+      "mode": "ubo",
+      "capacity": 256,
+      "compileAndLinkMs": 4.299999982118607,
+      "uploadSubmissionMs": 0.10000002384185791,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 256,
+      "maxListCount": 256,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.025000005960464478,
+        "p95": 0.04999999701976776,
+        "samples": [
+          0.025000005960464478,
+          0,
+          0.025000005960464478,
+          0.025000005960464478,
+          0,
+          0.09999999403953552,
+          0.02499999850988388,
+          0.025000005960464478,
+          0.04999999701976776
+        ]
+      },
+      "completionMs": {
+        "median": 73.17499999701977,
+        "p95": 74,
+        "samples": [
+          74,
+          72.75,
+          72.25,
+          74.52500000596046,
+          72.125,
+          73,
+          73.59999999403954,
+          73.20000000298023,
+          73.17499999701977
+        ]
+      }
+    },
+    {
+      "count": 256,
+      "kind": "sparse",
+      "mode": "texture",
+      "capacity": 256,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0.10000002384185791,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 256,
+      "maxListCount": 256,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.05000000447034836,
+        "p95": 0.07500000298023224,
+        "samples": [
+          0.07500000298023224,
+          0,
+          0.05000000447034836,
+          0.05000000447034836,
+          0.07500000298023224,
+          0.04999999701976776,
+          0,
+          0.04999999701976776,
+          0.10000000149011612
+        ]
+      },
+      "completionMs": {
+        "median": 90.02500000596046,
+        "p95": 90.20000000298023,
+        "samples": [
+          89.54999999701977,
+          90.375,
+          90.10000000149012,
+          90.02499999850988,
+          90.20000000298023,
+          89.92499999701977,
+          90.02500000596046,
+          90.09999999403954,
+          89.5
+        ]
+      }
+    },
+    {
+      "count": 256,
+      "kind": "sparse",
+      "mode": "tiled",
+      "capacity": 256,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 16384,
+      "listBytes": 263168,
+      "listMs": 0.7999999821186066,
+      "meanListCount": 7.73828125,
+      "maxListCount": 15,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0,
+          0,
+          0.02499999850988388,
+          0.02499999850988388,
+          0,
+          0.02499999850988388,
+          0.02499999850988388,
+          0,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 5.299999997019768,
+        "p95": 5.300000004470348,
+        "samples": [
+          5.25,
+          5.225000001490116,
+          5.299999997019768,
+          5.300000004470348,
+          5.274999998509884,
+          5.225000001490116,
+          5.299999997019768,
+          5.299999997019768,
+          5.300000004470348
+        ]
+      }
+    },
+    {
+      "count": 256,
+      "kind": "sparse",
+      "mode": "ubo",
+      "capacity": 256,
+      "compileAndLinkMs": 4.299999982118607,
+      "uploadSubmissionMs": 0.19999998807907104,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 256,
+      "maxListCount": 256,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.10000000149011612,
+        "samples": [
+          0.04999999701976776,
+          0,
+          0.10000000149011612,
+          0,
+          0.02499999850988388,
+          0.02499999850988388,
+          0.10000000149011612,
+          0.07499999552965164,
+          0.02499999850988388
+        ]
+      },
+      "completionMs": {
+        "median": 79.57499999552965,
+        "p95": 80.22499999403954,
+        "samples": [
+          80.22499999403954,
+          79.32500000298023,
+          80.07500000298023,
+          79.5,
+          80.39999999850988,
+          79.57499999552965,
+          80.17500000447035,
+          79.39999999850988,
+          79.17499999701977
+        ]
+      }
+    },
+    {
+      "count": 256,
+      "kind": "dense",
+      "mode": "texture",
+      "capacity": 256,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 256,
+      "maxListCount": 256,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.02499999850988388,
+        "samples": [
+          0.02499999850988388,
+          0,
+          0,
+          0.02499999850988388,
+          0,
+          0.125,
+          0,
+          0.02499999850988388,
+          0.02499999850988388
+        ]
+      },
+      "completionMs": {
+        "median": 94.42500000447035,
+        "p95": 94.67500000447035,
+        "samples": [
+          93.14999999850988,
+          95.04999999701977,
+          94.42500000447035,
+          94.47500000149012,
+          94.375,
+          94.32499999552965,
+          94.67500000447035,
+          94.07499999552965,
+          94.47500000149012
+        ]
+      }
+    },
+    {
+      "count": 256,
+      "kind": "dense",
+      "mode": "tiled",
+      "capacity": 256,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.20000001788139343,
+      "lightBytes": 16384,
+      "listBytes": 263168,
+      "listMs": 0.9000000059604645,
+      "meanListCount": 256,
+      "maxListCount": 256,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.07500000298023224,
+        "samples": [
+          0.04999999701976776,
+          0.02499999850988388,
+          0.02499999850988388,
+          0.04999999701976776,
+          0,
+          0.02499999850988388,
+          0.07500000298023224,
+          0.10000000149011612,
+          0.02499999850988388
+        ]
+      },
+      "completionMs": {
+        "median": 106.27499999850988,
+        "p95": 107.44999999552965,
+        "samples": [
+          105.5,
+          105.97500000149012,
+          107.10000000149012,
+          105.97499999403954,
+          107.44999999552965,
+          106.27499999850988,
+          105.95000000298023,
+          107.875,
+          106.35000000149012
+        ]
+      }
+    },
+    {
+      "count": 256,
+      "kind": "dense",
+      "mode": "ubo",
+      "capacity": 256,
+      "compileAndLinkMs": 4.299999982118607,
+      "uploadSubmissionMs": 0.19999998807907104,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 256,
+      "maxListCount": 256,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.025000005960464478,
+        "p95": 0.10000000149011612,
+        "samples": [
+          0.025000005960464478,
+          0.02499999850988388,
+          0.02499999850988388,
+          0,
+          0.02499999850988388,
+          0.10000000149011612,
+          0.09999999403953552,
+          0.025000005960464478,
+          0.10000000149011612
+        ]
+      },
+      "completionMs": {
+        "median": 87.04999999701977,
+        "p95": 87.5,
+        "samples": [
+          86.90000000596046,
+          86.69999999552965,
+          87.80000000447035,
+          87.27499999850988,
+          87.04999999701977,
+          87.17500000447035,
+          86.47499999403954,
+          87.5,
+          86.60000000149012
+        ]
+      }
+    },
+    {
+      "count": 256,
+      "kind": "mixed",
+      "mode": "texture",
+      "capacity": 256,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0.19999998807907104,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 256,
+      "maxListCount": 256,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.10000000149011612,
+        "samples": [
+          0,
+          0.025000005960464478,
+          0.02499999850988388,
+          0.10000000149011612,
+          0.10000000149011612,
+          0,
+          0.02499999850988388,
+          0.09999999403953552,
+          0.02499999850988388
+        ]
+      },
+      "completionMs": {
+        "median": 85.82500000298023,
+        "p95": 86.15000000596046,
+        "samples": [
+          85.32499999552965,
+          86.15000000596046,
+          84.54999999701977,
+          86.67499999701977,
+          85.92500000447035,
+          85.27499999850988,
+          85.95000000298023,
+          85.29999999701977,
+          85.82500000298023
+        ]
+      }
+    },
+    {
+      "count": 256,
+      "kind": "mixed",
+      "mode": "tiled",
+      "capacity": 256,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.20000001788139343,
+      "lightBytes": 16384,
+      "listBytes": 263168,
+      "listMs": 1,
+      "meanListCount": 58.20703125,
+      "maxListCount": 65,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.04999999701976776,
+        "samples": [
+          0.02499999850988388,
+          0,
+          0.04999999701976776,
+          0.025000005960464478,
+          0.02499999850988388,
+          0.02499999850988388,
+          0,
+          0.04999999701976776,
+          0.04999999701976776
+        ]
+      },
+      "completionMs": {
+        "median": 19.225000001490116,
+        "p95": 20.024999998509884,
+        "samples": [
+          19.149999998509884,
+          19.225000001490116,
+          19.32499999552965,
+          19.150000005960464,
+          20.024999998509884,
+          19.600000001490116,
+          18.174999997019768,
+          20.725000001490116,
+          18.975000001490116
+        ]
+      }
+    },
+    {
+      "count": 256,
+      "kind": "mixed",
+      "mode": "ubo",
+      "capacity": 256,
+      "compileAndLinkMs": 4.299999982118607,
+      "uploadSubmissionMs": 0.20000001788139343,
+      "lightBytes": 16384,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 256,
+      "maxListCount": 256,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.10000000149011612,
+        "samples": [
+          0.10000000149011612,
+          0,
+          0,
+          0.02499999850988388,
+          0.32500000298023224,
+          0,
+          0.025000005960464478,
+          0.02499999850988388,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 78.40000000596046,
+        "p95": 78.52499999850988,
+        "samples": [
+          78.40000000596046,
+          77.47499999403954,
+          78.27500000596046,
+          78.69999999552965,
+          78.47500000149012,
+          77.79999999701977,
+          78.42500000447035,
+          77.67499999701977,
+          78.52499999850988
+        ]
+      }
+    },
+    {
+      "count": 512,
+      "kind": "directional",
+      "mode": "texture",
+      "capacity": 512,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0,
+      "lightBytes": 32768,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 512,
+      "maxListCount": 512,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.10000000149011612,
+        "samples": [
+          0.02499999850988388,
+          0.02499999850988388,
+          0,
+          0.10000000149011612,
+          0.02499999850988388,
+          0.02499999850988388,
+          0.07499999552965164,
+          0.07499999552965164,
+          0.125
+        ]
+      },
+      "completionMs": {
+        "median": 130.70000000298023,
+        "p95": 131.5,
+        "samples": [
+          130.47500000149012,
+          131.5,
+          131.5,
+          130.22500000149012,
+          131.17499999701977,
+          130.70000000298023,
+          130.27499999850988,
+          130.60000000149012,
+          131.75
+        ]
+      }
+    },
+    {
+      "count": 512,
+      "kind": "directional",
+      "mode": "tiled",
+      "capacity": 512,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.19999998807907104,
+      "lightBytes": 32768,
+      "listBytes": 525312,
+      "listMs": 1.399999976158142,
+      "meanListCount": 512,
+      "maxListCount": 512,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.07499999552965164,
+        "p95": 0.07500000298023224,
+        "samples": [
+          0.04999999701976776,
+          0.07499999552965164,
+          0.04999999701976776,
+          0.07500000298023224,
+          0.125,
+          0.07500000298023224,
+          0.05000000447034836,
+          0.07500000298023224,
+          0.07499999552965164
+        ]
+      },
+      "completionMs": {
+        "median": 141.79999999701977,
+        "p95": 142.14999999850988,
+        "samples": [
+          141.57500000298023,
+          142.14999999850988,
+          143.27499999850988,
+          141.70000000298023,
+          141.92499999701977,
+          141.75,
+          142,
+          141.77499999850988,
+          141.79999999701977
+        ]
+      }
+    },
+    {
+      "count": 512,
+      "kind": "directional",
+      "mode": "ubo",
+      "capacity": 512,
+      "compileAndLinkMs": 8.699999988079071,
+      "uploadSubmissionMs": 0.9000000059604645,
+      "lightBytes": 32768,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 512,
+      "maxListCount": 512,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.10000000149011612,
+        "samples": [
+          0.02499999850988388,
+          0.02499999850988388,
+          0.02499999850988388,
+          0.10000000149011612,
+          0.125,
+          0.05000000447034836,
+          0.02499999850988388,
+          0,
+          0.025000005960464478
+        ]
+      },
+      "completionMs": {
+        "median": 144.77499999850988,
+        "p95": 144.97500000149012,
+        "samples": [
+          144.85000000149012,
+          144.77499999850988,
+          144.97500000149012,
+          144.79999999701977,
+          143.89999999850988,
+          144.45000000298023,
+          144.75,
+          144.04999999701977,
+          145.55000000447035
+        ]
+      }
+    },
+    {
+      "count": 512,
+      "kind": "sparse",
+      "mode": "texture",
+      "capacity": 512,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 32768,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 512,
+      "maxListCount": 512,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.05000000447034836,
+        "p95": 0.10000000149011612,
+        "samples": [
+          0.025000005960464478,
+          0.10000000149011612,
+          0.02499999850988388,
+          0.02499999850988388,
+          0.09999999403953552,
+          0.05000000447034836,
+          0.10000000149011612,
+          0.025000005960464478,
+          0.10000000149011612
+        ]
+      },
+      "completionMs": {
+        "median": 176.95000000298023,
+        "p95": 177.72500000149012,
+        "samples": [
+          178.5,
+          176.95000000298023,
+          176.47500000149012,
+          177.35000000149012,
+          176.44999999552965,
+          176.89999999850988,
+          177.25,
+          177.72500000149012,
+          175.75
+        ]
+      }
+    },
+    {
+      "count": 512,
+      "kind": "sparse",
+      "mode": "tiled",
+      "capacity": 512,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.19999998807907104,
+      "lightBytes": 32768,
+      "listBytes": 525312,
+      "listMs": 1.699999988079071,
+      "meanListCount": 16.1484375,
+      "maxListCount": 30,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.025000005960464478,
+        "samples": [
+          0.02499999850988388,
+          0,
+          0.02499999850988388,
+          0.04999999701976776,
+          0.02499999850988388,
+          0.02499999850988388,
+          0.025000005960464478,
+          0,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 9.649999998509884,
+        "p95": 10.549999997019768,
+        "samples": [
+          9.774999998509884,
+          9.375,
+          8.350000001490116,
+          11,
+          8.574999995529652,
+          9.649999998509884,
+          9.675000004470348,
+          10.549999997019768,
+          8.800000004470348
+        ]
+      }
+    },
+    {
+      "count": 512,
+      "kind": "sparse",
+      "mode": "ubo",
+      "capacity": 512,
+      "compileAndLinkMs": 8.699999988079071,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 32768,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 512,
+      "maxListCount": 512,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.04999999701976776,
+        "samples": [
+          0.04999999701976776,
+          0,
+          0,
+          0.02499999850988388,
+          0,
+          0,
+          0.05000000447034836,
+          0,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 157.60000000149012,
+        "p95": 157.77499999850988,
+        "samples": [
+          157.10000000149012,
+          157.60000000149012,
+          157,
+          157.57499999552965,
+          157.77499999850988,
+          157.375,
+          157.60000000149012,
+          157.75,
+          157.82500000298023
+        ]
+      }
+    },
+    {
+      "count": 512,
+      "kind": "dense",
+      "mode": "texture",
+      "capacity": 512,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 32768,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 512,
+      "maxListCount": 512,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.05000000447034836,
+        "p95": 0.09999999403953552,
+        "samples": [
+          0.02499999850988388,
+          0.02499999850988388,
+          0.15000000596046448,
+          0,
+          0.07500000298023224,
+          0,
+          0.05000000447034836,
+          0.07499999552965164,
+          0.09999999403953552
+        ]
+      },
+      "completionMs": {
+        "median": 185.22499999403954,
+        "p95": 185.40000000596046,
+        "samples": [
+          184.77499999850988,
+          184.57499999552965,
+          184.77500000596046,
+          185.22499999403954,
+          185.40000000596046,
+          185.34999999403954,
+          184.92500000447035,
+          185.22500000149012,
+          186
+        ]
+      }
+    },
+    {
+      "count": 512,
+      "kind": "dense",
+      "mode": "tiled",
+      "capacity": 512,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 32768,
+      "listBytes": 525312,
+      "listMs": 2.2999999821186066,
+      "meanListCount": 512,
+      "maxListCount": 512,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.04999999701976776,
+        "p95": 0.125,
+        "samples": [
+          0.04999999701976776,
+          0.10000000149011612,
+          0.02499999850988388,
+          0.17499999701976776,
+          0,
+          0.04999999701976776,
+          0.125,
+          0.025000005960464478,
+          0.025000005960464478
+        ]
+      },
+      "completionMs": {
+        "median": 209.625,
+        "p95": 210.35000000149012,
+        "samples": [
+          210.07499999552965,
+          208.85000000149012,
+          209.80000000447035,
+          209.625,
+          210.35000000149012,
+          209.04999999701977,
+          208.54999999701977,
+          210.85000000149012,
+          209.17500000447035
+        ]
+      }
+    },
+    {
+      "count": 512,
+      "kind": "dense",
+      "mode": "ubo",
+      "capacity": 512,
+      "compileAndLinkMs": 8.699999988079071,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 32768,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 512,
+      "maxListCount": 512,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.02499999850988388,
+        "p95": 0.05000000447034836,
+        "samples": [
+          0.02499999850988388,
+          0.05000000447034836,
+          0,
+          0.02499999850988388,
+          0.07499999552965164,
+          0.02499999850988388,
+          0,
+          0.05000000447034836,
+          0.02499999850988388
+        ]
+      },
+      "completionMs": {
+        "median": 172.44999999552965,
+        "p95": 172.77499999850988,
+        "samples": [
+          171.59999999403954,
+          172.27500000596046,
+          172.77499999850988,
+          172.22500000149012,
+          172.52499999850988,
+          172.79999999701977,
+          172.125,
+          172.45000000298023,
+          172.44999999552965
+        ]
+      }
+    },
+    {
+      "count": 512,
+      "kind": "mixed",
+      "mode": "texture",
+      "capacity": 512,
+      "compileAndLinkMs": 2.899999976158142,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 32768,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 512,
+      "maxListCount": 512,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.025000005960464478,
+        "samples": [
+          0,
+          0,
+          0.07499999552965164,
+          0.025000005960464478,
+          0,
+          0,
+          0,
+          0,
+          0.02499999850988388
+        ]
+      },
+      "completionMs": {
+        "median": 168.70000000298023,
+        "p95": 169.27499999850988,
+        "samples": [
+          168.125,
+          170.02499999850988,
+          168.57499999552965,
+          168.32500000298023,
+          169.27499999850988,
+          168.70000000298023,
+          168.27499999850988,
+          169.07500000298023,
+          168.89999999850988
+        ]
+      }
+    },
+    {
+      "count": 512,
+      "kind": "mixed",
+      "mode": "tiled",
+      "capacity": 512,
+      "compileAndLinkMs": 2,
+      "uploadSubmissionMs": 0.20000001788139343,
+      "lightBytes": 32768,
+      "listBytes": 525312,
+      "listMs": 1.5,
+      "meanListCount": 116.046875,
+      "maxListCount": 127,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.04999999701976776,
+        "samples": [
+          0,
+          0.04999999701976776,
+          0.02499999850988388,
+          0,
+          0,
+          0,
+          0.04999999701976776,
+          0.02499999850988388,
+          0
+        ]
+      },
+      "completionMs": {
+        "median": 36.600000001490116,
+        "p95": 36.75,
+        "samples": [
+          35.75,
+          36.75,
+          36.19999999552965,
+          36.70000000298023,
+          36.04999999701977,
+          36.775000005960464,
+          35.32499999552965,
+          36.600000001490116,
+          36.649999998509884
+        ]
+      }
+    },
+    {
+      "count": 512,
+      "kind": "mixed",
+      "mode": "ubo",
+      "capacity": 512,
+      "compileAndLinkMs": 8.699999988079071,
+      "uploadSubmissionMs": 0.09999999403953552,
+      "lightBytes": 32768,
+      "listBytes": 0,
+      "listMs": 0,
+      "meanListCount": 512,
+      "maxListCount": 512,
+      "parity": [
+        {
+          "depth": 0,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": -2,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        },
+        {
+          "depth": 0.5,
+          "changedPixels": 0,
+          "maxChannelDifference": 0,
+          "meanAbsoluteChannelDifference": 0
+        }
+      ],
+      "gpuMs": null,
+      "submissionMs": {
+        "median": 0.025000005960464478,
+        "p95": 0.07499999552965164,
+        "samples": [
+          0.02499999850988388,
+          0.07499999552965164,
+          0.025000005960464478,
+          0.025000005960464478,
+          0.04999999701976776,
+          0.02499999850988388,
+          0.04999999701976776,
+          0.10000000149011612,
+          0.02499999850988388
+        ]
+      },
+      "completionMs": {
+        "median": 154.69999999552965,
+        "p95": 155,
+        "samples": [
+          154.35000000149012,
+          154.69999999552965,
+          155,
+          154.30000000447035,
+          154.85000000149012,
+          154.27499999850988,
+          155.02499999850988,
+          154.70000000298023,
+          154.34999999403954
+        ]
+      }
+    }
+  ]
+}

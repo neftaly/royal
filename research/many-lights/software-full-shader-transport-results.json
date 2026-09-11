@@ -1,0 +1,842 @@
+{
+  "date": "2026-09-10T16:56:43.785Z",
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+  "size": 64,
+  "batch": 1,
+  "samples": 3,
+  "source": "Full Royal opaque fragment shader; fixed two-block UBO versus production highp texture transport; no scene traversal",
+  "results": [
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 16,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 4.199999988079071,
+        "p95": 4.300000011920929,
+        "samples": [
+          2.600000023841858,
+          4.300000011920929,
+          4.199999988079071
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 16,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 4.199999988079071,
+        "p95": 4.699999988079071,
+        "samples": [
+          4.699999988079071,
+          4.199999988079071,
+          4.100000023841858
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 64,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 9.699999988079071,
+        "p95": 12.5,
+        "samples": [
+          9.200000047683716,
+          9.699999988079071,
+          12.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 64,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 8.300000011920929,
+        "p95": 8.300000011920929,
+        "samples": [
+          8.300000011920929,
+          4.100000023841858,
+          8.300000011920929
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 256,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 12.799999952316284,
+        "p95": 13.100000023841858,
+        "samples": [
+          13.100000023841858,
+          12.799999952316284,
+          12.600000023841858
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 256,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 32.30000001192093,
+        "p95": 32.39999997615814,
+        "samples": [
+          32.39999997615814,
+          32.19999998807907,
+          32.30000001192093
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 512,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 68.5,
+        "p95": 76,
+        "samples": [
+          68.5,
+          67.89999997615814,
+          76
+        ]
+      },
+      "submissionMs": {
+        "median": 0.09999996423721313,
+        "p95": 0.09999996423721313,
+        "samples": [
+          0.09999996423721313,
+          0.09999996423721313,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "directional",
+      "count": 512,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 31.900000035762787,
+        "p95": 32,
+        "samples": [
+          28.899999976158142,
+          31.900000035762787,
+          32
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "point",
+      "count": 16,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 4.199999988079071,
+        "p95": 4.199999988079071,
+        "samples": [
+          4.199999988079071,
+          4.199999988079071,
+          4.100000023841858
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "point",
+      "count": 16,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 11.600000023841858,
+        "p95": 13.800000011920929,
+        "samples": [
+          11.600000023841858,
+          13.800000011920929,
+          10.800000011920929
+        ]
+      },
+      "submissionMs": {
+        "median": 0.09999996423721313,
+        "p95": 0.10000002384185791,
+        "samples": [
+          0.10000002384185791,
+          0,
+          0.09999996423721313
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "point",
+      "count": 64,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 32.89999997615814,
+        "p95": 33,
+        "samples": [
+          32.89999997615814,
+          32.80000001192093,
+          33
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "point",
+      "count": 64,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 11.100000023841858,
+        "p95": 12.400000035762787,
+        "samples": [
+          11.100000023841858,
+          6.799999952316284,
+          12.400000035762787
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "point",
+      "count": 256,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 22.900000035762787,
+        "p95": 24.099999964237213,
+        "samples": [
+          22.900000035762787,
+          21.700000047683716,
+          24.099999964237213
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "point",
+      "count": 256,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 108,
+        "p95": 111.5,
+        "samples": [
+          111.5,
+          108,
+          106.89999997615814
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "point",
+      "count": 512,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 212.19999998807907,
+        "p95": 215.9000000357628,
+        "samples": [
+          212.19999998807907,
+          209.19999998807907,
+          215.9000000357628
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": false,
+      "actualSamples": 0,
+      "kind": "point",
+      "count": 512,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 35.10000002384186,
+        "p95": 37.39999997615814,
+        "samples": [
+          37.39999997615814,
+          35.10000002384186,
+          34.89999997615814
+        ]
+      },
+      "submissionMs": {
+        "median": 0.09999996423721313,
+        "p95": 0.10000002384185791,
+        "samples": [
+          0.09999996423721313,
+          0.10000002384185791,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "directional",
+      "count": 16,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 4.100000023841858,
+        "p95": 4.199999988079071,
+        "samples": [
+          4.199999988079071,
+          4.100000023841858,
+          4.099999964237213
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.10000002384185791,
+        "samples": [
+          0.10000002384185791,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "directional",
+      "count": 16,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 4.100000023841858,
+        "p95": 4.199999988079071,
+        "samples": [
+          4.100000023841858,
+          4.199999988079071,
+          4.100000023841858
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "directional",
+      "count": 64,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 9.800000011920929,
+        "p95": 9.800000011920929,
+        "samples": [
+          9.800000011920929,
+          9.800000011920929,
+          8.5
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "directional",
+      "count": 64,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 4.199999988079071,
+        "p95": 4.199999988079071,
+        "samples": [
+          4.199999988079071,
+          4.199999988079071,
+          4.100000023841858
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "directional",
+      "count": 256,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 11.100000023841858,
+        "p95": 11.399999976158142,
+        "samples": [
+          9.800000011920929,
+          11.399999976158142,
+          11.100000023841858
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "directional",
+      "count": 256,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 32.09999996423721,
+        "p95": 32.90000003576279,
+        "samples": [
+          31.30000001192093,
+          32.09999996423721,
+          32.90000003576279
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.09999996423721313,
+        "samples": [
+          0,
+          0.09999996423721313,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "directional",
+      "count": 512,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 61.5,
+        "p95": 63.40000003576279,
+        "samples": [
+          63.40000003576279,
+          61.5,
+          61.09999996423721
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.09999996423721313,
+        "samples": [
+          0,
+          0,
+          0.09999996423721313
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "directional",
+      "count": 512,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 21.100000023841858,
+        "p95": 22.600000023841858,
+        "samples": [
+          22.600000023841858,
+          20,
+          21.100000023841858
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "point",
+      "count": 16,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 4.100000023841858,
+        "p95": 4.199999988079071,
+        "samples": [
+          4.199999988079071,
+          4.100000023841858,
+          4.099999964237213
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.10000002384185791,
+        "samples": [
+          0.10000002384185791,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "point",
+      "count": 16,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 12.299999952316284,
+        "p95": 12.300000011920929,
+        "samples": [
+          12.299999952316284,
+          8.199999988079071,
+          12.300000011920929
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.10000002384185791,
+        "samples": [
+          0,
+          0,
+          0.10000002384185791
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "point",
+      "count": 64,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 27.30000001192093,
+        "p95": 27.399999976158142,
+        "samples": [
+          27.30000001192093,
+          27.399999976158142,
+          26.400000035762787
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "point",
+      "count": 64,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 5.800000011920929,
+        "p95": 8.300000011920929,
+        "samples": [
+          5.800000011920929,
+          8.300000011920929,
+          5.800000011920929
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "point",
+      "count": 256,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 19,
+        "p95": 19.80000001192093,
+        "samples": [
+          19.80000001192093,
+          19,
+          17.600000023841858
+        ]
+      },
+      "submissionMs": {
+        "median": 0.10000002384185791,
+        "p95": 0.10000002384185791,
+        "samples": [
+          0.10000002384185791,
+          0.10000002384185791,
+          0.10000002384185791
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "point",
+      "count": 256,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 102.60000002384186,
+        "p95": 107,
+        "samples": [
+          107,
+          101.39999997615814,
+          102.60000002384186
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "point",
+      "count": 512,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 218.5,
+        "p95": 220.60000002384186,
+        "samples": [
+          218.5,
+          201.89999997615814,
+          220.60000002384186
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.10000002384185791,
+        "samples": [
+          0,
+          0.10000002384185791,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "point",
+      "count": 512,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 37,
+        "p95": 40.39999997615814,
+        "samples": [
+          40.39999997615814,
+          37,
+          34.30000001192093
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  ]
+}

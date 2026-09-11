@@ -1,0 +1,114 @@
+{
+  "date": "2026-09-10T17:03:47.055Z",
+  "userAgent": "Mozilla/5.0 (iPad; CPU OS 17_7_11 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Mobile/15E148 Safari/604.1",
+  "size": 1024,
+  "batch": 1,
+  "samples": 3,
+  "source": "Full Royal opaque fragment shader; fixed two-block UBO versus production highp texture transport; no scene traversal",
+  "results": [
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "directional",
+      "count": 512,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 1440.0000000000018,
+        "p95": 1445.999999999999,
+        "samples": [
+          1445.999999999999,
+          1440.0000000000018,
+          1436.9999999999982
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "directional",
+      "count": 512,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 1405,
+        "p95": 1406,
+        "samples": [
+          1404,
+          1405,
+          1406
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "point",
+      "count": 512,
+      "mode": "texture",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 2151.9999999999964,
+        "p95": 2153.000000000011,
+        "samples": [
+          2149.9999999999964,
+          2151.9999999999964,
+          2153.000000000011
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0,
+        "samples": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "point",
+      "count": 512,
+      "mode": "ubo",
+      "maxDifference": 0,
+      "completionMs": {
+        "median": 1950,
+        "p95": 1952,
+        "samples": [
+          1952,
+          1950,
+          1949.0000000000073
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 1,
+        "samples": [
+          1,
+          0,
+          0
+        ]
+      }
+    }
+  ]
+}

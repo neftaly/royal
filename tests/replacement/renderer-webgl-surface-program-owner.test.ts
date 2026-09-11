@@ -23,6 +23,26 @@ import { VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS } from "../../packages/renderer-w
 import { transmissionShaderSource } from "../../packages/renderer-webgl/src/surface/surface-composite-owner";
 
 describe("surface program ownership", () => {
+  it("accepts compiler-eliminated BRDF uniforms in an unilluminated standard scene", () => {
+    const gl = fakeGl();
+    const live = new Set(['model', 'viewProjection', 'emissiveFactor', 'presentation']);
+    gl.getUniformLocation = vi.fn((_program, name: string) => live.has(name) ? {} as WebGLUniformLocation : null);
+    const owner = new SurfaceProgramOwner(gl);
+    try {
+      expect(owner.get('standard', SURFACE_FEATURE_VERTEX_NORMAL | SURFACE_FEATURE_NORMAL_TEXTURE
+        | SURFACE_FEATURE_TANGENT | SURFACE_FEATURE_BASE_COLOR_TEXTURE, false, false, false))
+        .toMatchObject({ baseColor: null, cameraWorldPosition: null, materialFactors: null,
+          normalTransform: null, normalTexture: null, texture: null });
+      // Missing lighting uniforms still fail once a light actually contributes.
+      expect(() => owner.get('standard', surfaceLightCountFeatureBits(1, 0), false, false, false))
+        .toThrow(/missing baseColor/);
+      expect(gl.deleteProgram).toHaveBeenCalledOnce();
+      live.add('baseColor'); live.add('materialFactors');
+      expect(owner.get('standard', SURFACE_FEATURE_ALPHA_BLEND, false, true, false))
+        .toMatchObject({ baseColor: expect.any(Object), cameraWorldPosition: null, materialFactors: expect.any(Object) });
+    } finally { owner.dispose(); }
+  });
+
   it("preserves continuous texel-edge coordinates when sampling the VT atlas", () => {
     // uv * virtualSize already includes the fragment's fractional texel
     // position. Do not snap it or add the offset used for integer texel IDs.
@@ -127,7 +147,7 @@ describe("surface program ownership", () => {
     const gl = fakeGl();
     const owner = new SurfaceProgramOwner(gl);
 
-    owner.get("standard", SURFACE_FEATURE_VERTEX_NORMAL, false, false, false);
+    owner.get("standard", SURFACE_FEATURE_VERTEX_NORMAL | surfaceLightCountFeatureBits(1, 0), false, false, false);
 
     expect(gl.getUniformLocation).toHaveBeenCalledWith(
       expect.anything(),

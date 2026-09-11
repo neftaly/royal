@@ -141,6 +141,7 @@ const captureRootImage = (host: RootImageCaptureHost, options: RendererImageCapt
   if (sceneInput === null || size === null || size.backingWidth === 0 || size.backingHeight === 0) {
     throw new Error("Royal image capture requires a scene and nonzero canvas size");
   }
+  let preparationAttempted = false;
   const assertCurrent = (): void => {
     const context = root.getLifecycleSnapshot();
     if (context.phase !== "active" || context.generation !== generation) {
@@ -152,7 +153,7 @@ const captureRootImage = (host: RootImageCaptureHost, options: RendererImageCapt
     if (host.hasExternalClock()) throw new Error("Royal image capture requires the canvas frame clock");
     if (host.hasOverlay()) throw new Error("Royal image capture does not yet support overlays");
     const failure = root.getSnapshot().lastFrameFailure;
-    if (failure !== undefined) throw new Error(failure);
+    if (preparationAttempted && failure !== undefined) throw new Error(failure);
   };
   const ready = (): boolean => {
     const scene = host.scene();
@@ -187,6 +188,8 @@ const captureRootImage = (host: RootImageCaptureHost, options: RendererImageCapt
   return captureImageRequest({
     assertCurrent,
     prepare: () => {
+      // A valid replacement may still carry the preceding frame's diagnostic.
+      preparationAttempted = true;
       root.flushInvalidated();
       assertCurrent();
       return ready();

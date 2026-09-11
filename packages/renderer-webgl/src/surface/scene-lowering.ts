@@ -304,8 +304,7 @@ export type CanonicalPunctualLight = Readonly<{
   range: number;
 }>;
 
-export const MAX_CANONICAL_DIRECTIONAL_LIGHTS = 4;
-export const MAX_CANONICAL_PUNCTUAL_LIGHTS = 8;
+export const MAX_CANONICAL_LIGHTS = 512;
 
 export type CanonicalSurfacePreparationOptions = Readonly<{
   /** @defaultValue `true` */
@@ -562,9 +561,9 @@ export const prepareCanonicalSurfaceScene = (
         const appendLight = (lightModel: Mat4): void => {
           const direction = transformDirection(lightModel, [0, 0, -1]);
           if (light.kind === "directional") {
-            if (directionalLights.length === MAX_CANONICAL_DIRECTIONAL_LIGHTS) {
+            if (directionalLights.length + punctualLights.length === MAX_CANONICAL_LIGHTS) {
               throw new Error(
-                `Royal scenes support at most ${MAX_CANONICAL_DIRECTIONAL_LIGHTS} directional lights`,
+                `Royal scenes support at most ${MAX_CANONICAL_LIGHTS} lights combined`,
               );
             }
             const index = directionalLights.length;
@@ -580,9 +579,9 @@ export const prepareCanonicalSurfaceScene = (
               });
             }
           } else {
-            if (punctualLights.length === MAX_CANONICAL_PUNCTUAL_LIGHTS) {
+            if (directionalLights.length + punctualLights.length === MAX_CANONICAL_LIGHTS) {
               throw new Error(
-                `Royal scenes support at most ${MAX_CANONICAL_PUNCTUAL_LIGHTS} point and spot lights`,
+                `Royal scenes support at most ${MAX_CANONICAL_LIGHTS} lights combined`,
               );
             }
             const index = punctualLights.length;
@@ -808,9 +807,9 @@ export const prepareCanonicalSurfaceScene = (
     if (node.kind !== "mesh") {
       if (node.kind === "directional-light") {
         if (!requiresLighting) continue;
-        if (directionalLights.length === MAX_CANONICAL_DIRECTIONAL_LIGHTS) {
+        if (directionalLights.length + punctualLights.length === MAX_CANONICAL_LIGHTS) {
           throw new Error(
-            `Royal scenes support at most ${MAX_CANONICAL_DIRECTIONAL_LIGHTS} directional lights`,
+            `Royal scenes support at most ${MAX_CANONICAL_LIGHTS} lights combined`,
           );
         }
         directionalLights.push({
@@ -826,9 +825,9 @@ export const prepareCanonicalSurfaceScene = (
       }
       if (node.kind === "point-light" || node.kind === "spot-light") {
         if (!requiresLighting) continue;
-        if (punctualLights.length === MAX_CANONICAL_PUNCTUAL_LIGHTS) {
+        if (directionalLights.length + punctualLights.length === MAX_CANONICAL_LIGHTS) {
           throw new Error(
-            `Royal scenes support at most ${MAX_CANONICAL_PUNCTUAL_LIGHTS} point and spot lights`,
+            `Royal scenes support at most ${MAX_CANONICAL_LIGHTS} lights combined`,
           );
         }
         const spot = node.kind === "spot-light";

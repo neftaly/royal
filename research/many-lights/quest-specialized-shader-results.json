@@ -1,0 +1,115 @@
+{
+  "date": "2026-09-10T17:06:53.934Z",
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/149.1.0.10.52.1018773329 Chrome/149.0.7827.197 VR Safari/537.36",
+  "size": 1024,
+  "batch": 1,
+  "samples": 3,
+  "specialize": true,
+  "source": "Full Royal opaque fragment shader; fixed two-block UBO versus production highp texture transport; no scene traversal",
+  "results": [
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "directional",
+      "count": 512,
+      "mode": "texture",
+      "maxDifference": 1,
+      "completionMs": {
+        "median": 146.59999999403954,
+        "p95": 149.80000001192093,
+        "samples": [
+          146.59999999403954,
+          149.80000001192093,
+          144.69999998807907
+        ]
+      },
+      "submissionMs": {
+        "median": 0.09999999403953552,
+        "p95": 0.19999998807907104,
+        "samples": [
+          0.09999999403953552,
+          0.09999999403953552,
+          0.19999998807907104
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "directional",
+      "count": 512,
+      "mode": "ubo",
+      "maxDifference": 1,
+      "completionMs": {
+        "median": 171.69999998807907,
+        "p95": 175.90000000596046,
+        "samples": [
+          171.69999998807907,
+          175.90000000596046,
+          167.80000001192093
+        ]
+      },
+      "submissionMs": {
+        "median": 0,
+        "p95": 0.09999999403953552,
+        "samples": [
+          0,
+          0,
+          0.09999999403953552
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "point",
+      "count": 512,
+      "mode": "texture",
+      "maxDifference": 1,
+      "completionMs": {
+        "median": 226.69999998807907,
+        "p95": 227.5,
+        "samples": [
+          227.5,
+          218.40000000596046,
+          226.69999998807907
+        ]
+      },
+      "submissionMs": {
+        "median": 0.09999999403953552,
+        "p95": 0.09999999403953552,
+        "samples": [
+          0.09999999403953552,
+          0,
+          0.09999999403953552
+        ]
+      }
+    },
+    {
+      "antialias": true,
+      "actualSamples": 4,
+      "kind": "point",
+      "count": 512,
+      "mode": "ubo",
+      "maxDifference": 1,
+      "completionMs": {
+        "median": 254.69999998807907,
+        "p95": 260.80000001192093,
+        "samples": [
+          260.80000001192093,
+          254.69999998807907,
+          254.40000000596046
+        ]
+      },
+      "submissionMs": {
+        "median": 0.10000002384185791,
+        "p95": 0.5,
+        "samples": [
+          0.10000002384185791,
+          0.09999999403953552,
+          0.5
+        ]
+      }
+    }
+  ]
+}
