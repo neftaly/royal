@@ -3,7 +3,7 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
-## Unreleased
+## 0.0.26 - 2026-09-11
 
 - Skip zero-contribution large lights through the existing material early return,
   avoiding the larger dense-scene cost of loop-level rejection. Small-light
