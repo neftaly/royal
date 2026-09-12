@@ -3,7 +3,7 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
-## 0.0.27 - 2026-09-12
+## 0.0.28 - 2026-09-12
 
 - Release discarded compressed mip storage after fitting and decoder temporaries on close; account for native SVG previews using their compressed byte sizes.
 
@@ -12,6 +12,8 @@ versions identify source-level prerelease checkpoints in this repository.
 - Add direct native ASTC LDR 6x6/8x8 and BC1/BC3/BC7 KTX2 textures and
   authored VT pages through the shared ETC2 pipeline, with capability-gated
   omission, exact block-byte accounting, and no runtime transcoding.
+
+## 0.0.27 - 2026-09-12
 
 - Allow renderer roots and React Canvas to use a stable host frame clock,
   including coalesced canvas sizing for embedded presentation.
