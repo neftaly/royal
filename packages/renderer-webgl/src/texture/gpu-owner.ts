@@ -1,3 +1,4 @@
+import { nativeTextureAvailable, nativeWebGlFormat, validateNativeBaseDimensions } from "./native-storage";
 import type { CanonicalTextureBinding } from "../surface/canonical-material";
 
 const EMPTY_STORAGE_KEYS: readonly string[] = [];
@@ -6,7 +7,6 @@ import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 import { FrameUploadBudgetOwner } from "../resource/frame-upload-budget";
 import {
   completeKtx2MipLevelCount,
-  etc2RgbaWebGlFormat,
   ktx2Etc2StorageBytes,
 } from "./etc2-storage";
 import { ordinaryTextureStorageBytes } from "./storage";
@@ -72,6 +72,7 @@ export class TextureGpuOwner {
   readonly #deferredStorageKeys = new Set<string>();
   readonly #gl: WebGL2RenderingContext;
   readonly #etc2Available: boolean;
+  readonly #nativeAvailable = new Map<number, boolean>();
   readonly #releasedStorageKeys = new Set<string>();
   readonly #samplers = new Map<string, GpuSampler>();
   readonly #textures = new Map<string, GpuTexture>();
@@ -97,6 +98,7 @@ export class TextureGpuOwner {
       this.#gl.deleteTexture(resource.texture);
       this.#budget.release(resource.budgetIdentity);
     }
+    this.#nativeAvailable.clear();
     this.#samplers.clear();
     this.#textures.clear();
     this.#deniedStorageKeys.clear();
@@ -107,6 +109,7 @@ export class TextureGpuOwner {
 
   /** Context loss invalidates handles without issuing deletion calls against the lost generation. */
   invalidate(): void {
+    this.#nativeAvailable.clear();
     this.#samplers.clear();
     for (const resource of this.#textures.values()) this.#budget.release(resource.budgetIdentity);
     this.#textures.clear();
@@ -362,8 +365,18 @@ export class TextureGpuOwner {
     if (this.#deferredStorageKeys.has(binding.storageKey)) return undefined;
     const gl = this.#gl;
     const decoded = binding.decoded;
-    const compressed = decoded.kind === "ktx2-etc2";
-    if (compressed && !this.#etc2Available) {
+    const compressed = decoded.kind !== undefined;
+    if (decoded.kind === "ktx2-native") {
+      const format = nativeWebGlFormat(decoded.format, binding.colorSpace);
+      let available = this.#nativeAvailable.get(format);
+      if (available === undefined) {
+        available = nativeTextureAvailable(gl, decoded.format, binding.colorSpace);
+        this.#nativeAvailable.set(format, available);
+      }
+      if (!available) return undefined;
+      validateNativeBaseDimensions(decoded.format, decoded.width, decoded.height);
+    }
+    if (decoded.kind === "ktx2-etc2" && !this.#etc2Available) {
       throw new Error("Royal ETC2 KTX2 upload requires WEBGL_compressed_texture_etc");
     }
     const mipmapsRequired = usesMipmaps(binding.sampler.minFilter);
@@ -409,7 +422,7 @@ export class TextureGpuOwner {
         if (decoded.colorSpace !== binding.colorSpace) {
           throw new TypeError("Royal ETC2 KTX2 storage color space does not match its binding");
         }
-        const format = etc2RgbaWebGlFormat(binding.colorSpace);
+        const format = nativeWebGlFormat(decoded.kind === "ktx2-native" ? decoded.format : "etc2-rgba", binding.colorSpace);
         for (let levelIndex = 0; levelIndex < decoded.levels.length; levelIndex += 1) {
           const level = decoded.levels[levelIndex]!;
           gl.compressedTexImage2D(

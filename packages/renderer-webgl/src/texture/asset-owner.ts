@@ -141,7 +141,7 @@ export const decodedTextureHandoffBytes = (
   decoded: DecodedTextureSource,
   alpha: DecodedTextureAlpha | undefined = decoded.alpha,
 ): number => {
-  const textureBytes = decoded.kind === "ktx2-etc2"
+  const textureBytes = decoded.kind !== undefined
     ? decoded.levels.reduce((total, level) => total + level.blocks.byteLength, 0)
     : decoded.width * decoded.height * 4;
   const bytes = textureBytes + (alpha === undefined ? 0 : textureAlphaStorageBytes(alpha));
@@ -266,7 +266,7 @@ export class TextureAssetOwner {
     };
     const encodedSourceReads = this.#platform.readAheadSnapshot?.();
     for (const entry of this.#entries.values()) {
-      retainedEncodedSourceBytes += entry.decoded?.kind === "ktx2-etc2"
+      retainedEncodedSourceBytes += entry.decoded?.kind !== undefined
         ? 0
         : entry.decoded?.encodedSvg?.byteLength ?? entry.decoded?.svgPreview?.encoded?.byteLength ?? 0;
       for (const storageKey of entry.claimedStorageKeys) {

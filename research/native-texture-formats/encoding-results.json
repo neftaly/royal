@@ -1,0 +1,275 @@
+{
+  "cpu": "11th Gen Intel(R) Core(TM) i7-1185G7 @ 3.00GHz",
+  "machine": "x86_64",
+  "encoder": "astcenc v5.7.0, 64-bit avx2+popcnt+f16c\nCopyright (c) 2011-2026 Arm Limited. All rights reserved.",
+  "sources": {
+    "tiger": "apps/examples-react/public/fixtures/gltf-svg-texture/ghostscript-tiger-fallback.png",
+    "sponza": "apps/examples-react/public/fixtures/scenes/Sponza/glTF/8006627369776289000.png"
+  },
+  "results": [
+    {
+      "source": "tiger",
+      "extent": 136,
+      "block": 6,
+      "quality": "fastest",
+      "encodeMedianMs": 13.5,
+      "wallMedianMs": 18.485274049453437,
+      "bytes": 8464,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "tiger",
+      "extent": 136,
+      "block": 6,
+      "quality": "fast",
+      "encodeMedianMs": 24.9,
+      "wallMedianMs": 30.39114800048992,
+      "bytes": 8464,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "tiger",
+      "extent": 136,
+      "block": 6,
+      "quality": "medium",
+      "encodeMedianMs": 60.0,
+      "wallMedianMs": 65.66504196962342,
+      "bytes": 8464,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "tiger",
+      "extent": 136,
+      "block": 8,
+      "quality": "fastest",
+      "encodeMedianMs": 27.900000000000002,
+      "wallMedianMs": 33.76580699114129,
+      "bytes": 4624,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "tiger",
+      "extent": 136,
+      "block": 8,
+      "quality": "fast",
+      "encodeMedianMs": 37.8,
+      "wallMedianMs": 43.52513700723648,
+      "bytes": 4624,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "tiger",
+      "extent": 136,
+      "block": 8,
+      "quality": "medium",
+      "encodeMedianMs": 97.69999999999999,
+      "wallMedianMs": 105.25180801050738,
+      "bytes": 4624,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "tiger",
+      "extent": 1024,
+      "block": 6,
+      "quality": "fastest",
+      "encodeMedianMs": 173.7,
+      "wallMedianMs": 195.97872102167457,
+      "bytes": 467856,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "tiger",
+      "extent": 1024,
+      "block": 6,
+      "quality": "fast",
+      "encodeMedianMs": 198.5,
+      "wallMedianMs": 222.67801803536713,
+      "bytes": 467856,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "tiger",
+      "extent": 1024,
+      "block": 6,
+      "quality": "medium",
+      "encodeMedianMs": 602.6,
+      "wallMedianMs": 628.2585819717497,
+      "bytes": 467856,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "tiger",
+      "extent": 1024,
+      "block": 8,
+      "quality": "fastest",
+      "encodeMedianMs": 288.4,
+      "wallMedianMs": 313.7558670132421,
+      "bytes": 262144,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "tiger",
+      "extent": 1024,
+      "block": 8,
+      "quality": "fast",
+      "encodeMedianMs": 377.3,
+      "wallMedianMs": 401.7816769774072,
+      "bytes": 262144,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "tiger",
+      "extent": 1024,
+      "block": 8,
+      "quality": "medium",
+      "encodeMedianMs": 979.0,
+      "wallMedianMs": 1004.8506180173717,
+      "bytes": 262144,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "sponza",
+      "extent": 136,
+      "block": 6,
+      "quality": "fastest",
+      "encodeMedianMs": 23.2,
+      "wallMedianMs": 27.89851900888607,
+      "bytes": 8464,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "sponza",
+      "extent": 136,
+      "block": 6,
+      "quality": "fast",
+      "encodeMedianMs": 61.6,
+      "wallMedianMs": 67.04021204495803,
+      "bytes": 8464,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "sponza",
+      "extent": 136,
+      "block": 6,
+      "quality": "medium",
+      "encodeMedianMs": 103.0,
+      "wallMedianMs": 109.40002603456378,
+      "bytes": 8464,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "sponza",
+      "extent": 136,
+      "block": 8,
+      "quality": "fastest",
+      "encodeMedianMs": 42.7,
+      "wallMedianMs": 48.657423991244286,
+      "bytes": 4624,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "sponza",
+      "extent": 136,
+      "block": 8,
+      "quality": "fast",
+      "encodeMedianMs": 66.19999999999999,
+      "wallMedianMs": 72.24006805336103,
+      "bytes": 4624,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "sponza",
+      "extent": 136,
+      "block": 8,
+      "quality": "medium",
+      "encodeMedianMs": 140.1,
+      "wallMedianMs": 148.218906018883,
+      "bytes": 4624,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "sponza",
+      "extent": 1024,
+      "block": 6,
+      "quality": "fastest",
+      "encodeMedianMs": 266.2,
+      "wallMedianMs": 290.72410101071,
+      "bytes": 467856,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "sponza",
+      "extent": 1024,
+      "block": 6,
+      "quality": "fast",
+      "encodeMedianMs": 517.5999999999999,
+      "wallMedianMs": 540.8873959677294,
+      "bytes": 467856,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "sponza",
+      "extent": 1024,
+      "block": 6,
+      "quality": "medium",
+      "encodeMedianMs": 1680.1,
+      "wallMedianMs": 1703.3409149735235,
+      "bytes": 467856,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "sponza",
+      "extent": 1024,
+      "block": 8,
+      "quality": "fastest",
+      "encodeMedianMs": 437.2,
+      "wallMedianMs": 463.32700503990054,
+      "bytes": 262144,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "sponza",
+      "extent": 1024,
+      "block": 8,
+      "quality": "fast",
+      "encodeMedianMs": 637.1,
+      "wallMedianMs": 664.5496030105278,
+      "bytes": 262144,
+      "threads": 1,
+      "samples": 3
+    },
+    {
+      "source": "sponza",
+      "extent": 1024,
+      "block": 8,
+      "quality": "medium",
+      "encodeMedianMs": 2192.6,
+      "wallMedianMs": 2224.371989024803,
+      "bytes": 262144,
+      "threads": 1,
+      "samples": 3
+    }
+  ]
+}

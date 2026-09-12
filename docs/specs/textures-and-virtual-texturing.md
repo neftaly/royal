@@ -20,7 +20,7 @@ boundaries, including non-power-of-two dimensions.
 ## Canonical prepared representation
 
 Source format is cold-path ingestion data. Every accepted complete texture
-source—whether browser-decoded PNG/JPEG/WebP/AVIF, SVG, offline ETC2 KTX2, a
+source—whether browser-decoded PNG/JPEG/WebP/AVIF, SVG, offline native KTX2, a
 buffer view, a data URI, or a future decoder—MUST lower to one prepared texture
 upload contract containing semantic storage class, dimensions, mip slices,
 row/block layout, color/alpha interpretation, and reconstruction identity. This
@@ -30,7 +30,7 @@ submission MUST NOT branch on source file format.
 
 A VT page is an independently scheduled region, not a complete texture or mip
 chain. It therefore lowers to the narrower page-transport contract, while
-sharing the same storage-class, color-space, orientation, ETC2 parser, block
+sharing the same storage-class, color-space, orientation, native KTX2 parser, block
 layout, and WebGL-format authorities. Forcing page identity/residency into the
 complete-texture union would couple two lifecycles without simplifying binding
 or drawing and is rejected.
@@ -51,9 +51,11 @@ fails during preparation rather than inventing a transcode or branching during
 drawing. Browser-decoded AVIF/WebP is not automatically GPU compressed and
 enters an uncompressed plan unless an offline container supplies blocks.
 
-Optional ASTC or another native target MAY be added only if device measurements
-show enough memory/bandwidth benefit to justify another representation revision,
-cache key, upload validator, restoration recipe, and test matrix.
+Offline native ASTC LDR 6x6/8x8 and BC1 RGBA/BC3/BC7 MAY use the same
+compressed path behind WebGL capability checks. Format choice is authored;
+Royal does not encode browser images, rasterized SVGs, or automatic VT pages
+into block-compressed storage at runtime. Native format measurements and
+limitations are recorded in `research/native-texture-formats/README.md`.
 
 ## Ordinary texture lifecycle
 
@@ -114,12 +116,16 @@ claim MUST NOT wait for that representation lease to end: auxiliary alpha
 preparation preserves the leased source and releases its own temporary pixels
 when the alpha plane is published or discarded.
 
-### Direct offline ETC2 KTX2 subset
+### Direct offline native KTX2 subset
 
 An ordinary `textureAsset` or `imageTexture` URI ending in `.ktx2`, or served as
 `image/ktx2`, enters the same root-owned texture lifecycle as a browser image.
 Royal accepts only two-dimensional, non-array, single-face, unsupercompressed
-ETC2 RGBA KTX2 with Vulkan format 151 (linear) or 152 (sRGB). The declared format
+KTX2 in one of these native formats (linear/sRGB Vulkan enums): ETC2 RGBA
+151/152, ASTC LDR 6x6 165/166, ASTC LDR 8x8 171/172, BC1 RGBA 133/134,
+BC3 RGBA 137/138, or BC7 RGBA 145/146. An internal `ktx2-native` source marker
+also supports opaque transport URLs; `ktx2-etc2` remains an exact ETC2 claim.
+The declared format
 MUST match the asset color-space request. Level storage is bounds-, size-,
 alignment-, and overlap-validated before publication, and upload borrows the
 level byte views without a second block copy. Orientation is absent/default
@@ -130,14 +136,29 @@ upper-left, straight-alpha contract.
 A mipmapped sampler requires a complete authored pyramid. Under a per-texture
 storage ceiling, Royal MAY drop the largest authored levels and rebase a
 complete remaining suffix; it never resamples compressed texels or calls
-`generateMipmap` for this path. Exact compressed bytes, not an RGBA estimate,
+`generateMipmap` for this path. BC base levels, including a rebased suffix,
+MUST have dimensions divisible by four; later BC levels are restricted to
+1, 2, or multiples of four. Exact compressed bytes, not an RGBA estimate,
 participate in the persistent GPU budget. This direct storage profile is not a
 glTF extension. `KHR_texture_basisu` is a separate official glTF delivery
 contract and remains unsupported because Royal ships no Basis runtime
 transcoder. Direct ETC2 upload additionally requires the root to enable
 `WEBGL_compressed_texture_etc`; unsupported direct Royal KTX2 sources fail
-explicitly before upload. Authored compressed VT pages settle as
-unsupported/error rather than allocating an invalid atlas.
+explicitly before upload. ASTC requires the extension's LDR profile; BC1/BC3
+require S3TC (the separate sRGB extension for sRGB), and BC7 requires BPTC.
+An unsupported native source settles as a local texture error, releases its
+preparation/handoff reservation, and uses the neutral material-slot fallback;
+it does not throw out of rendering or block other textures. Custom decoded
+native sources receive an empty GPU binding if unsupported. Capability caches
+are cleared on context loss. Authored compressed VT pages settle as
+unsupported without requesting page payloads or allocating an invalid atlas.
+
+Native ASTC/BC remain unsupported for retained CPU alpha queries: a pickable
+MASK source requiring exact alpha fails preparation coherently instead of
+adding a software block decoder or inventing alpha. Use ETC2/raster storage or
+an explicit picking proxy for that case. GPU blending uses native alpha normally.
+ASTC HDR, other ASTC footprints, BC1 RGB, BC2/BC4/BC5/BC6H, supercompression,
+and ETC1S/UASTC transcoding are outside this direct LDR profile.
 
 ## Representation choice
 
@@ -167,16 +188,23 @@ An authored manifest is JSON with `contractVersion: 2` and:
 - positive `virtualSize: [width, height]`, `pageSize`, and `borderTexels`;
 - optional `colorSpace` of `srgb` or `linear`;
 - optional positive `mipCount` no larger than the derived full chain;
-- optional `pageEncoding` of `image` (default) or `ktx2-etc2`;
+- optional `pageEncoding` of `image` (default), `ktx2-etc2`,
+  `ktx2-astc-6x6`, `ktx2-astc-8x8`, `ktx2-bc1`, `ktx2-bc3`, or `ktx2-bc7`;
 - `pages.entries`, a URI template, or both;
 - optional positive `physicalSlots` and `physicalByteBudget` quality ceilings.
 
 An explicit entry wins over the template for the same page. Template tokens are
 `{page}`, `{mip}`, `{x}`, `{y}`, and `{key}`. Entries MUST be unique, in bounds,
 and well formed. A template denotes complete addressing; entries alone denote
-sparse addressing. For KTX2/ETC2, stored page extent including both gutters
-MUST be block compatible. Pages are offline-authored, unsupercompressed ETC2
-RGBA blocks; Royal does not ship a Basis WASM transcoder.
+sparse addressing. Native KTX2 page extent including both gutters MUST be a
+multiple of the format's block extent: 4 for ETC2/BC, 6 or 8 for ASTC. For a
+128-texel page, two-texel borders produce a 132-texel ETC2/BC/ASTC-6x6 extent;
+four-texel borders produce a 136-texel ASTC-8x8 extent. Each page contains
+exactly one level matching its manifest format. Compatible atlases are keyed
+by stored extent, page encoding, and color space; distinct formats never share
+storage. Both allocation and pending-page admission charge exact block bytes,
+including BC1's eight-byte blocks. Pages are authored offline; Royal does not
+ship a runtime encoder or Basis WASM transcoder.
 
 Manifest ceilings do not preallocate memory and do not override stricter root
 budgets or hardware limits.
@@ -372,7 +400,7 @@ They grow as demand increases, within the remaining root GPU budget and a
 combined atlas allowance of 75% of that budget. The default root budget remains
 256 MiB. Both the old and replacement atlas count against it during migration;
 growth can therefore stop below the final allowance when temporary storage will
-not fit. Compressed ETC2 pools retain the bounded 32 MiB allocation policy.
+not fit. Compressed native pools retain the bounded 32 MiB allocation policy.
 Unspecified per-texture limits allow use of the shared pool; they do not impose
 an additional 24-page ceiling.
 
@@ -429,8 +457,8 @@ Released storage becomes available to ordinary resources and other pools.
 An initial VT allocation blocked by current budget capacity remains retryable
 when capacity returns, rather than permanently becoming unsupported. If even a
 replacement preserving minimum coverage cannot fit alongside the old atlas,
-capacity remains unchanged. Compressed ETC2 pools retain their fixed policy and
-are accounted before dividing RGBA shares; ETC2 resizing and automatic
+capacity remains unchanged. Compressed native pools retain their fixed policy and
+are accounted before dividing RGBA shares; Compressed-pool resizing and automatic
 calibration of the root's default budget remain unimplemented.
 
 Direct-target demand that exceeds a texture's admitted capacity is coarsened

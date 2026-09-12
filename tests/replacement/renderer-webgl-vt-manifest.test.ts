@@ -90,6 +90,6 @@ describe("VT2 manifest contract", () => {
     expect(() => parseVirtualTextureManifest({
       ...fixture(),
       pageEncoding: "ktx2-basis",
-    })).toThrow("image or ktx2-etc2");
+    })).toThrow("supported native KTX2 format");
   });
 });

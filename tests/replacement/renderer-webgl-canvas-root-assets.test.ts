@@ -1590,3 +1590,38 @@ describe("canvas root asset publication", () => {
     })).toBe(true);
   });
 });
+
+it("settles many unsupported native textures without retaining handoff bytes or blocking ETC2", async () => {
+  const { createKtx2Fixture } = await import("./support/ktx2-fixture");
+  const unsupportedBytes = createKtx2Fixture(166, 16, 16, 5);
+  const supportedBytes = createKtx2Fixture(152, 16, 16, 5);
+  vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo) => new Response(
+    (String(input).includes("supported-etc2") ? supportedBytes : unsupportedBytes).slice().buffer as ArrayBuffer,
+    { headers: { "content-type": "image/ktx2" } },
+  )));
+  const { root, canvas, flushScheduledFrames, callbacks, scheduledFailures, listenerErrors } = harness({}, {
+    getExtension: vi.fn((name: string) => name === "WEBGL_compressed_texture_etc" ? {} : null) as WebGL2RenderingContext["getExtension"],
+  });
+  const unsupported = Array.from({ length: 40 }, (_, index) => imageTexture(`/unsupported-${index}.ktx2`));
+  const supported = imageTexture("/supported-etc2.ktx2");
+  try {
+    root.setSize({ cssWidth: 128, cssHeight: 128, pixelRatio: 1 });
+    root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [...unsupported, supported].map(texture => mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture }) })),
+    }));
+    await waitFor(() => {
+      flushScheduledFrames();
+      expect(unsupported.every(texture => root.getTextureAssetSnapshot(texture).status === "error")).toBe(true);
+      expect(root.getTextureAssetSnapshot(supported).status).toBe("ready");
+    });
+    flushScheduledFrames();
+    expect(root.getSnapshot().resources.imageTexturePreparation).toMatchObject({
+      activePreparations: 0, sourceReservations: 0, decodedHandoffBytes: 0,
+    });
+    expect(canvas.gl.compressedTexImage2D).toHaveBeenCalledTimes(5);
+    expect(canvas.gl.drawElements).toHaveBeenCalled();
+    expect(scheduledFailures).toEqual([]);
+    expect(listenerErrors).toEqual([]);
+    expect(callbacks).toHaveLength(0);
+  } finally { root.dispose(); vi.unstubAllGlobals(); }
+});

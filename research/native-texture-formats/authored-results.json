@@ -1,0 +1,96 @@
+{
+  "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+  "results": [
+    {
+      "source": "tiger",
+      "format": "rgba8",
+      "quality": "original",
+      "bytes": 4194304,
+      "uploadMedianMs": 2.600000023841858,
+      "drawReadbackMedianMs": 8.900000035762787,
+      "linearRgbaPsnrDb": null
+    },
+    {
+      "source": "tiger",
+      "format": "astc-6x6",
+      "quality": "fastest",
+      "bytes": 467856,
+      "uploadMedianMs": 0.09999996423721313,
+      "drawReadbackMedianMs": 52.5,
+      "linearRgbaPsnrDb": 41.911044492936405
+    },
+    {
+      "source": "tiger",
+      "format": "astc-6x6",
+      "quality": "medium",
+      "bytes": 467856,
+      "uploadMedianMs": 0.09999996423721313,
+      "drawReadbackMedianMs": 47.30000001192093,
+      "linearRgbaPsnrDb": 45.25621462279108
+    },
+    {
+      "source": "tiger",
+      "format": "astc-8x8",
+      "quality": "fastest",
+      "bytes": 262144,
+      "uploadMedianMs": 0.10000002384185791,
+      "drawReadbackMedianMs": 47.19999998807907,
+      "linearRgbaPsnrDb": 38.29343883065344
+    },
+    {
+      "source": "tiger",
+      "format": "astc-8x8",
+      "quality": "medium",
+      "bytes": 262144,
+      "uploadMedianMs": 0.09999996423721313,
+      "drawReadbackMedianMs": 49.10000002384186,
+      "linearRgbaPsnrDb": 41.63496507350493
+    },
+    {
+      "source": "sponza",
+      "format": "rgba8",
+      "quality": "original",
+      "bytes": 4194304,
+      "uploadMedianMs": 2.700000047683716,
+      "drawReadbackMedianMs": 8.900000035762787,
+      "linearRgbaPsnrDb": null
+    },
+    {
+      "source": "sponza",
+      "format": "astc-6x6",
+      "quality": "fastest",
+      "bytes": 467856,
+      "uploadMedianMs": 0.10000002384185791,
+      "drawReadbackMedianMs": 42.5,
+      "linearRgbaPsnrDb": 39.3013945213308
+    },
+    {
+      "source": "sponza",
+      "format": "astc-6x6",
+      "quality": "medium",
+      "bytes": 467856,
+      "uploadMedianMs": 0.10000002384185791,
+      "drawReadbackMedianMs": 43.39999997615814,
+      "linearRgbaPsnrDb": 40.235528634290176
+    },
+    {
+      "source": "sponza",
+      "format": "astc-8x8",
+      "quality": "fastest",
+      "bytes": 262144,
+      "uploadMedianMs": 0.09999996423721313,
+      "drawReadbackMedianMs": 44,
+      "linearRgbaPsnrDb": 35.8806578731801
+    },
+    {
+      "source": "sponza",
+      "format": "astc-8x8",
+      "quality": "medium",
+      "bytes": 262144,
+      "uploadMedianMs": 0.09999996423721313,
+      "drawReadbackMedianMs": 48.69999998807907,
+      "linearRgbaPsnrDb": 36.81565621117356
+    }
+  ],
+  "note": "1024x1024 real encoded images, nearest sampling, one full-screen draw, warmed upload submission with gl.finish, draw completion forced with one-pixel readPixels. PSNR compares quantized linear RGBA framebuffer pixels, not source-space encoder quality. SwiftShader is not representative of native GPU throughput."
+}

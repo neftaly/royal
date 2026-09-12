@@ -4,7 +4,9 @@ import {
   type VirtualTextureManifest,
   type VirtualTexturePageId,
 } from "./manifest";
-import { parseKtx2Etc2Page } from "./ktx2-etc2";
+import type { NativeTextureFormat } from "../texture/native-storage";
+import { parseKtx2Native } from "../texture/ktx2-native";
+import { virtualTexturePageFormat } from "./page-format";
 import { decodeBrowserImageElement } from "../texture/browser-image-element";
 import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 
@@ -18,7 +20,7 @@ export type DecodedVirtualTexturePage = Readonly<{
   blocks: Uint8Array;
   close(): void;
   colorSpace: "linear" | "srgb";
-  kind: "etc2-rgba";
+  kind: NativeTextureFormat;
 }>;
 
 /** Cold page production only; residency, publication, and scheduling stay runtime-owned. */
@@ -129,19 +131,23 @@ export const readVirtualTexturePage = async (
     throw new Error(`Royal VT page request failed with HTTP ${response.status}`);
   }
   const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
-  if (manifest.pageEncoding === "ktx2-etc2") {
+  if (manifest.pageEncoding !== "image") {
     const bytes = new Uint8Array(await response.arrayBuffer());
     return scheduleDecode(signal, async () => {
       if (signal.aborted) throw new DOMException("VT page read was aborted", "AbortError");
-      const parsed = parseKtx2Etc2Page(bytes);
+      const parsed = parseKtx2Native(bytes);
+      if (parsed.levels.length !== 1) throw new TypeError("Royal VT KTX2 pages must contain exactly one level");
+      if (parsed.format !== virtualTexturePageFormat(manifest.pageEncoding)) {
+        throw new TypeError("Royal VT KTX2 page format does not match the manifest");
+      }
       if (parsed.width !== storedPageSize || parsed.height !== storedPageSize) {
         throw new RangeError("Royal VT KTX2 page dimensions do not match the manifest");
       }
       return {
-        blocks: parsed.blocks,
+        blocks: parsed.levels[0]!.blocks,
         close: () => undefined,
         colorSpace: parsed.colorSpace,
-        kind: "etc2-rgba",
+        kind: parsed.format,
       };
     });
   }

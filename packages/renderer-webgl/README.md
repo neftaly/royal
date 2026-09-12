@@ -204,21 +204,30 @@ support. The repository's
 [conformance ledger](../../docs/specs/conformance-and-review.md) is the
 authoritative feature and limitation inventory.
 
-Offline asset tools may validate Royal's directly uploadable ETC2 profile
+Offline asset tools may validate Royal's directly uploadable native LDR profiles
 without creating WebGL or importing the renderer root:
 
 ```ts
-import { inspectEtc2Ktx2 } from "@royal/renderer-webgl/ktx2";
+import { inspectNativeKtx2 } from "@royal/renderer-webgl/ktx2";
 
-const info = inspectEtc2Ktx2(encodedBytes);
-console.log(info.colorSpace, info.width, info.height, info.storageBytes);
+const info = inspectNativeKtx2(encodedBytes);
+console.log(info.format, info.colorSpace, info.width, info.height, info.storageBytes);
 ```
 
-Direct ETC2 KTX2 is a Royal texture and virtual-texture source, not a glTF
+Native ETC2 RGBA, ASTC LDR 6x6/8x8, and BC1 RGBA/BC3/BC7 KTX2 use one
+texture and virtual-texture upload path. `inspectEtc2Ktx2` remains available
+for strict ETC2 tooling. Ordinary sources use `.ktx2` or `image/ktx2`; VT
+manifests choose `ktx2-etc2`, `ktx2-astc-6x6`, `ktx2-astc-8x8`, `ktx2-bc1`,
+`ktx2-bc3`, or `ktx2-bc7`. Native KTX2 is not a glTF
 extension. Royal does not attach it to glTF through a private extension and
 does not reinterpret `KHR_texture_basisu`; the latter remains unsupported
-while Royal ships no Basis runtime transcoder. Direct compressed sources fail
-explicitly when `WEBGL_compressed_texture_etc` is unavailable.
+while Royal ships no Basis runtime transcoder. Unsupported native textures
+use the neutral material fallback without crashing rendering; unsupported VT
+settles without downloading pages. Automatic PNG/SVG pages remain RGBA.
+Native ASTC/BC sources that need retained CPU alpha for exact MASK picking fail
+preparation; use ETC2/raster or an explicit picking proxy for those materials.
+See the [texture contract](../../docs/specs/textures-and-virtual-texturing.md)
+for block alignment, mip, and color-space requirements.
 
 Experimental `GS_texture_svg` prefers one bounded self-contained SVG source on
 sRGB material slots. Optional use requires a portable raster fallback: an

@@ -6,10 +6,11 @@
   },
   "@royal/react": 131072,
   "@royal/renderer-core": 524288,
-  "@royal/renderer-webgl": 735232,
+  "@royal/renderer-webgl": 741376,
   "_allowance": {
     "optionalCaptureModuleAndDeclarationsBytes": 8192,
     "lazyLargeLightRuntimeAndDeclarationsBytes": 8192,
-    "hostClockOriginProbeAndInstanceRevisionBytes": 2048
+    "hostClockOriginProbeAndInstanceRevisionBytes": 2048,
+    "nativeCompressedFormatsAndDeclarationsBytes": 6144
   }
 }

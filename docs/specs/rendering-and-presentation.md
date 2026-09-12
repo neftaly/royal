@@ -23,8 +23,8 @@ The compatibility floor is Safari 17, including A10-class iPad hardware. Quest
 devices are additional coverage, not permission to raise the baseline through
 an optional extension.
 
-Portable ETC2/EAC is the compressed texture baseline. Optional ASTC,
-anisotropic filtering, parallel shader compilation, timer queries, multiview,
+Portable ETC2/EAC is the compressed texture baseline. Optional native ASTC LDR
+and BC1/BC3/BC7, anisotropic filtering, parallel shader compilation, timer queries, multiview,
 or multi-draw MAY be used behind capability policy. Lack of one optional
 extension MUST take a documented fallback path, not a browser-name branch.
 

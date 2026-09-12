@@ -323,6 +323,7 @@ const defaultPlatform = (): CanvasRootPlatform => ({
 
 const lazyBrowserTextureDecoder = (
   etc2Available: boolean,
+  gl: WebGL2RenderingContext,
   readGltfTexture: CanvasRootPlatform["readGltfTextureResource"],
   onReadAheadChanged: () => void,
   scheduleSvgPreparation: import("../resource/async-preparation-owner").AsyncPreparationScheduler,
@@ -340,6 +341,7 @@ const lazyBrowserTextureDecoder = (
           readGltfTexture,
           onReadAheadChanged,
           scheduleSvgPreparation,
+          gl,
         );
         loadedDecoder = value;
         return value;
@@ -820,6 +822,7 @@ export class CanvasRoot implements RendererRoot {
       const browserTextureDecoder = platform.decodeTexture === undefined
         ? lazyBrowserTextureDecoder(
           this.#etc2Available,
+          this.#gl,
           platform.readGltfTextureResource,
           () => {
             if (!this.#disposed) this.#publish();

@@ -30,10 +30,10 @@ export const ktx2Etc2StorageBytes = (texture: Ktx2Etc2Texture): number => {
 };
 
 /** Fits by dropping authored largest mip levels; compressed texels are never resampled. */
-export const fitKtx2Etc2Storage = (
-  texture: Ktx2Etc2Texture,
+export const fitKtx2Etc2Storage = <T extends Ktx2Etc2Texture>(
+  texture: T,
   maxBytes: number,
-): Ktx2Etc2Texture => {
+): T => {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
     throw new RangeError("Royal KTX2 storage ceiling must be a positive safe integer");
   }
@@ -51,7 +51,7 @@ export const fitKtx2Etc2Storage = (
   if (firstLevel === 0) return texture;
   const base = texture.levels[firstLevel]!;
   return {
-    colorSpace: texture.colorSpace,
+    ...texture,
     height: base.height,
     levels: texture.levels.slice(firstLevel),
     width: base.width,

@@ -7,7 +7,8 @@ import {
   type CanonicalTextureSampler,
 } from "../texture/sampler";
 import type { CanonicalSurfaceScene } from "../surface/scene-lowering";
-import { etc2RgbaWebGlFormat } from "../texture/etc2-storage";
+import { nativeTextureAvailable, nativeWebGlFormat } from "../texture/native-storage";
+import { virtualTexturePageBytes, virtualTexturePageFormat } from "./page-format";
 import {
   openAuthoredVirtualTexturePageSource,
   type DecodedVirtualTexturePage,
@@ -217,7 +218,7 @@ const createGpuVirtualTextureAtlas = (
       gl.TEXTURE_2D,
       1,
       plan.compressed
-        ? etc2RgbaWebGlFormat(colorSpace)
+        ? nativeWebGlFormat(virtualTexturePageFormat(manifest.pageEncoding)!, colorSpace)
         : colorSpace === "srgb" ? gl.SRGB8_ALPHA8 : gl.RGBA8,
       plan.atlasColumns * plan.storedPageSize,
       plan.atlasRows * plan.storedPageSize,
@@ -632,7 +633,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       const svg = automaticVirtualTextureIsSvg(decoded);
       const preview = automaticVirtualTextureHasPreview(decoded);
       if (
-        decoded.kind === "ktx2-etc2"
+        decoded.kind !== undefined
         || (!svg && !preview && !automaticVirtualTextureEligible(decoded))
       ) {
         this.#automaticIneligible += 1;
@@ -751,14 +752,14 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       const manifest = resource.manifest;
       if (manifest === undefined || resource.manifestFailure !== undefined) continue;
       const key = virtualTextureAtlasKey(resource.asset, manifest);
-      const bytesPerPage = (manifest.pageSize + manifest.borderTexels * 2) ** 2 * (manifest.pageEncoding === "ktx2-etc2" ? 1 : 4);
+      const bytesPerPage = virtualTexturePageBytes(manifest);
       const count = Math.min(resource.desiredPageCount ?? 0, manifest.physicalSlots ?? Infinity,
         manifest.physicalByteBudget === undefined ? Infinity : Math.floor(manifest.physicalByteBudget / bytesPerPage));
       this.#atlasDemand.set(key, (this.#atlasDemand.get(key) ?? 0) + count);
       this.#atlasDemandBytes.set(key, (this.#atlasDemandBytes.get(key) ?? 0) + count * bytesPerPage);
       this.#atlasMinimumSlots.set(key, (this.#atlasMinimumSlots.get(key) ?? 0) + (count > 0 ? 1 : 0));
       if (count === 0 && !this.#atlases.has(key)) continue;
-      if (manifest.pageEncoding === "ktx2-etc2") {
+      if (manifest.pageEncoding !== "image") {
         if (!compressedKeys.has(key)) compressedBytes += this.#atlases.get(key)?.allocationBytes ?? 32 * 1024 * 1024;
         compressedKeys.add(key);
       } else {
@@ -834,7 +835,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         }
         const evicted = gpu.atlas.slots[slot];
         const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
-        const pageByteLength = ready.decoded.kind === "etc2-rgba"
+        const pageByteLength = ready.decoded.kind !== "image"
           ? ready.decoded.blocks.byteLength
           : storedPageSize * storedPageSize * 4;
         const evictedGpu = evicted === undefined
@@ -919,10 +920,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     let gpuCreated = false;
     if (resource.gpu === undefined) {
       const atlas = this.#atlases.get(virtualTextureAtlasKey(resource.asset, manifest));
-      const pageBytes = (manifest.pageSize + manifest.borderTexels * 2) ** 2
-        * (manifest.pageEncoding === "ktx2-etc2" ? 1 : 4);
+      const pageBytes = virtualTexturePageBytes(manifest);
       resource.allocationBudgetBlocked = this.#budget.availableBytes < manifest.tableByteLength + (atlas === undefined ? pageBytes : 0)
-        || (atlas === undefined && manifest.pageEncoding !== "ktx2-etc2" && this.#atlasAllowance(undefined, virtualTextureAtlasKey(resource.asset, manifest)) < pageBytes);
+        || (atlas === undefined && manifest.pageEncoding === "image" && this.#atlasAllowance(undefined, virtualTextureAtlasKey(resource.asset, manifest)) < pageBytes);
       if (resource.allocationBudgetBlocked) return false;
       if (!this.#uploadBudget.tryAdmitAllocation()) {
         resource.demandRevision = -1;
@@ -1237,6 +1237,10 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     resource: RuntimeResource,
     manifest: VirtualTextureManifest,
   ): GpuVirtualTexture {
+    if (manifest.pageEncoding !== "image" && manifest.pageEncoding !== "ktx2-etc2"
+      && !nativeTextureAvailable(this.#gl, virtualTexturePageFormat(manifest.pageEncoding)!, resource.asset.colorSpace ?? manifest.colorSpace)) {
+      throw new Error("Royal native compressed VT page format is unsupported by this device");
+    }
     if (manifest.pageEncoding === "ktx2-etc2" && !this.#etc2Available) {
       throw new Error("Royal ETC2 KTX2 VT pages require WEBGL_compressed_texture_etc");
     }
@@ -1249,8 +1253,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         manifest,
         maxTextureSize,
         this.#budget.availableBytes,
-        manifest.pageEncoding === "ktx2-etc2" ? Infinity : this.#targetAtlasSlots(atlasKey),
-        manifest.pageEncoding === "ktx2-etc2" ? undefined : this.#atlasAllowance(undefined, atlasKey),
+        manifest.pageEncoding !== "image" ? Infinity : this.#targetAtlasSlots(atlasKey),
+        manifest.pageEncoding !== "image" ? undefined : this.#atlasAllowance(undefined, atlasKey),
       );
       atlas = createGpuVirtualTextureAtlas(
         this.#gl,
@@ -1435,10 +1439,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     const svgPreview = preview !== undefined && automaticVirtualTextureHasPreview(preview)
       ? preview.svgPreview : undefined;
     const manifest = resource.manifest!;
-    const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
-    const byteLength = manifest.pageEncoding === "ktx2-etc2"
-      ? Math.ceil(storedPageSize / 4) ** 2 * 16
-      : storedPageSize ** 2 * 4;
+    const byteLength = virtualTexturePageBytes(manifest);
     for (let index = 0; index < resource.workspace.count; index += 1) {
       const mip = resource.workspace.mips[index]!;
       const x = resource.workspace.xs[index]!;
@@ -1598,9 +1599,10 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
     gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-    if (ready.decoded.kind === "etc2-rgba") {
+    if (ready.decoded.kind !== "image") {
       const expectedColorSpace = resource.asset.colorSpace ?? resource.manifest!.colorSpace;
-      if (!atlas.compressed || ready.decoded.colorSpace !== expectedColorSpace) {
+      if (!atlas.compressed || ready.decoded.colorSpace !== expectedColorSpace
+        || ready.decoded.kind !== virtualTexturePageFormat(resource.manifest!.pageEncoding)) {
         throw new TypeError("Royal VT KTX2 page storage does not match its manifest color space");
       }
       gl.compressedTexSubImage2D(
@@ -1610,7 +1612,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         slotY * storedPageSize,
         storedPageSize,
         storedPageSize,
-        etc2RgbaWebGlFormat(expectedColorSpace),
+        nativeWebGlFormat(ready.decoded.kind, expectedColorSpace),
         ready.decoded.blocks,
       );
     } else {

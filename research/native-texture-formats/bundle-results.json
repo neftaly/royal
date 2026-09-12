@@ -1,0 +1,47 @@
+{
+  "compression": {
+    "algorithm": "gzip",
+    "level": 9,
+    "note": "Capability gzip upper bounds count whole emitted chunks and may overlap. Matched module rendered bytes retain published-module granularity and are not an exact division of shared source contributions."
+  },
+  "fixtures": {
+    "environment": {
+      "initial": 143370,
+      "lazy": 127810,
+      "total": 271180,
+      "worker": 23129
+    },
+    "gltf": {
+      "initial": 144276,
+      "lazy": 127811,
+      "total": 272087,
+      "worker": 23129
+    },
+    "react": {
+      "initial": 59288,
+      "lazy": 0,
+      "total": 59288,
+      "worker": 0
+    },
+    "royal": {
+      "initial": 143278,
+      "lazy": 127784,
+      "total": 271062,
+      "worker": 23129
+    },
+    "xr": {
+      "initial": 3895,
+      "lazy": 2543,
+      "total": 6438,
+      "worker": 0
+    }
+  },
+  "measurements": {
+    "gltfAuthoringDeltaGzipBytes": 998,
+    "royalIncrementalGzipBytes": 83990,
+    "royalOnlyGraphGzipBytes": 211774
+  },
+  "phaseSemantics": "Initial and lazy partition emitted JavaScript; worker is a subset of lazy; total counts each fixture file once.",
+  "schemaVersion": 1,
+  "note": "Compact summary of node scripts/check-bundle-size.mjs --json; per-chunk file listings omitted."
+}

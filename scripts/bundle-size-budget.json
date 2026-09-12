@@ -12,7 +12,7 @@
     "royalWorkerGzipBytes": 56618
   },
   "_allowance": {
-    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, retained multi-view outline planning, invariant-prepass depth equality, final default-depth discard, transactional creation-loss recovery, alpha-safe AVIF fitting, retained screen-space segments, exact-budget VT atlas planning, and lazy bounded emissive volumes, extracted overlay ownership with reentrant installation guards and shared preparation policy, always-on VT, preview-first SVG refinement, indexed outline provenance, and opaque retained-presentation copies, and separated transparent bounds ordering, and full-atlas VT preparation queue liveness, bounded adaptive VT residency and preparation, nonblocking VT shader publication, and authored SVG crop semantics, per-mount imported-light control and optional image-capture capability, lazy 512-light composition with a shared material path, exact zero-contribution rejection through the existing BRDF early return, host frame scheduling, asynchronous SVG origin validation, and per-pass material and exact instance revision reuse",
+    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, retained multi-view outline planning, invariant-prepass depth equality, final default-depth discard, transactional creation-loss recovery, alpha-safe AVIF fitting, retained screen-space segments, exact-budget VT atlas planning, and lazy bounded emissive volumes, extracted overlay ownership with reentrant installation guards and shared preparation policy, always-on VT, preview-first SVG refinement, indexed outline provenance, and opaque retained-presentation copies, and separated transparent bounds ordering, and full-atlas VT preparation queue liveness, bounded adaptive VT residency and preparation, nonblocking VT shader publication, and authored SVG crop semantics, per-mount imported-light control and optional image-capture capability, lazy 512-light composition with a shared material path, exact zero-contribution rejection through the existing BRDF early return, host frame scheduling, asynchronous SVG origin validation, and per-pass material and exact instance revision reuse, direct native ASTC/BC textures and authored VT through the shared compressed pipeline",
     "initialAndTotalGzipBytes": 8600,
     "lazyGzipBytes": 3700,
     "minidraco050GzipBytes": 3700,
@@ -21,14 +21,16 @@
     "lazyLargeLightsModuleGzipBytes": 1600,
     "unilluminatedShaderAndCaptureReadinessGltfGzipBytes": 50,
     "largeLightZeroContributionGzipBytes": 100,
-    "hostClockOriginProbeAndInstanceRevisionGzipBytes": 256
+    "hostClockOriginProbeAndInstanceRevisionGzipBytes": 256,
+    "nativeCompressedFormatsInitialGzipBytes": 512,
+    "nativeCompressedFormatsLazyGzipBytes": 1024
   },
-  "royalInitialGzipBytes": 142906,
-  "royalIncrementalGzipBytes": 83606,
-  "royalGltfInitialGzipBytes": 143906,
+  "royalInitialGzipBytes": 143418,
+  "royalIncrementalGzipBytes": 84118,
+  "royalGltfInitialGzipBytes": 144418,
   "royalGltfIncrementalGzipBytes": 1050,
-  "royalLazyGzipBytes": 126800,
-  "royalTotalIncrementalGzipBytes": 210406,
-  "royalTotalGzipBytes": 269656,
+  "royalLazyGzipBytes": 127824,
+  "royalTotalIncrementalGzipBytes": 211942,
+  "royalTotalGzipBytes": 271192,
   "royalWorkerGzipBytes": 23150
 }

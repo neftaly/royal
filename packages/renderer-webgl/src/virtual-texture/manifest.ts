@@ -1,3 +1,5 @@
+import { nativeBlockSize } from "../texture/native-storage";
+import { isVirtualTexturePageEncoding, virtualTexturePageFormat, type VirtualTexturePageEncoding } from "./page-format";
 import type { TextureColorSpace } from "@royal/renderer-core";
 
 export { DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS } from "./automatic-policy";
@@ -18,7 +20,7 @@ export type VirtualTextureManifest = Readonly<{
   mipCount: number;
   mipLayouts: readonly VirtualTextureMipLayout[];
   pageAddressing: "complete" | "sparse";
-  pageEncoding: "image" | "ktx2-etc2";
+  pageEncoding: VirtualTexturePageEncoding;
   pageSize: number;
   physicalByteBudget?: number;
   physicalSlots?: number;
@@ -169,11 +171,11 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
     throw new TypeError("Royal VT manifest colorSpace must be srgb or linear");
   }
   const pageEncoding = input.pageEncoding === undefined ? "image" : input.pageEncoding;
-  if (pageEncoding !== "image" && pageEncoding !== "ktx2-etc2") {
-    throw new TypeError("Royal VT manifest pageEncoding must be image or ktx2-etc2");
+  if (!isVirtualTexturePageEncoding(pageEncoding)) {
+    throw new TypeError("Royal VT manifest pageEncoding must be image or a supported native KTX2 format");
   }
-  if (pageEncoding === "ktx2-etc2" && storedPageSize % 4 !== 0) {
-    throw new RangeError("Royal VT KTX2/ETC2 stored page size must be block-compatible");
+  if (pageEncoding !== "image" && storedPageSize % nativeBlockSize(virtualTexturePageFormat(pageEncoding)!) !== 0) {
+    throw new RangeError("Royal VT KTX2 stored page size must be block-compatible");
   }
   if (!isRecord(input.pages)) throw new TypeError("Royal VT manifest pages must be an object");
   const uriTemplate = input.pages.uriTemplate === undefined

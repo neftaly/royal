@@ -9,16 +9,16 @@ const AUTOMATIC_VT_MIN_SOURCE_TEXELS = DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS
 
 export const automaticVirtualTextureEligible = (
   source: DecodedTextureSource,
-): source is DecodedImageTextureSource => source.kind !== "ktx2-etc2"
+): source is DecodedImageTextureSource => source.kind === undefined
   && Math.max(source.width, source.height) >= AUTOMATIC_VT_MIN_LONG_EDGE
   && source.width * source.height > AUTOMATIC_VT_MIN_SOURCE_TEXELS;
 
 export const automaticVirtualTextureIsSvg = (
   source: DecodedTextureSource,
 ): source is DecodedImageTextureSource & Readonly<{ encodedSvg: EncodedSvgTextureSource }> =>
-  source.kind !== "ktx2-etc2" && source.encodedSvg !== undefined;
+  source.kind === undefined && source.encodedSvg !== undefined;
 
 export const automaticVirtualTextureHasPreview = (
   source: DecodedTextureSource,
 ): source is DecodedImageTextureSource & Readonly<{ svgPreview: NonNullable<DecodedImageTextureSource["svgPreview"]> }> =>
-  source.kind !== "ktx2-etc2" && source.svgPreview !== undefined;
+  source.kind === undefined && source.svgPreview !== undefined;

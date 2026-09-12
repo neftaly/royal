@@ -373,11 +373,18 @@ describe("browser virtual texture runtime", () => {
     }
   });
 
-  it("reserves compressed page bytes through decode, upload, and invalidation", async () => {
-    const storedSize = 2052;
-    const bytes = createKtx2Etc2Fixture(152, storedSize, storedSize);
+  it.each([
+    ["ktx2-etc2", 152, 4, 16, 2052, 0x9279],
+    ["ktx2-astc-6x6", 166, 6, 16, 2052, 0x93d4],
+    ["ktx2-astc-8x8", 172, 8, 16, 2056, 0x93d7],
+    ["ktx2-bc1", 134, 4, 8, 2052, 0x8c4d],
+    ["ktx2-bc3", 138, 4, 16, 2052, 0x8c4f],
+    ["ktx2-bc7", 146, 4, 16, 2052, 0x8e8d],
+  ] as const)("reserves %s bytes through decode, upload, and invalidation", async (encoding, vk, block, blockBytes, storedSize, glFormat) => {
+    const bytes = createKtx2Etc2Fixture(vk, storedSize, storedSize);
+    const pageBytes = (storedSize / block) ** 2 * blockBytes;
     const manifest = {
-      borderTexels: 2, contractVersion: 2, pageSize: 2048, pageEncoding: "ktx2-etc2",
+      borderTexels: (storedSize - 2048) / 2, contractVersion: 2, pageSize: 2048, pageEncoding: encoding,
       pages: { uriTemplate: "page-{mip}-{x}-{y}.ktx2" }, physicalSlots: 1, virtualSize: [2048, 2048],
     };
     vi.stubGlobal("document", { baseURI: "https://example.test/" });
@@ -386,7 +393,7 @@ describe("browser virtual texture runtime", () => {
     )));
     const gl = fakeGl();
     const upload = vi.fn();
-    Object.assign(gl, { compressedTexSubImage2D: upload });
+    Object.assign(gl, { compressedTexSubImage2D: upload, getExtension: vi.fn(() => ({ getSupportedProfiles: () => ["ldr"] })) });
     const asset = virtualTexture("https://example.test/compressed.vt.json");
     const prepared = prepareCanonicalSurfaceScene(scene({
       camera: perspectiveCamera({}),
@@ -399,16 +406,17 @@ describe("browser virtual texture runtime", () => {
       runtime.setScene(prepared);
       await waitFor(() => expect(runtime.snapshot(asset).status).toBe("ready"));
       runtime.update([view]);
-      expect(runtime.runtimeSnapshot()).toMatchObject({ pendingPageBytes: storedSize ** 2, pageRequests: 1, failedPages: 0 });
+      expect(runtime.runtimeSnapshot()).toMatchObject({ pendingPageBytes: pageBytes, pageRequests: 1, failedPages: 0 });
       await waitFor(() => {
         runtime.update([view]);
         expect(runtime.snapshot(asset).residentPages).toBe(1);
       });
       expect(upload).toHaveBeenCalledOnce();
+      expect(upload.mock.calls[0]![6]).toBe(glFormat);
       expect(runtime.runtimeSnapshot().pendingPageBytes).toBe(0);
       runtime.invalidate();
       runtime.update([view]);
-      expect(runtime.runtimeSnapshot().pendingPageBytes).toBe(storedSize ** 2);
+      expect(runtime.runtimeSnapshot().pendingPageBytes).toBe(pageBytes);
       runtime.dispose();
       await waitFor(() => expect(runtime.runtimeSnapshot().pendingPageBytes).toBe(0));
     } finally {
@@ -1009,5 +1017,34 @@ describe("browser virtual texture runtime", () => {
     expect(acquireDecoded).toHaveBeenCalledOnce();
     runtime.dispose();
     expect(release).toHaveBeenCalledOnce();
+  });
+});
+
+describe("native VT compatibility", () => {
+  it.each(["ktx2-astc-6x6", "ktx2-astc-8x8", "ktx2-bc1", "ktx2-bc3", "ktx2-bc7"])("settles unsupported %s without page downloads or GPU allocation", async (pageEncoding) => {
+    const borderTexels = pageEncoding === "ktx2-astc-8x8" ? 4 : 2;
+    const fetch = vi.fn(async () => new Response(JSON.stringify({
+      contractVersion: 2, pageEncoding, pageSize: 128, borderTexels, virtualSize: [128, 128],
+      pages: { uriTemplate: "{mip}-{x}-{y}.ktx2" },
+    })));
+    vi.stubGlobal("fetch", fetch);
+    const gl = fakeGl();
+    const budget = new PersistentGpuBudgetOwner();
+    const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn(), budget);
+    const asset = virtualTexture("https://test.invalid/native.json");
+    const matrix = identityMat4();
+    const view = { view: matrix, viewProjection: matrix, viewport: { width: 256, height: 256, x: 0, y: 0 } };
+    try {
+      runtime.setScene(prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}),
+        nodes: [mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) })],
+      })));
+      await waitFor(() => expect(runtime.snapshot(asset).status).toBe("ready"));
+      for (let frame = 0; frame < 100; frame++) expect(() => runtime.update([view])).not.toThrow();
+      expect(runtime.snapshot(asset).status).toBe("unsupported");
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(gl.getExtension).toHaveBeenCalledOnce();
+      expect(gl.texStorage2D).not.toHaveBeenCalled();
+      expect(budget.snapshot().retainedBytes).toBe(0);
+    } finally { runtime.dispose(); }
   });
 });

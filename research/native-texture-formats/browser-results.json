@@ -1,0 +1,159 @@
+{
+  "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+  "results": [
+    {
+      "extent": 136,
+      "format": "etc2-rgba",
+      "bytes": 18496,
+      "parseMs": 0.0008399999976158142,
+      "supported": true,
+      "uploadMs": 0.08000000715255737,
+      "retainMs": 0.00004300000011920929,
+      "pageUploadMs": 0.06999999880790711
+    },
+    {
+      "extent": 136,
+      "format": "astc-6x6",
+      "bytes": 8464,
+      "parseMs": 0.0008799999952316285,
+      "supported": true,
+      "uploadMs": 0.13999999761581422,
+      "retainMs": 0.00004399999976158142,
+      "pageUploadMs": 0.0800000011920929
+    },
+    {
+      "extent": 136,
+      "format": "astc-8x8",
+      "bytes": 4624,
+      "parseMs": 0.0009,
+      "supported": true,
+      "uploadMs": 0.1,
+      "retainMs": 0.00004899999976158142,
+      "pageUploadMs": 0.07999999523162842
+    },
+    {
+      "extent": 136,
+      "format": "bc1-rgba",
+      "bytes": 9248,
+      "parseMs": 0.0006600000023841858,
+      "supported": true,
+      "uploadMs": 0.11999999284744263,
+      "retainMs": 0.000044000000357627867,
+      "pageUploadMs": 0.0800000011920929
+    },
+    {
+      "extent": 136,
+      "format": "bc3-rgba",
+      "bytes": 18496,
+      "parseMs": 0.0005,
+      "supported": true,
+      "uploadMs": 0.1,
+      "retainMs": 0.00004599999964237213,
+      "pageUploadMs": 0.06999999880790711
+    },
+    {
+      "extent": 136,
+      "format": "bc7-rgba",
+      "bytes": 18496,
+      "parseMs": 0.0005,
+      "supported": true,
+      "uploadMs": 0.1,
+      "retainMs": 0.00005399999976158142,
+      "pageUploadMs": 0.07999999523162842
+    },
+    {
+      "extent": 136,
+      "format": "rgba8",
+      "bytes": 73984,
+      "uploadMs": 0.1
+    },
+    {
+      "extent": 1024,
+      "format": "etc2-rgba",
+      "bytes": 1048576,
+      "parseMs": 0.00043999999761581423,
+      "supported": true,
+      "uploadMs": 0.9200000047683716,
+      "retainMs": 0.000044000000357627867,
+      "pageUploadMs": 0.0899999976158142
+    },
+    {
+      "extent": 1024,
+      "format": "astc-6x6",
+      "bytes": 467856,
+      "parseMs": 0.00044000000953674316,
+      "supported": true,
+      "uploadMs": 0.24000000953674316,
+      "retainMs": 0.00004199999988079071,
+      "pageUploadMs": 0.0800000011920929
+    },
+    {
+      "extent": 1024,
+      "format": "astc-8x8",
+      "bytes": 262144,
+      "parseMs": 0.00047999999523162844,
+      "supported": true,
+      "uploadMs": 0.1799999952316284,
+      "retainMs": 0.00006200000047683716,
+      "pageUploadMs": 0.0800000011920929
+    },
+    {
+      "extent": 1024,
+      "format": "bc1-rgba",
+      "bytes": 524288,
+      "parseMs": 0.0005,
+      "supported": true,
+      "uploadMs": 0.2399999976158142,
+      "retainMs": 0.000044000000357627867,
+      "pageUploadMs": 0.0800000011920929
+    },
+    {
+      "extent": 1024,
+      "format": "bc3-rgba",
+      "bytes": 1048576,
+      "parseMs": 0.00048000000715255737,
+      "supported": true,
+      "uploadMs": 1.0800000071525573,
+      "retainMs": 0.000065,
+      "pageUploadMs": 0.0800000011920929
+    },
+    {
+      "extent": 1024,
+      "format": "bc7-rgba",
+      "bytes": 1048576,
+      "parseMs": 0.0005199999928474427,
+      "supported": true,
+      "uploadMs": 0.9600000023841858,
+      "retainMs": 0.000045,
+      "pageUploadMs": 0.06999999880790711
+    },
+    {
+      "extent": 1024,
+      "format": "rgba8",
+      "bytes": 4194304,
+      "uploadMs": 2.7199999928474425
+    }
+  ],
+  "pixels": [
+    {
+      "format": "astc-6x6",
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "format": "astc-8x8",
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ]
+    }
+  ],
+  "note": "Median warmed wall time with gl.finish; software-driver results are not native GPU timings. Parsing uses structural fixtures and creates views, not payload copies."
+}

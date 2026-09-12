@@ -1,0 +1,8 @@
+<!doctype html><meta charset="utf-8"><title>Royal native texture benchmark</title>
+<p>Run <code>await runNativeTextureBenchmark()</code> in the console. Timings include software-renderer cost when SwiftShader is active.</p>
+<script type="module">
+import { runNativeTextureBenchmark } from './benchmark.ts';
+window.runNativeTextureBenchmark = runNativeTextureBenchmark;
+import { runAuthoredTextureBenchmark } from './authored-benchmark.ts';
+window.runAuthoredTextureBenchmark = runAuthoredTextureBenchmark;
+</script>

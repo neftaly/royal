@@ -1,3 +1,5 @@
+import { fitKtx2Etc2Storage } from "./etc2-storage";
+import { nativeTextureAvailable, validateNativeBaseDimensions } from "./native-storage";
 import { selectAsyncPreparationLane, type AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 import type {
   DecodedImageTextureSource,
@@ -265,7 +267,7 @@ const isSvgUri = (uri: string): boolean => /\.svg(?:[?#]|$)/i.test(uri);
 
 const textureBlobType = (asset: TextureLeafSourceRef & Readonly<{ src: string }>): string => {
   if (asset.mimeType !== undefined) return asset.mimeType;
-  if (asset.sourceEncoding === "ktx2-etc2" || isKtx2Uri(asset.src)) return "image/ktx2";
+  if (asset.sourceEncoding === "ktx2-etc2" || asset.sourceEncoding === "ktx2-native" || isKtx2Uri(asset.src)) return "image/ktx2";
   if (asset.sourceEncoding === "svg" || isSvgUri(asset.src)) return "image/svg+xml";
   if (/\.avif(?:[?#]|$)/i.test(asset.src)) return "image/avif";
   if (/\.jpe?g(?:[?#]|$)/i.test(asset.src)) return "image/jpeg";
@@ -321,12 +323,6 @@ const resizeAvifBitmap = (
   };
 };
 
-const declaresKtx2 = (asset: TextureLeafSourceRef): boolean =>
-  asset.sourceEncoding === "ktx2-etc2"
-  || (asset.kind === "embedded-asset"
-    ? isKtx2MimeType(asset.mimeType)
-    : isKtx2Uri(asset.src));
-
 const alphaMipmapsRequired = (asset: TextureLeafSourceRef): boolean =>
   (asset.sampler?.minFilter ?? "linear-mipmap-linear").includes("mipmap");
 
@@ -338,7 +334,7 @@ const readTextureBlob = async (
     ? {
       blob: new Blob([asset.bytes as Uint8Array<ArrayBuffer>], { type: asset.mimeType }),
       byteLength: asset.bytes.byteLength,
-      ktx2: asset.sourceEncoding === "ktx2-etc2" || isKtx2MimeType(asset.mimeType),
+      ktx2: asset.sourceEncoding === "ktx2-etc2" || asset.sourceEncoding === "ktx2-native" || isKtx2MimeType(asset.mimeType),
       svg: asset.sourceEncoding === "svg" || isSvgMimeType(asset.mimeType),
     }
     : await (async () => {
@@ -347,7 +343,7 @@ const readTextureBlob = async (
         return {
           blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: textureBlobType(asset) }),
           byteLength: bytes.byteLength,
-          ktx2: asset.sourceEncoding === "ktx2-etc2" || isKtx2Uri(asset.src),
+          ktx2: asset.sourceEncoding === "ktx2-etc2" || asset.sourceEncoding === "ktx2-native" || isKtx2Uri(asset.src),
           svg: asset.sourceEncoding === "svg" || isSvgUri(asset.src),
         };
       }
@@ -359,7 +355,7 @@ const readTextureBlob = async (
       return {
         blob,
         byteLength: blob.size,
-        ktx2: asset.sourceEncoding === "ktx2-etc2"
+        ktx2: (asset.sourceEncoding === "ktx2-etc2" || asset.sourceEncoding === "ktx2-native")
           || isKtx2Uri(asset.src)
           || isKtx2MimeType(blob.type),
         svg: asset.sourceEncoding === "svg" || isSvgUri(asset.src) || isSvgMimeType(blob.type),
@@ -372,27 +368,58 @@ const decodeKtx2Texture = async (
   signal: AbortSignal,
   maxStorageBytes?: number,
   retainAlpha = false,
+  etc2Available = true,
+  gl?: WebGL2RenderingContext,
 ): Promise<DecodedTextureSource> => {
   if (signal.aborted) throw aborted();
-  const {
-    decodeKtx2Etc2Alpha,
-    fitKtx2Etc2Storage,
-    parseKtx2Etc2,
-  } = await import("./ktx2-etc2");
+  const { parseKtx2Native } = await import("./ktx2-native");
+  const sourceTexture = parseKtx2Native(new Uint8Array(await blob.arrayBuffer()));
   if (signal.aborted) throw aborted();
-  const sourceTexture = parseKtx2Etc2(new Uint8Array(await blob.arrayBuffer()));
-  if (signal.aborted) throw aborted();
+  if (sourceTexture.format === "etc2-rgba" && !etc2Available) {
+    throw new Error("Royal ETC2 KTX2 textures require WEBGL_compressed_texture_etc");
+  }
+  // Only native preparation waits; a lost context is not permanent lack of support.
+  if (sourceTexture.format !== "etc2-rgba" && gl !== undefined) {
+    for (;;) {
+      if (signal.aborted) throw aborted();
+      if (!gl.isContextLost()) {
+        if (nativeTextureAvailable(gl, sourceTexture.format, sourceTexture.colorSpace)) break;
+        if (!gl.isContextLost()) throw new Error(`Royal ${sourceTexture.format} texture is unsupported by this device`);
+      }
+      await new Promise<void>((resolve, reject) => {
+        const cleanup = (): void => {
+          gl.canvas.removeEventListener("webglcontextrestored", restored);
+          signal.removeEventListener("abort", cancel);
+        };
+        const restored = (): void => { cleanup(); resolve(); };
+        const cancel = (): void => { cleanup(); reject(aborted()); };
+        gl.canvas.addEventListener("webglcontextrestored", restored, { once: true });
+        signal.addEventListener("abort", cancel, { once: true });
+        if (signal.aborted) cancel();
+        else if (!gl.isContextLost()) restored();
+      });
+    }
+  }
+  if (asset.sourceEncoding === "ktx2-etc2" && sourceTexture.format !== "etc2-rgba") {
+    throw new TypeError("Royal KTX2 format does not match sourceEncoding");
+  }
   const colorSpace = asset.colorSpace ?? "srgb";
   if (sourceTexture.colorSpace !== colorSpace) {
     throw new TypeError(
-      `${diagnosticLabel(asset)} declares ${sourceTexture.colorSpace} ETC2 storage but the asset requests ${colorSpace}`,
+      `${diagnosticLabel(asset)} declares ${sourceTexture.colorSpace} ${sourceTexture.format === "etc2-rgba" ? "ETC2" : sourceTexture.format} storage but the asset requests ${colorSpace}`,
     );
   }
   const texture = maxStorageBytes === undefined
     ? sourceTexture
     : fitKtx2Etc2Storage(sourceTexture, maxStorageBytes);
+  validateNativeBaseDimensions(texture.format, texture.width, texture.height);
   let alpha: DecodedTextureSource["alpha"];
+  if (retainAlpha && sourceTexture.format !== "etc2-rgba") {
+    throw new TypeError("Royal ASTC/BC textures do not support retained CPU alpha; use ETC2 or a raster source for alpha picking");
+  }
   if (retainAlpha) {
+    const { decodeKtx2Etc2Alpha } = await import("./ktx2-etc2");
+    if (signal.aborted) throw aborted();
     const levels = texture.levels.map((level, index) => ({
       height: level.height,
       values: decodeKtx2Etc2Alpha(texture, index),
@@ -418,7 +445,9 @@ const decodeKtx2Texture = async (
     },
     colorSpace,
     height: texture.height,
-    kind: "ktx2-etc2",
+    ...(texture.format === "etc2-rgba"
+      ? { kind: "ktx2-etc2" as const }
+      : { kind: "ktx2-native" as const, format: texture.format }),
     levels,
     ...(texture === sourceTexture ? {} : {
       sourceHeight: sourceTexture.height,
@@ -648,6 +677,7 @@ export const createBrowserTextureDecoder = (
   readGltfTexture?: BrowserGltfTextureReader,
   onReadAheadChanged: () => void = () => undefined,
   scheduleSvgPreparation: AsyncPreparationScheduler = (_signal, prepare) => prepare(),
+  gl?: WebGL2RenderingContext,
 ): BrowserTextureDecoder => {
   const now = (): number => performance.now();
   const decodes = new BrowserWorkQueue(maxParallelDecodes);
@@ -690,7 +720,7 @@ export const createBrowserTextureDecoder = (
     retainAlpha: boolean | undefined,
     fallback = false,
   ): Promise<DecodedTextureSource> => {
-    if (!etc2Available && declaresKtx2(asset)) {
+    if (!etc2Available && asset.sourceEncoding === "ktx2-etc2") {
       throw new Error("Royal ETC2 KTX2 textures require WEBGL_compressed_texture_etc");
     }
     const {
@@ -703,9 +733,6 @@ export const createBrowserTextureDecoder = (
     if (fallback && svg) {
       throw new TypeError("Royal SVG texture fallback must be an ordinary raster or ETC2 source");
     }
-    if (ktx2 && !etc2Available) {
-      throw new Error("Royal ETC2 KTX2 textures require WEBGL_compressed_texture_etc");
-    }
     const parsedSvg = svg
       ? await import("./svg-source").then(({ validateSvgTextureBlob }) =>
           validateSvgTextureBlob(blob, signal))
@@ -715,7 +742,7 @@ export const createBrowserTextureDecoder = (
     const decoded = await decodes.run(signal, () => {
       decodeStartedAt = now();
       return ktx2
-        ? decodeKtx2Texture(asset, blob, signal, maxStorageBytes, retainAlpha)
+        ? decodeKtx2Texture(asset, blob, signal, maxStorageBytes, retainAlpha, etc2Available, gl)
         : decodeTextureBlob(
             asset,
             blob,
@@ -735,7 +762,7 @@ export const createBrowserTextureDecoder = (
         transportQueueDurationMs,
       },
     };
-    if (!svg || timed.kind === "ktx2-etc2") return timed;
+    if (!svg || timed.kind !== undefined) return timed;
     return {
       ...timed,
       encodedSvg: { blob, byteLength: blob.size, parsed: parsedSvg! },
@@ -756,7 +783,7 @@ export const createBrowserTextureDecoder = (
         // A missing preview must not prevent a usable authoritative source.
         return decodeLeaf(asset, signal, maxStorageBytes, retainAlpha);
       }
-      if (preview.kind === "ktx2-etc2") {
+      if (preview.kind !== undefined) {
         preview.close?.();
         return decodeLeaf(asset, signal, maxStorageBytes, retainAlpha);
       }

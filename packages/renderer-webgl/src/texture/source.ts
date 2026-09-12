@@ -6,6 +6,7 @@ import type {
 } from "@royal/renderer-core";
 import type { DecodedTextureAlpha } from "./alpha-mipmap";
 import type { Ktx2Etc2Level } from "./etc2-storage";
+import type { NativeTextureFormat } from "./native-storage";
 import type { ParsedSvgTextureSource } from "./svg-source";
 
 /** Cold stage attribution captured by the built-in browser texture decoder. */
@@ -62,8 +63,13 @@ export type DecodedKtx2Etc2TextureSource = Readonly<{
   width: number;
 }>;
 
-/** Canonical CPU upload source: a browser image or already-GPU-native ETC2 levels. */
-export type DecodedTextureSource = DecodedImageTextureSource | DecodedKtx2Etc2TextureSource;
+export type DecodedKtx2NativeTextureSource = Omit<DecodedKtx2Etc2TextureSource, "kind"> & Readonly<{
+  kind: "ktx2-native";
+  format: Exclude<NativeTextureFormat, "etc2-rgba">;
+}>;
+
+/** Canonical CPU upload source: a browser image or already-GPU-native compressed levels. */
+export type DecodedTextureSource = DecodedImageTextureSource | DecodedKtx2Etc2TextureSource | DecodedKtx2NativeTextureSource;
 
 /** Explicit CPU-source claim used by optional representations such as automatic VT. */
 export type DecodedTextureLease = Readonly<{
@@ -71,7 +77,7 @@ export type DecodedTextureLease = Readonly<{
   source: DecodedTextureSource;
 }>;
 
-export type TextureSourceEncoding = "ktx2-etc2" | "svg";
+export type TextureSourceEncoding = "ktx2-etc2" | "ktx2-native" | "svg";
 
 export type GltfTextureAssetRef = TextureAssetRef & Readonly<{
   /** @internal Routes this source through the root's glTF resource reader. */
@@ -129,9 +135,10 @@ const validateLeafAsset = (asset: TextureLeafSourceRef): void => {
   if (
     asset.sourceEncoding !== undefined
     && asset.sourceEncoding !== "ktx2-etc2"
+    && asset.sourceEncoding !== "ktx2-native"
     && asset.sourceEncoding !== "svg"
   ) {
-    throw new TypeError("Royal texture sourceEncoding must be ktx2-etc2 or svg when present");
+    throw new TypeError("Royal texture sourceEncoding must be ktx2-etc2 or svg or ktx2-native when present");
   }
   if (asset.kind === "embedded-asset") {
     if (asset.contentKey.length === 0) {

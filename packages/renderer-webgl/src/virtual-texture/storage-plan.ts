@@ -1,3 +1,4 @@
+import { virtualTexturePageBytes } from "./page-format";
 import type { VirtualTextureManifest } from "./manifest";
 
 const DEFAULT_PHYSICAL_BYTES = 32 * 1024 * 1024;
@@ -63,8 +64,8 @@ export const planVirtualTextureAtlasStorage = (
   if (maximumAxisSlots < 1) {
     throw new RangeError("Royal VT stored page exceeds this WebGL2 context's texture limit");
   }
-  const compressed = manifest.pageEncoding === "ktx2-etc2";
-  const bytesPerPage = storedPageSize * storedPageSize * (compressed ? 1 : 4);
+  const compressed = manifest.pageEncoding !== "image";
+  const bytesPerPage = virtualTexturePageBytes(manifest);
   const availableAtlasBytes = Math.max(0, availableBytesInput - (allocation === "initial" ? manifest.tableByteLength : 0));
   // This atlas serves all compatible textures, not just the first asset.
   const atlasByteLimit = Math.min(

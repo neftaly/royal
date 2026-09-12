@@ -341,7 +341,7 @@ describe("browser texture decode shell", () => {
     }, new AbortController().signal);
     expect(fetch.mock.calls.map(([uri]) => uri)).toEqual(["/preview.png"]);
     expect(source).not.toHaveProperty("fallbackReason");
-    if (source.kind === "ktx2-etc2" || source.svgPreview === undefined) throw new Error("missing preview");
+    if (source.kind !== undefined || source.svgPreview === undefined) throw new Error("missing preview");
     const first = source.svgPreview.load();
     expect(source.svgPreview.load()).toBe(first);
     await first;
@@ -371,7 +371,7 @@ describe("browser texture decode shell", () => {
       fallback: { kind: "asset", src: `/preview-${index}.png` },
     }, controller.signal)));
     const detail = sources.map((source) => {
-      if (source.kind === "ktx2-etc2" || source.svgPreview === undefined) throw new Error("missing preview");
+      if (source.kind !== undefined || source.svgPreview === undefined) throw new Error("missing preview");
       return source.svgPreview.load().catch(() => undefined);
     });
     let next: Promise<Awaited<ReturnType<typeof decoder.decode>>> | undefined;
@@ -411,7 +411,7 @@ describe("browser texture decode shell", () => {
       kind: "asset", src: "/detail.svg", sourceEncoding: "svg", svgPreview: true,
       fallback: { kind: "asset", src: "/preview.png" },
     }, controller.signal);
-    if (source.kind === "ktx2-etc2" || source.svgPreview === undefined) throw new Error("missing preview");
+    if (source.kind !== undefined || source.svgPreview === undefined) throw new Error("missing preview");
     const foreground = Array.from({ length: 32 }, (_, index) => decoder.decode({
       kind: "asset", src: `/foreground-${index}.png`,
     }, controller.signal).then((decoded) => decoded.close?.(), () => undefined));
@@ -444,7 +444,7 @@ describe("browser texture decode shell", () => {
       ? new Response("missing", { status: 404 })
       : new Response("png", { headers: { "content-type": "image/png" } })));
     const preview = await createBrowserTextureDecoder().decode(asset, new AbortController().signal);
-    if (preview.kind === "ktx2-etc2" || preview.svgPreview === undefined) throw new Error("missing preview");
+    if (preview.kind !== undefined || preview.svgPreview === undefined) throw new Error("missing preview");
     await expect(preview.svgPreview.load()).rejects.toThrow("404");
     expect(bitmap.close).not.toHaveBeenCalled();
     preview.close?.();
