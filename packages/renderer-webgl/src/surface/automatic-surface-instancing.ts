@@ -201,6 +201,7 @@ const surfaceGeometriesEqual = (
 
 const automaticInstanceCandidateKey = (
   surface: CanonicalDrawSurface,
+  materialKeys: WeakMap<CanonicalSurfaceMaterial, string>,
 ): string | undefined => {
   const node = surface.node;
   if (
@@ -214,10 +215,15 @@ const automaticInstanceCandidateKey = (
     || surface.material.alphaBlend === true
     || canonicalMaterialHasTransmission(surface.material)
   ) return undefined;
+  let materialKey = materialKeys.get(surface.materialSource);
+  if (materialKey === undefined) {
+    materialKey = canonicalMaterialInstanceIdentityKey(surface.materialSource);
+    materialKeys.set(surface.materialSource, materialKey);
+  }
   return JSON.stringify([
     surfaceGeometryLayoutKey(surface),
     geometryBucketKey(surface),
-    canonicalMaterialInstanceIdentityKey(surface.materialSource),
+    materialKey,
     surface.modelHandedness,
   ]);
 };
@@ -268,8 +274,8 @@ const collapsedCohort = (
       count: cohort.members.length,
       key: JSON.stringify(["automatic-surface-instances-v1", cohort.key, membership]),
       localModels,
-      // Full float contents make retained-buffer invalidation exact across scene replacements.
-      revision: Array.from(localModels).join(","),
+      // Retain immutable GPU values for exact comparison without decimal-string allocation.
+      revision: localModels,
     },
     model: identity,
     normalTransform: identityMat4(),
@@ -284,11 +290,14 @@ const collapsedCohort = (
 export const automaticallyInstanceCanonicalSurfaces = (
   surfaces: readonly CanonicalDrawSurface[],
 ): readonly CanonicalDrawSurface[] => {
+  // One lowering pass shares material definitions across physical occurrences.
+  // Keep the cache local so later scene edits always recompute their identity.
+  const materialKeys = new WeakMap<CanonicalSurfaceMaterial, string>();
   const cohortsByKey = new Map<string, AutomaticInstanceCohort[]>();
   const cohortBySurfaceIndex = new Map<number, AutomaticInstanceCohort>();
   for (let index = 0; index < surfaces.length; index += 1) {
     const surface = surfaces[index]!;
-    const key = automaticInstanceCandidateKey(surface);
+    const key = automaticInstanceCandidateKey(surface, materialKeys);
     if (key === undefined) continue;
     let cohorts = cohortsByKey.get(key);
     if (cohorts === undefined) {

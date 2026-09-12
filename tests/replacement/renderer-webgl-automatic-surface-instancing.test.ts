@@ -1,3 +1,4 @@
+import { sameInstanceRevision } from "../../packages/renderer-webgl/src/surface/instance-revision";
 import {
   gltf,
   imageTexture,
@@ -82,7 +83,8 @@ describe("automatic canonical surface instancing", () => {
     const first = render(5);
     const moved = render(6);
     expect(moved.key).toBe(first.key);
-    expect(moved.revision).not.toBe(first.revision);
+    expect(sameInstanceRevision(moved.revision, first.revision)).toBe(false);
+    expect(sameInstanceRevision(render(5).revision, first.revision)).toBe(true);
   });
 
   it("submits converged roots through the existing WebGL instance executor", async () => {

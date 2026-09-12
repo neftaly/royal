@@ -28,6 +28,10 @@ export type GltfResourceReader = (
 export type RendererRootDependencies = Readonly<{
   /** Overrides transport for glTF roots, buffers, and external images. */
   gltfResourceReader?: GltfResourceReader;
+  /** Host-owned presentation clock, e.g. the visible document hosting an embed.
+   * Must schedule asynchronously and invoke each callback at most once.
+   */
+  requestFrame?: (callback: () => void) => void;
 }>;
 
 /** Validates the cold renderer-root dependency boundary before WebGL ownership begins. */
@@ -38,7 +42,7 @@ export const resolveRendererRootDependencies = (
     throw new TypeError("Royal renderer root dependencies must be an object");
   }
   for (const key of Reflect.ownKeys(dependencies)) {
-    if (key !== "gltfResourceReader") {
+    if (key !== "gltfResourceReader" && key !== "requestFrame") {
       throw new TypeError(`Royal renderer root dependencies contain unsupported field ${String(key)}`);
     }
   }
@@ -47,6 +51,9 @@ export const resolveRendererRootDependencies = (
     && typeof dependencies.gltfResourceReader !== "function"
   ) {
     throw new TypeError("Royal renderer root dependency gltfResourceReader must be a function");
+  }
+  if (dependencies.requestFrame !== undefined && typeof dependencies.requestFrame !== "function") {
+    throw new TypeError("Royal renderer root dependency requestFrame must be a function");
   }
   return dependencies;
 };

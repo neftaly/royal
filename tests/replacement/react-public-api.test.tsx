@@ -744,4 +744,34 @@ describe("replacement React public API", () => {
       vi.unstubAllGlobals();
     }
   });
+  it("uses a host clock for coalesced sizing and ignores queued work after release", () => {
+    let observe: ResizeObserverCallback | undefined;
+    const frames: Array<() => void> = [];
+    const setSize = vi.fn();
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: ResizeObserverCallback) { observe = callback; }
+      disconnect = vi.fn();
+      observe = vi.fn();
+    });
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => { throw new Error("local clock used"); }));
+    vi.stubGlobal("addEventListener", vi.fn());
+    vi.stubGlobal("removeEventListener", vi.fn());
+    try {
+      const release = observeCanvasSize({} as HTMLCanvasElement, { setSize } as unknown as RendererRoot,
+        2, (callback) => { frames.push(callback); });
+      const resize = (width: number) => observe?.([
+        { contentRect: { height: 100, width } } as ResizeObserverEntry,
+      ], {} as ResizeObserver);
+      resize(200);
+      resize(300);
+      expect(frames).toHaveLength(1);
+      frames.shift()!();
+      expect(setSize).toHaveBeenCalledExactlyOnceWith({ cssHeight: 100, cssWidth: 300, pixelRatio: 2 });
+      resize(400);
+      release();
+      frames.shift()!();
+      expect(setSize).toHaveBeenCalledTimes(1);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
 });

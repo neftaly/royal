@@ -1,3 +1,4 @@
+vi.mock("../../packages/renderer-webgl/src/texture/origin-clean", () => ({ proveOriginClean: vi.fn(async () => {}) }));
 import {
   imageTexture,
   perspectiveCamera,
@@ -225,9 +226,9 @@ describe("browser virtual texture runtime", () => {
         const uploaded = runtime.runtimeSnapshot().uploadedPages;
         runtime.update([view]);
         expect(runtime.runtimeSnapshot().uploadedPages - uploaded).toBeLessThanOrEqual(4);
-        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: viewportSize === 512 ? 6 : 30, unresidentPages: 0, pendingPages: 0 });
+        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: viewportSize === 512 ? 102 : 390, unresidentPages: 0, pendingPages: 0 });
       });
-      expect(decode).toHaveBeenCalledTimes(viewportSize === 512 ? 6 : 12);
+      expect(decode).toHaveBeenCalledTimes(viewportSize === 512 ? 6 : 48);
       expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(4 * 1024 * 1024 + 6 * 64 * 64 * 4);
     } finally { runtime.dispose(); }
   });
@@ -289,27 +290,27 @@ describe("browser virtual texture runtime", () => {
       resolve(encoded);
       await waitFor(() => {
         runtime.update([view]);
-        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 5, pendingPages: 0 });
+        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 65, pendingPages: 0 });
       });
-      expect(sizes).toHaveLength(2);
+      expect(sizes).toHaveLength(8);
       expect(sizes.every(size => size <= 1028)).toBe(true);
-      expect(runtime.runtimeSnapshot().pageRequests).toBe(5);
+      expect(runtime.runtimeSnapshot().pageRequests).toBe(65);
       expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(64 * 64 * 4 + 4 * 1024 * 1024);
       view.viewport.width = 64;
       view.viewport.height = 64;
       await waitFor(() => {
         runtime.update([view]);
-        expect(sizes).toHaveLength(3);
-        expect(sizes.at(-1)).toBe(512);
+        expect(sizes).toHaveLength(9);
+        expect(sizes.at(-1)).toBe(128);
         expect(runtime.runtimeSnapshot().pendingPages).toBe(0);
       });
       expect(runtime.automaticBinding(asset)).toBeDefined();
-      expect(runtime.runtimeSnapshot().pageRequests).toBe(6);
+      expect(runtime.runtimeSnapshot().pageRequests).toBe(66);
       expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBe(64 * 64 * 4);
     } finally {
       runtime.dispose();
     }
-    expect(close).toHaveBeenCalledTimes(3);
+    expect(close).toHaveBeenCalledTimes(9);
   });
 
   it.each([false, true])("restores coarse preview coverage after vector failure (already failed: %s)", async (alreadyFailed) => {

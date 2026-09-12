@@ -4,8 +4,8 @@ Status: accepted pre-release API direction
 
 ## Consumer tasks first
 
-Royal's primary consumer is a React application rendering glTF scenes. Public
-API is evaluated by the shortest clear path for these tasks:
+Royal's current consumers are Probability Play and onboarding. Public API is
+evaluated against their actual call sites and the shortest clear path for these tasks:
 
 - render a scene in a CSS-sized canvas;
 - load and progressively display glTF;
@@ -491,6 +491,13 @@ that hands off an unretained view preserves the zero-copy path. HTTP range
 negotiation remains an optimization of Royal's default fetch transport, not a
 second public storage protocol.
 
+The optional stable `requestFrame(callback)` dependency lets an embedded root
+use its visible host's presentation clock. It must schedule asynchronously and
+invoke each callback at most once. Native window scheduling remains the default.
+React `Canvas` accepts the same dependency and uses it for coalesced size
+publication too; disposed size callbacks cannot publish. This is a scheduling
+seam for the existing root, not another renderer backend.
+
 `root.setSize({ cssWidth, cssHeight, pixelRatio })` uses the same backing-pixel
 policy name as React. `pixelRatio` is a requested ratio, not necessarily the
 browser device pixel ratio; the resolved size reports both that request and any
@@ -509,8 +516,8 @@ error reaches the existing React error boundary. No timer, replacement-canvas,
 visibility, or page-lifecycle retry policy is implicit.
 
 Creation options and dependencies are immutable for a root. In React,
-`Canvas` accepts the reader directly as `gltfResourceReader`; changing its
-identity replaces the root, while changing `scene` does not. Applications
+`Canvas` accepts `gltfResourceReader` and `requestFrame` directly; changing either
+function's identity replaces the root, while changing `scene` does not. Applications
 SHOULD retain one stable function for the intended root lifetime. Changing a
 creation option also replaces the root and canvas. The replacement mount
 publishes `null` rather than a stale disposed root until the new canvas-owned

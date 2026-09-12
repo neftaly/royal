@@ -263,7 +263,11 @@ SVG automatic VT rasterizes requested pages from the vector source without
 retaining a full-resolution bitmap. Its current maximum raster long edge is
 16,384 texels; this is a quality/capability ceiling, not the SVG's logical
 dimension. Browser feature decisions MUST follow successful decode and
-origin-clean canvas readback capabilities rather than user-agent strings.
+origin-clean source capabilities rather than user-agent strings. SVG page
+sources prove origin cleanliness by creating and transferring a cropped 1px
+ImageBitmap; this avoids synchronous canvas pixel readback. The temporary
+bitmap is closed, and decoded sources remain pinned until asynchronous
+consumers finish.
 
 Direct ordinary SVG decode MUST retain the already-read
 encoded SVG as the vector authority. The automatic page source parses that
@@ -308,15 +312,15 @@ fragment identifiers remain unchanged. Browser-dependent intrinsic CSS sizing
 is feature-tested. A prepared source requiring CSS/length rewriting may retain
 one weakly owned DOM snapshot; sources requiring no rewriting retain none.
 
-Automatic SVG sources use 512px pages with 2px gutters; ordinary raster sources
-retain 128px pages and authored VT retains its declared page size. Larger SVG
-pages reduce preparation/publication overhead without changing the requested
-texel density. The ordinary-raster eligibility threshold is unchanged.
+Automatic SVG and ordinary raster sources use 128px pages with 2px gutters;
+authored VT retains its declared page size. The smaller SVG allocation preserves
+the requested texel density and 16,384px source-detail ceiling. The ordinary-raster
+eligibility threshold is unchanged.
 
 When admitted demand includes multiple pages at a mip whose whole image fits
 within 512px per axis, SVG preparation may rasterize that target once and crop
 its pages from shared pixels. Larger clamped SVG targets can share regions of
-two horizontal pages, at most 1028px by 516px including gutters. Fractional edge
+two horizontal by four vertical pages, at most 260px by 516px including gutters. Fractional edge
 regions retain per-page rasterization so rounding cannot stretch all pages in
 a group. The root-owned SVG raster cache reserves at most
 4 MiB including in-flight decodes, separately from the 16 MiB pending-page

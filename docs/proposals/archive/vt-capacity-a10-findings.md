@@ -6,8 +6,8 @@
 
 The fixed 32 MiB allocation below is an uncommitted experiment, not the accepted
 automatic memory policy. Preserve its measurements and implementation for
-comparison. [Automatic texture memory](../automatic-texture-memory.md) defines the
-proposed direction and separates the correctness fixes from allocator work.
+comparison. The [texture specification](../../specs/textures-and-virtual-texturing.md)
+defines the implemented memory policy and correctness requirements.
 Its preview-to-target policy supersedes requiring a vector coarsest page as
 an intermediate step: coarse source authority is needed when coarse is the
 target, while supplied preview coverage may bridge directly to finer targets.

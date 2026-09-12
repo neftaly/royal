@@ -1,5 +1,5 @@
 > Historical proposal, archived 2026-09-11. Retained lookup is implemented.
-> See [remaining work](../selection-outline-camera-performance.md) for current status.
+> See [proposal decisions](../README.md) for current status.
 
 # Selection-outline performance during camera movement
 

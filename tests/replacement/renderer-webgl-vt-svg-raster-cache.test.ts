@@ -7,6 +7,58 @@ const bitmap = (): DecodedImageTextureSource => ({
 });
 
 describe("bounded shared SVG raster storage", () => {
+  it("keeps storage pinned when one async consumer rejects while another is suspended", async () => {
+    const cache = new SvgRasterCache(256);
+    const key = {};
+    const image = bitmap();
+    let rejectFirst!: (error: Error) => void;
+    let finishSecond!: () => void;
+    const firstWork = new Promise<void>((_resolve, reject) => { rejectFirst = reject; });
+    const secondWork = new Promise<void>((resolve) => { finishSecond = resolve; });
+    const prepare = vi.fn(async () => image);
+    const first = cache.use(key, 256, prepare, () => firstWork);
+    const rejected = expect(first).rejects.toThrow("cancelled");
+    const second = cache.use(key, 256, prepare, async (decoded) => {
+      await secondWork;
+      expect(decoded.close).not.toHaveBeenCalled();
+      return "copied";
+    });
+    rejectFirst(new Error("cancelled"));
+    await rejected;
+    cache.clear();
+    expect(cache.byteLength).toBe(256);
+    expect(image.close).not.toHaveBeenCalled();
+    expect(await cache.use(key, 256, prepare, () => "stale")).toBeUndefined();
+    finishSecond();
+    expect(await second).toBe("copied");
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(image.close).toHaveBeenCalledOnce();
+    expect(cache.byteLength).toBe(0);
+  });
+
+  it("pins a decoded raster until asynchronous validation finishes", async () => {
+    const cache = new SvgRasterCache(256);
+    const image = bitmap();
+    let finish!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const validation = new Promise<void>((resolve) => { finish = resolve; });
+    const pending = cache.use({}, 256, async () => image, async () => {
+      entered();
+      await validation;
+      expect(image.close).not.toHaveBeenCalled();
+      return "copied";
+    });
+    await started;
+    cache.clear();
+    expect(cache.byteLength).toBe(256);
+    expect(image.close).not.toHaveBeenCalled();
+    finish();
+    expect(await pending).toBe("copied");
+    expect(image.close).toHaveBeenCalledOnce();
+    expect(cache.byteLength).toBe(0);
+  });
+
   it("shares in-flight decoding and releases pinned storage after disposal", async () => {
     const cache = new SvgRasterCache(256);
     const key = {};

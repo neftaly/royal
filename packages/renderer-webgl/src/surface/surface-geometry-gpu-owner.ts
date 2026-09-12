@@ -1,3 +1,4 @@
+import { sameInstanceRevision, type InstanceRevision } from "./instance-revision";
 import {
   affineSurfaceNormalTransformInto,
   identityMat4,
@@ -66,7 +67,7 @@ type GpuInstanceData = {
   buffer: WebGLBuffer;
   count: number;
   key: string;
-  revision?: number | string;
+  revision?: InstanceRevision;
 };
 
 type GpuInstanceVertexArray = Readonly<{
@@ -84,7 +85,7 @@ const changedInstanceSurface = (
   for (const surface of surfaces) {
     if (
       surface.instances?.key === resource.key
-      && surface.instances.revision !== resource.revision
+      && !sameInstanceRevision(surface.instances.revision, resource.revision)
     ) return surface;
   }
   return undefined;
@@ -888,7 +889,7 @@ export class SurfaceGeometryGpuOwner {
     const createdInstances: GpuInstanceData[] = [];
     const createdInstanceVaos: GpuInstanceVertexArray[] = [];
     const pendingInstanceUpdates = new Map<GpuInstanceData, Readonly<{
-      revision: number | string;
+      revision: InstanceRevision;
       values: Float32Array;
     }>>();
     try {
@@ -912,7 +913,7 @@ export class SurfaceGeometryGpuOwner {
           instanceData === undefined
           || (
             instances.revision !== undefined
-            && instances.revision !== instanceData.revision
+            && !sameInstanceRevision(instances.revision, instanceData.revision)
             && !pendingInstanceUpdates.has(instanceData)
           )
         );
@@ -957,7 +958,7 @@ export class SurfaceGeometryGpuOwner {
             createdInstances.push(instanceData);
           } else if (
             instances.revision !== undefined
-            && instances.revision !== instanceData.revision
+            && !sameInstanceRevision(instances.revision, instanceData.revision)
             && !pendingInstanceUpdates.has(instanceData)
           ) {
             pendingInstanceUpdates.set(instanceData, {

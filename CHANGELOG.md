@@ -3,6 +3,18 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.27 - 2026-09-12
+
+- Allow renderer roots and React Canvas to use a stable host frame clock,
+  including coalesced canvas sizing for embedded presentation.
+- Avoid synchronous SVG origin-probe pixel readback and keep shared decoded
+  rasters alive through asynchronous consumers.
+- Use 128px automatic SVG pages while retaining the full source-detail ceiling.
+- Reuse material preparation within one lowering pass and compare automatic
+  instance revisions without allocating decimal strings.
+- Reconcile proposals against Probability Play and onboarding; remove redundant
+  plans and retain performance evidence separately.
+
 ## 0.0.26 - 2026-09-11
 
 - Skip zero-contribution large lights through the existing material early return,

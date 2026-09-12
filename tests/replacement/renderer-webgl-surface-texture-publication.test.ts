@@ -51,6 +51,61 @@ const createSurfaceGpuOwner = (
 );
 
 describe("retained surface texture publication", () => {
+  it.each([false, true])("draws a ready preview despite an unfinished future shader (scene replaced: %s)", (replaceScene) => {
+    const gl = fakeGl();
+    const programs: WebGLProgram[] = [];
+    vi.mocked(gl.createProgram).mockImplementation(() => {
+      const program = { id: programs.length } as unknown as WebGLProgram;
+      programs.push(program);
+      return program;
+    });
+    vi.mocked(gl.getExtension).mockImplementation((name) => String(name) === "KHR_parallel_shader_compile"
+      ? { COMPLETION_STATUS_KHR: 0x91b1 } as unknown as WEBGL_multi_draw : null);
+    vi.mocked(gl.getProgramParameter).mockImplementation((program, parameter) => {
+      const ready = program === programs[0];
+      if (parameter === 0x91b1) return ready;
+      if (!ready) throw new Error("Synchronized an unused future shader");
+      return true;
+    });
+    const owner = createSurfaceGpuOwner(gl);
+    const geometry = planeGeometry(1);
+    const prepare = (textured: boolean) => prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({ position: [0, 0, 3] }),
+      nodes: [mesh({ geometry, material: unlitMaterial(textured
+        ? { texture: imageTexture("/pending.png") } : { color: [1, 1, 1, 1] }) })],
+    }));
+    try {
+      owner.setScene(prepare(true));
+      expect(programs).toHaveLength(2);
+      if (replaceScene) owner.setScene(prepare(false));
+      owner.beginFrame();
+      expect(owner.drawViews(TEST_VIEWS, null, new WebGlStateOwner(gl), [0, 0, 0, 1])).toBe(false);
+      expect(gl.drawElements).toHaveBeenCalledOnce();
+      expect(gl.getProgramParameter).toHaveBeenCalledWith(programs[0], gl.LINK_STATUS);
+      expect(gl.getProgramParameter).not.toHaveBeenCalledWith(programs[1], gl.LINK_STATUS);
+    } finally { owner.dispose(); }
+  });
+
+  it("resolves shared materials once per scene but observes subsequent texture publication", () => {
+    const texture = imageTexture("/shared.png");
+    const material = unlitMaterial({ texture });
+    const geometry = planeGeometry(1);
+    const input = scene({ camera: perspectiveCamera({}), nodes: [
+      mesh({ geometry, material, ref: { current: null } }),
+      mesh({ geometry, material, ref: { current: null } }),
+    ] });
+    const decode = vi.fn(() => undefined as DecodedTextureSource | undefined);
+    const pending = prepareCanonicalSurfaceScene(input, undefined, undefined, decode);
+    expect(decode).toHaveBeenCalledTimes(1);
+    expect(pending.surfaces).toHaveLength(2);
+    expect(pending.surfaces[0]!.material).toBe(pending.surfaces[1]!.material);
+    decode.mockReturnValue({ width: 16, height: 16, source: {} as ImageBitmap });
+    const ready = prepareCanonicalSurfaceScene(input, undefined, undefined, decode);
+    expect(decode).toHaveBeenCalledTimes(2);
+    expect(ready.surfaces[0]!.material).toBe(ready.surfaces[1]!.material);
+    expect(ready.surfaces[0]!.material).not.toBe(pending.surfaces[0]!.material);
+  });
+
   it("draws the ordinary preview until VT compilation finishes and requests the switching frame", () => {
     const gl = fakeGl();
     vi.mocked(gl.getExtension).mockImplementation((name) => String(name) === "KHR_parallel_shader_compile"

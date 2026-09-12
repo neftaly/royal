@@ -306,6 +306,28 @@ describe("surface geometry GPU owner", () => {
     expect(gl.deleteVertexArray).toHaveBeenCalledTimes(2);
   });
 
+  it("reuses equal automatic matrix snapshots and uploads changed transforms", () => {
+    const gl = fakeGl();
+    const owner = new SurfaceGeometryGpuOwner(gl);
+    const base = surface(planeGeometry(1))[0]!;
+    const snapshot = (x: number) => {
+      const localModels = new Float32Array([
+        1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, 0, 0, 1,
+      ]);
+      return { ...base, instances: {
+        count: 1, key: "automatic", localModels, revision: localModels,
+      } };
+    };
+    try {
+      owner.prepare([snapshot(0)]).commit();
+      const uploads = vi.mocked(gl.bufferSubData).mock.calls.length;
+      owner.prepare([snapshot(0)]).commit();
+      expect(gl.bufferSubData).toHaveBeenCalledTimes(uploads);
+      owner.prepare([snapshot(2)]).commit();
+      expect(gl.bufferSubData).toHaveBeenCalledTimes(uploads + 1);
+    } finally { owner.dispose(); }
+  });
+
   it("retains and releases distinct instance vertex-array identities", () => {
     const gl = fakeGl();
     const owner = new SurfaceGeometryGpuOwner(gl);

@@ -2041,8 +2041,8 @@ export const createRendererRoot = (
   return new CanvasRoot(
     canvas,
     options,
-    resourcePlatform === undefined
-      ? defaultPlatform()
-      : { ...defaultPlatform(), ...resourcePlatform },
+    { ...defaultPlatform(), ...resourcePlatform,
+      ...(dependencies.requestFrame === undefined ? {} : { requestFrame: dependencies.requestFrame }),
+    },
   );
 };

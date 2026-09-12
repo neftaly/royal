@@ -1,3 +1,4 @@
+import { proveOriginClean } from "../texture/origin-clean";
 import { AUTOMATIC_VT_PAGE_SIZE, AUTOMATIC_VT_BORDER_TEXELS } from "./automatic-policy";
 export { AUTOMATIC_VT_MIN_LONG_EDGE, automaticVirtualTextureEligible, automaticVirtualTextureIsSvg, automaticVirtualTextureHasPreview } from "./automatic-policy";
 import type { TextureSamplerWrap } from "@royal/renderer-core";
@@ -21,7 +22,6 @@ import type {
 } from "./browser-page-source";
 
 const AUTOMATIC_SVG_MAX_LONG_EDGE = 16_384;
-const AUTOMATIC_SVG_PAGE_SIZE = 512;
 
 type AxisSegment = Readonly<{
   destinationExtent: number;
@@ -317,19 +317,6 @@ const exactPageSegment = (
     : undefined;
 };
 
-const proveOriginClean = (
-  source: CanvasImageSource,
-): void => {
-  const probe = document.createElement("canvas");
-  probe.width = 1;
-  probe.height = 1;
-  const context = probe.getContext("2d", { alpha: true });
-  if (context === null) throw new Error("Royal automatic SVG VT could not allocate its origin probe");
-  context.drawImage(source, 0, 0, 1, 1);
-  context.getImageData(0, 0, 1, 1);
-  probe.width = 1;
-};
-
 /** Vector-backed automatic source: logical detail grows without a full-resolution bitmap. */
 const automaticSvgManifest = (
   intrinsicWidth: number,
@@ -343,7 +330,7 @@ const automaticSvgManifest = (
     borderTexels: AUTOMATIC_VT_BORDER_TEXELS,
     colorSpace,
     height,
-    pageSize: AUTOMATIC_SVG_PAGE_SIZE,
+    pageSize: AUTOMATIC_VT_PAGE_SIZE,
     width,
   });
 };
@@ -410,12 +397,16 @@ export const createAutomaticSvgPageSource = (
   const { width, height } = manifest;
   let parsed: ParsedSvgTextureSource | undefined = encodedSource.parsed;
   let closed = false;
-  let originClean = false;
+  let originClean: Promise<void> | undefined;
+  const ensureOriginClean = async (image: CanvasImageSource, signal: AbortSignal): Promise<void> => {
+    await (originClean ??= proveOriginClean(image));
+    if (closed || signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
+  };
   const abort = new AbortController();
   const sharedMips = new Map<number, object>();
   const regionColumns = 2;
-  // A two-page strip at 512px fits the existing 4 MiB cache. A 2x2
-  // region plus gutters would exceed it and silently disable raster reuse.
+  // Keep each shared SVG region within the root-local raster cache while
+  // small atlas pages avoid reserving a large tile for every tiny piece.
   const regionRows = Math.max(1, 512 / manifest.pageSize);
   const sharedRegions = new Map<string, { x: AxisSegment; y: AxisSegment }>();
   const regionFor = (page: VirtualTexturePageId): string => `${page.mip}:${Math.floor(page.x / regionColumns)}:${Math.floor(page.y / regionRows)}`;
@@ -496,12 +487,9 @@ export const createAutomaticSvgPageSource = (
       if (region !== undefined) {
         const cached = await rasterCache.use(region, region.x.destinationExtent * region.y.destinationExtent * 4,
           () => rasterizeSvgRegion(source, width, height, region.x, region.y, abort.signal),
-          (decoded) => {
+          async (decoded) => {
             if (closed || signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
-            if (!originClean) {
-              proveOriginClean(decoded.source as CanvasImageSource);
-              originClean = true;
-            }
+            await ensureOriginClean(decoded.source as CanvasImageSource, signal);
             const canvas = document.createElement("canvas");
             canvas.width = storedPageSize;
             canvas.height = storedPageSize;
@@ -528,12 +516,9 @@ export const createAutomaticSvgPageSource = (
             { sourceStart: 0, sourceExtent: width, destinationStart: 0, destinationExtent: imageWidth, reversed: false },
             { sourceStart: 0, sourceExtent: height, destinationStart: 0, destinationExtent: imageHeight, reversed: false },
             abort.signal),
-          (decoded) => {
+          async (decoded) => {
             if (closed || signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
-            if (!originClean) {
-              proveOriginClean(decoded.source as CanvasImageSource);
-              originClean = true;
-            }
+            await ensureOriginClean(decoded.source as CanvasImageSource, signal);
             return renderAutomaticPage(manifest, sampler, decoded.source as CanvasImageSource,
               imageWidth / width, imageHeight / height, page, signal);
           });
@@ -548,10 +533,7 @@ export const createAutomaticSvgPageSource = (
           signal);
         try {
           if (closed || signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
-          if (!originClean) {
-            proveOriginClean(decoded.source as CanvasImageSource);
-            originClean = true;
-          }
+          await ensureOriginClean(decoded.source as CanvasImageSource, signal);
           return renderAutomaticPage(manifest, sampler, decoded.source as CanvasImageSource,
             imageWidth / width, imageHeight / height, page, signal);
         } finally {
@@ -575,10 +557,7 @@ export const createAutomaticSvgPageSource = (
         const decoded = await rasterizeSvgRegion(source, width, height, exactX, exactY, signal);
         try {
           if (closed || signal.aborted) throw new DOMException("SVG page source was aborted", "AbortError");
-          if (!originClean) {
-            proveOriginClean(decoded.source as CanvasImageSource);
-            originClean = true;
-          }
+          await ensureOriginClean(decoded.source as CanvasImageSource, signal);
         } catch (error) {
           decoded.close?.();
           throw error;
@@ -624,9 +603,12 @@ export const createAutomaticSvgPageSource = (
           }
         }
       }
-      if (!originClean) {
-        context.getImageData(0, 0, 1, 1);
-        originClean = true;
+      try {
+        await ensureOriginClean(canvas, signal);
+      } catch (error) {
+        canvas.width = 1;
+        canvas.height = 1;
+        throw error;
       }
       return {
         close: () => {

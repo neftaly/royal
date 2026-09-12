@@ -1,21 +1,47 @@
 # Royal proposals and decisions
 
-Reconciled for Royal 0.0.25 on 2026-09-11. Implemented behavior belongs in
+Reconciled against Royal 0.0.26 and the current working tree on 2026-09-12. Implemented behavior belongs in
 [the specifications](../specs) and [changelog](../../CHANGELOG.md). Historical
 consumer/device observations are retained as evidence.
 
-## Open follow-ups
+## Acceptance
 
-| Document | Remaining work |
+Royal's current consumers are Probability Play and onboarding. A proposal is a
+claim to investigate, not an accepted requirement. Before implementing it, check
+the current consumer call site and Royal behavior, reproduce the problem, and
+compare the smallest plausible fix. Historical timings, hypothetical consumers
+and an agent's requested API do not establish a missing renderer capability.
+Record browser capabilities with performance evidence. Remove implemented,
+superseded or rejected proposal instructions; keep useful measurements in research
+and implemented contracts in the specifications.
+
+## Open investigation
+
+[Screen-space tolerant picking](screen-space-tolerant-picking.md) addresses
+Play's small-piece touch acquisition. It is not an accepted API: the consumer
+must first establish its gesture policy and trial evidence. Exact picking remains
+the current contract.
+
+## Closed implementation proposals
+
+| Topic | Decision and retained evidence |
 | --- | --- |
-| [Onboarding glTF capture](onboarding-static-preview-profile.md) | Linked onboarding now uses `captureImage`; evaluate VT opt-out and readback performance using original assets. The browser-only opt-out experiment changes pixels and is not accepted policy. |
-| [Unlimited lights](unlimited-lights.md) | Working branch implements a lazy 512-light global texture path; A10/Quest comparisons favor further conservative local-light list experiments. Unlimited/spatial architecture remains open. |
-| [Automatic texture memory](automatic-texture-memory.md) | Physical-device default-budget calibration; ETC2 resizing and prefetch only with demonstrated workloads. RGBA allocator/refinement work shipped in 0.0.24. |
-| [SVG refinement](preview-first-svg-refinement.md) | Profile remaining current-device hitches; alternative rasterizers/codecs require evidence. Preview-to-target behavior is implemented. |
-| [Selection-outline camera performance](selection-outline-camera-performance.md) | Fresh hardware baseline after indexing and camera-copy changes, then evaluate descriptor replacement or GPU costs. |
-| [Screen-space tolerant picking](screen-space-tolerant-picking.md) | Consumer device trials, semantics and competing experiments before accepting an API. |
+| Onboarding capture | Onboarding already calls `captureImage`. No demonstrated need for a separate static backend or VT opt-out; the opt-out experiment changes pixels. Retain [capture research](../../research/image-capture/README.md). |
+| Unlimited lights | Play uses `importLights: false`; Royal already has the finite 512-light path. No current consumer demonstrates a need for unbounded or clustered lighting. Retain [many-light experiments](../../research/many-lights/README.md). |
+| Automatic texture memory | Allocation and refinement are implemented. Device calibration, ETC2 resizing and prefetch have no new failing consumer workload. Retain [VT research](../../research/virtual-texturing/README.md). |
+| SVG refinement | Preview-to-target refinement is implemented. The current import measurements point to large ordinary bitmap uploads, not another SVG renderer or codec. Retain [SVG evidence](../../research/svg-preview/README.md). |
+| Selection outlines | Source indexing and camera-copy fixes are implemented. No current comparison establishes another renderer gap. Retain the [historical investigation](archive/selection-outline-camera-performance-2026-09-11.md). |
+
+These decisions do not remove supported capabilities or rule out future fixes.
+Reopen a topic with a concrete current consumer failure, rather than carrying
+speculative implementation instructions forward.
 
 ## Implemented work and retained decisions
+
+The [background-renderer review](../../research/background-renderer-review/README.md)
+closed that proposal: retain the existing local fixes, reject unproven shader
+expansion and staged image uploads, and require new consumer evidence before a
+worker-renderer migration.
 
 | Document | Disposition |
 | --- | --- |

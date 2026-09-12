@@ -65,6 +65,8 @@ export interface CanvasProps
   readonly overlay?: SceneOverlay | null;
   /** Stable root-scoped byte reader for glTF roots, buffers, and external images. */
   readonly gltfResourceReader?: GltfResourceReader;
+  /** Stable host presentation clock for an embedded renderer. */
+  readonly requestFrame?: (callback: () => void) => void;
   /**
    * Complete render-ready glTF preload claim without scene membership.
    * Geometry, metadata, and material images prepare through the ordinary lifecycle.
@@ -89,6 +91,7 @@ type CanvasRuntime = Readonly<{
 type CanvasAttachment = Readonly<{
   canvas: HTMLCanvasElement;
   gltfResourceReader: GltfResourceReader | undefined;
+  requestFrame: ((callback: () => void) => void) | undefined;
   options: ResolvedRendererRootOptions;
   optionsKey: string;
 }>;
@@ -199,6 +202,7 @@ export const observeCanvasSize = (
   canvas: HTMLCanvasElement,
   root: RendererRoot,
   pixelRatio?: number,
+  requestFrame?: (callback: () => void) => void,
 ): (() => void) => {
   const ResizeObserverConstructor = globalThis.ResizeObserver;
   if (typeof ResizeObserverConstructor !== "function") {
@@ -207,12 +211,18 @@ export const observeCanvasSize = (
   let cssHeight = 0;
   let cssWidth = 0;
   let frame: number | undefined;
+  let pending = false;
+  let disposed = false;
   const schedulePublication = (): void => {
-    if (frame !== undefined) return;
-    frame = globalThis.requestAnimationFrame(() => {
+    if (pending || disposed) return;
+    pending = true;
+    const publish = () => {
+      pending = false;
       frame = undefined;
-      publishCanvasSize(root, cssWidth, cssHeight, pixelRatio);
-    });
+      if (!disposed) publishCanvasSize(root, cssWidth, cssHeight, pixelRatio);
+    };
+    if (requestFrame) requestFrame(publish);
+    else frame = globalThis.requestAnimationFrame(publish);
   };
   const observer = new ResizeObserverConstructor((entries) => {
     const entry = entries[entries.length - 1];
@@ -224,6 +234,7 @@ export const observeCanvasSize = (
   observer.observe(canvas);
   globalThis.addEventListener("resize", schedulePublication);
   return () => {
+    disposed = true;
     if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
     observer.disconnect();
     globalThis.removeEventListener("resize", schedulePublication);
@@ -266,6 +277,7 @@ export const Canvas = ({
   children,
   gltfAssetClaims,
   gltfResourceReader,
+  requestFrame,
   overlay,
   pixelRatio,
   ref,
@@ -311,6 +323,7 @@ export const Canvas = ({
     setAttachment(element === null ? null : {
       canvas: element,
       gltfResourceReader,
+      requestFrame,
       options: resolvedOptions,
       optionsKey,
     });
@@ -321,11 +334,11 @@ export const Canvas = ({
       if (releaseExternalRef === undefined) assignRef(ref, null);
       else releaseExternalRef();
     };
-  }, [gltfResourceReader, optionsKey, ref]);
+  }, [gltfResourceReader, requestFrame, optionsKey, ref]);
 
   useLayoutEffect(() => {
     if (activeAttachment === null) return undefined;
-    const { canvas: ownedCanvas, gltfResourceReader: reader, options } = activeAttachment;
+    const { canvas: ownedCanvas, gltfResourceReader: reader, requestFrame: frameClock, options } = activeAttachment;
     const recovery = createCanvasRootRecovery(
       ownedCanvas,
       () => setCreationAttempt((attempt) => attempt + 1),
@@ -335,7 +348,9 @@ export const Canvas = ({
       root = createRendererRoot(
         ownedCanvas,
         options,
-        reader === undefined ? {} : { gltfResourceReader: reader },
+        { ...(reader === undefined ? {} : { gltfResourceReader: reader }),
+          ...(frameClock === undefined ? {} : { requestFrame: frameClock }),
+        },
       );
     } catch (error) {
       if (
@@ -370,8 +385,8 @@ export const Canvas = ({
   useLayoutEffect(() => {
     const root = activeRoot;
     if (root === null) return undefined;
-    return observeCanvasSize(root.canvas, root, resolvedPixelRatio);
-  }, [activeRoot, resolvedPixelRatio]);
+    return observeCanvasSize(root.canvas, root, resolvedPixelRatio, requestFrame);
+  }, [activeRoot, resolvedPixelRatio, requestFrame]);
 
   useLayoutEffect(() => {
     if (activeRoot !== null && liveRootRef.current === activeRoot) {

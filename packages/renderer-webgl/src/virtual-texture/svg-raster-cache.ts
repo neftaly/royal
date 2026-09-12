@@ -43,7 +43,7 @@ export class SvgRasterCache {
     key: object,
     bytes: number,
     prepare: () => Promise<DecodedImageTextureSource>,
-    consume: (image: DecodedImageTextureSource) => T,
+    consume: (image: DecodedImageTextureSource) => T | Promise<T>,
   ): Promise<T | undefined> {
     let entry = this.#entries.get(key);
     if (entry?.discard) return undefined;
@@ -58,13 +58,13 @@ export class SvgRasterCache {
       entry = { bytes, discard: false, users: 0, pending: Promise.resolve().then(prepare) };
       this.#entries.set(key, entry);
     }
-    // Active users pin storage through decode and synchronous page copying.
+    // Active users pin storage through decode, validation, and page copying.
     entry.users += 1;
     this.#entries.delete(key);
     this.#entries.set(key, entry);
     try {
       entry.image = await entry.pending;
-      return consume(entry.image);
+      return await consume(entry.image);
     } catch (error) {
       entry.discard = true;
       throw error;

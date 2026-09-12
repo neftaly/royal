@@ -1,3 +1,4 @@
+import type { InstanceRevision } from "./instance-revision";
 import type {
   Direction3,
   Geometry,
@@ -83,7 +84,7 @@ export type CanonicalDrawSurface = Readonly<{
     innerModels?: ArrayLike<number>;
     key: string;
     localModels: Float32Array;
-    revision?: number | string;
+    revision?: InstanceRevision;
     source?: GltfInstanceTransforms;
     sourceIndices?: Uint32Array;
     sourceOrdered?: boolean;
@@ -451,6 +452,27 @@ export const prepareCanonicalSurfaceScene = (
   const lodBounds: ReturnType<typeof emptyWorldBounds>[] = [];
   const geometryLodGroupIds: LodGroupId[] = [];
   const directMaterials = new WeakMap<Material, CanonicalSurfaceMaterial>();
+  // Physical copies share immutable material recipes. Resolve texture readiness
+  // once per lowering pass; the next pass observes newly published textures.
+  const resolvedMaterials = new WeakMap<CanonicalSurfaceMaterial, CanonicalSurfaceMaterial>();
+  const materialKeys = new WeakMap<CanonicalSurfaceMaterial, readonly string[]>();
+  const resolveMaterial = (source: CanonicalSurfaceMaterial): CanonicalSurfaceMaterial => {
+    let material = resolvedMaterials.get(source);
+    if (material === undefined) {
+      material = resolveCanonicalMaterialTexture(source, decodedTexture, texturePending);
+      resolvedMaterials.set(source, material);
+    }
+    return material;
+  };
+  const textureKeysFor = (source: CanonicalSurfaceMaterial): readonly string[] => {
+    let keys = materialKeys.get(source);
+    if (keys === undefined) {
+      keys = canonicalMaterialTextureKeys(source);
+      materialKeys.set(source, keys);
+    }
+    return keys;
+  };
+
   const directPlainGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
   const directTexturedGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
   const directWireframeGeometry = new WeakMap<Geometry, CanonicalTriangleGeometry>();
@@ -740,11 +762,7 @@ export const prepareCanonicalSurfaceScene = (
               ...(sourceIndices === undefined ? {} : { sourceIndices }),
               },
             }),
-            material: resolveCanonicalMaterialTexture(
-              presentedMaterial,
-              decodedTexture,
-              texturePending,
-            ),
+            material: resolveMaterial(presentedMaterial),
             ...(materialLod === undefined ? {} : { materialLodLevel: true as const }),
             materialSource: presentedMaterial,
             ...(lods === undefined ? {} : { lods }),
@@ -757,7 +775,7 @@ export const prepareCanonicalSurfaceScene = (
                 ? primitive.localModel
                 : IDENTITY_OBJECT_LOCAL_MODEL,
             }),
-            textureKeys: canonicalMaterialTextureKeys(presentedMaterial),
+            textureKeys: textureKeysFor(presentedMaterial),
             worldBounds,
           });
           if (includePicking && proxyGeometry === undefined) {
@@ -855,7 +873,7 @@ export const prepareCanonicalSurfaceScene = (
       materialSource = prepareCanonicalMaterialSource(node.material);
       directMaterials.set(node.material, materialSource);
     }
-    const material = resolveCanonicalMaterialTexture(materialSource, decodedTexture, texturePending);
+    const material = resolveMaterial(materialSource);
     if (node.material.baseColor.kind === "virtual-asset") {
       virtualTextureAssets.push(node.material.baseColor);
     }
@@ -876,7 +894,7 @@ export const prepareCanonicalSurfaceScene = (
       ...(node.ref === undefined
         ? {}
         : { objectLocalModel: IDENTITY_OBJECT_LOCAL_MODEL }),
-      textureKeys: canonicalMaterialTextureKeys(materialSource),
+      textureKeys: textureKeysFor(materialSource),
       ...(wireframe ? { topology: "lines" as const } : {}),
       worldBounds: transformedWorldBounds(geometry.bounds, model),
     };

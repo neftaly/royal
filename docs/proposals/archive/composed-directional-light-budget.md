@@ -5,7 +5,7 @@ Status: imported-light control included in Royal 0.0.25, 2026-09-11. `gltf` and
 embedded lighting. The option omits imported directional, point, and spot lights
 per mount without changing asset identity or shared resources. Existing scene
 light limits remain unchanged. The linked Play checkout now explicitly disables imported lights on model mounts. Larger-count architecture is covered
-by [unlimited lights](../unlimited-lights.md).
+by [many-light research](../../../research/many-lights/README.md).
 
 ## Problem
 

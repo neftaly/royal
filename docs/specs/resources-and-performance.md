@@ -426,11 +426,15 @@ Parsing/preparation SHOULD yield or chunk only where it measurably improves
 input responsiveness. Lifecycle complexity is not justified solely to make a
 synthetic progress counter move.
 
-Shader stages compile before one program-link synchronization. Successful
-startup MUST NOT poll each stage separately; link failure is the validation
-boundary and includes the program plus non-empty vertex/fragment logs. Optional
-parallel-compilation publication remains unjustified while it delays first
-usable presentation or requires a second fallback-program lifecycle.
+Shader stages compile before program-link validation. Successful startup MUST
+NOT poll each stage separately. With `KHR_parallel_shader_compile`, optional VT
+variants poll completion before publication. Ordinary variants prewarm without
+synchronizing, then validate linking when selected for drawing. Unused future
+variants MUST NOT gate scene reconciliation or ready previews. Ordinary
+acquisitions and other GPU owners can still link synchronously.
+Without the extension, linking remains synchronous. Record extension availability
+when using performance traces to justify readiness changes; hardware acceleration
+alone does not imply parallel compilation support.
 
 ## Load performance
 

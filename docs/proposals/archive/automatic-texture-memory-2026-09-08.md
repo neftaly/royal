@@ -230,7 +230,7 @@ Existing findings constrain this experiment:
 - [Preview verification](../../../research/svg-preview/README.md) establishes
   preview/failure/restoration behavior and bounded admission, not comparative
   whole-target versus per-region rasterization performance.
-- [Preview-first findings](../preview-first-svg-refinement.md) explicitly caution
+- [Preview-first findings](preview-first-svg-refinement-2026-09-08.md) explicitly caution
   that unattributed native `(program)` time is not proof of SVG decode cost.
 - The July 14 Safari Tiger entry in the device benchmark notes reports
   origin-unclean pixels when repainting the same SVG through Canvas 2D in that

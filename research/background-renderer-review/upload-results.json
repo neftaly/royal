@@ -1,0 +1,1539 @@
+{
+  "microbenchmarks": {
+    "upload-representations": [
+      {
+        "mode": "whole",
+        "prepare": 0,
+        "upload": 69,
+        "maxUpload": 69,
+        "maxPrepare": 0,
+        "total": 69,
+        "mismatches": 0,
+        "maxError": 0,
+        "error": 0
+      },
+      {
+        "mode": "skip-rows",
+        "prepare": 0,
+        "upload": 55,
+        "maxUpload": 8,
+        "maxPrepare": 0,
+        "total": 55,
+        "mismatches": 0,
+        "maxError": 0,
+        "error": 0
+      },
+      {
+        "mode": "cropped",
+        "prepare": 2,
+        "upload": 39,
+        "maxUpload": 4,
+        "maxPrepare": 1,
+        "total": 42,
+        "mismatches": 0,
+        "maxError": 0,
+        "error": 0
+      },
+      {
+        "mode": "image-data",
+        "prepare": 39,
+        "upload": 2,
+        "maxUpload": 2,
+        "maxPrepare": 0,
+        "total": 42,
+        "mismatches": 8291840,
+        "maxError": 1,
+        "error": 0
+      }
+    ],
+    "materialized-upload": [
+      {
+        "mode": "whole",
+        "prepare": 0,
+        "upload": 54,
+        "maxUpload": 54,
+        "maxPrepare": 0,
+        "total": 54,
+        "mismatches": 0,
+        "maxError": 0,
+        "error": 0
+      },
+      {
+        "mode": "canvas-bitmap",
+        "prepare": 1,
+        "upload": 54,
+        "maxUpload": 54,
+        "maxPrepare": 0,
+        "total": 56,
+        "mismatches": 0,
+        "maxError": 0,
+        "error": 0
+      },
+      {
+        "mode": "image-data",
+        "prepare": 28,
+        "upload": 1,
+        "maxUpload": 1,
+        "maxPrepare": 0,
+        "total": 29,
+        "mismatches": 8291840,
+        "maxError": 1,
+        "error": 0
+      }
+    ]
+  },
+  "consumerRuns": [
+    {
+      "name": "cropped-webkit-play-1",
+      "concurrentBuild": true,
+      "firstFrameMs": 10269,
+      "completeMs": 60316,
+      "snapshot": {
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "frame": 212,
+        "resources": {
+          "asyncPreparation": {
+            "activeJobs": 0,
+            "jobLimit": 8,
+            "queuedDetailJobs": 0,
+            "queuedForegroundJobs": 0,
+            "queuedJobs": 0
+          },
+          "geometryUploads": {
+            "admittedBytes": 0,
+            "budgetBytes": 4194304,
+            "deferredUploads": 0,
+            "pendingSurfaces": 0
+          },
+          "gltfSharedGeometry": {
+            "pendingPreparationTasks": 0,
+            "preparedTaskBytes": 94236,
+            "preparedTasks": 41,
+            "preparationTaskClaims": 173,
+            "primitiveClaims": 173,
+            "retainedBytes": 94236,
+            "reusedClaims": 132,
+            "reusedPreparationClaims": 132,
+            "taskProducerPreparationDurationMs": 9073.999999999998,
+            "uniqueGeometries": 41
+          },
+          "gltfSourceReads": {
+            "activeReads": 0,
+            "queuedReads": 0,
+            "sourceReservationLimit": 64,
+            "sourceReservations": 0,
+            "stagedBytes": 0,
+            "stagedByteThreshold": 33554432
+          },
+          "imageTexturePreparation": {
+            "activePreparations": 0,
+            "browserStageTimings": {
+              "sourceCount": 77,
+              "totals": {
+                "decodeDurationMs": 14726,
+                "decodeQueueDurationMs": 0,
+                "transportDurationMs": 34564,
+                "transportQueueDurationMs": 1174
+              }
+            },
+            "decodedHandoffBytes": 0,
+            "decodedHandoffThresholdBytes": 67108864,
+            "encodedSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 128,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "pendingStorageRepresentations": 0,
+            "retainedEncodedSourceBytes": 472159,
+            "sourceReservationLimit": 64,
+            "sourceReservations": 0
+          },
+          "imageTextureUploads": {
+            "admittedBytes": 157076,
+            "budgetBytes": 33554432,
+            "deferredUploads": 0
+          },
+          "imageTextures": {
+            "compressedBytes": 0,
+            "compressedTextures": 0,
+            "fittedTextures": 19,
+            "residentBytes": 184346960,
+            "residentTextures": 77
+          },
+          "persistentGpu": {
+            "budgetBytes": 268435456,
+            "deniedClaims": 0,
+            "retainedBytes": 192912822
+          },
+          "virtualTextures": {
+            "admittedUploadBytes": 157076,
+            "atlasBytes": 4460544,
+            "atlasPools": 1,
+            "atlasGrowthFailures": 0,
+            "desiredPages": 64,
+            "admittedPages": 64,
+            "unresidentPages": 0,
+            "automaticCandidates": 71,
+            "automaticDecodedBytes": 62625172,
+            "automaticIneligible": 7,
+            "automaticResources": 64,
+            "automaticWaiting": 0,
+            "deferredUploads": 0,
+            "failedPages": 0,
+            "pageRequests": 64,
+            "pendingPages": 0,
+            "pendingPageBytes": 0,
+            "pendingPageByteLimit": 16777216,
+            "residentPages": 64,
+            "uploadedPages": 64,
+            "uploadBudgetBytes": 33554432
+          }
+        },
+        "size": {
+          "backingHeight": 477,
+          "backingWidth": 993,
+          "cssHeight": 477,
+          "cssWidth": 993,
+          "pixelRatio": 1,
+          "renderScale": 1
+        },
+        "filesystem": {
+          "documents": 221,
+          "bytes": 3099905,
+          "writeMs": 3590,
+          "readMs": 0,
+          "exportMs": 563
+        },
+        "sourceCount": 289,
+        "failedSources": 0
+      },
+      "rendererCalls": [
+        {
+          "url": "http://127.0.0.1:4187/onboarding?preview=play",
+          "calls": {
+            "texSubImage2D:Number:undefinedxundefined": {
+              "count": 6,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "getProgramParameter:37297": {
+              "count": 10,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "bufferData": {
+              "count": 30,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "getProgramParameter:35714": {
+              "count": 11,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "getUniformLocation": {
+              "count": 184,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x86": {
+              "count": 2,
+              "total": 5,
+              "max": 5,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:2048x128": {
+              "count": 40,
+              "total": 325,
+              "max": 23,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:2048x91": {
+              "count": 4,
+              "total": 24,
+              "max": 12,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:132x132": {
+              "count": 28,
+              "total": 150,
+              "max": 38,
+              "over50": 0
+            },
+            "texSubImage2D:Uint8Array:undefinedxundefined": {
+              "count": 80,
+              "total": 3,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1960x133": {
+              "count": 26,
+              "total": 207,
+              "max": 34,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1960x108": {
+              "count": 2,
+              "total": 10,
+              "max": 6,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x120": {
+              "count": 1,
+              "total": 5,
+              "max": 5,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1902x137": {
+              "count": 14,
+              "total": 132,
+              "max": 50,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1902x130": {
+              "count": 1,
+              "total": 7,
+              "max": 7,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1894x138": {
+              "count": 14,
+              "total": 103,
+              "max": 21,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:119x128": {
+              "count": 1,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1894x107": {
+              "count": 1,
+              "total": 7,
+              "max": 7,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1974x132": {
+              "count": 26,
+              "total": 302,
+              "max": 49,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1974x102": {
+              "count": 2,
+              "total": 14,
+              "max": 9,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x118": {
+              "count": 1,
+              "total": 3,
+              "max": 3,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:2038x128": {
+              "count": 16,
+              "total": 253,
+              "max": 48,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1954x134": {
+              "count": 14,
+              "total": 262,
+              "max": 44,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1954x88": {
+              "count": 1,
+              "total": 27,
+              "max": 27,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:127x128": {
+              "count": 1,
+              "total": 38,
+              "max": 38,
+              "over50": 0
+            }
+          }
+        },
+        {
+          "url": "http://127.0.0.1:4187/play/?embedded=onboarding",
+          "calls": {
+            "getProgramParameter:37297": {
+              "count": 20,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "bufferData": {
+              "count": 395,
+              "total": 5,
+              "max": 1,
+              "over50": 0
+            },
+            "getProgramParameter:35714": {
+              "count": 24,
+              "total": 3,
+              "max": 1,
+              "over50": 0
+            },
+            "getUniformLocation": {
+              "count": 300,
+              "total": 3,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:Number:undefinedxundefined": {
+              "count": 6,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:2048x128": {
+              "count": 40,
+              "total": 341,
+              "max": 86,
+              "over50": 36
+            },
+            "texSubImage2D:ImageBitmap:2048x91": {
+              "count": 4,
+              "total": 20,
+              "max": 6,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x86": {
+              "count": 2,
+              "total": 3,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1960x133": {
+              "count": 26,
+              "total": 167,
+              "max": 30,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x120": {
+              "count": 1,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1960x108": {
+              "count": 2,
+              "total": 9,
+              "max": 5,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:132x132": {
+              "count": 64,
+              "total": 255,
+              "max": 13,
+              "over50": 0
+            },
+            "texSubImage2D:Uint8Array:undefinedxundefined": {
+              "count": 480,
+              "total": 12,
+              "max": 4,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:1848x1701": {
+              "count": 1,
+              "total": 28,
+              "max": 28,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x118": {
+              "count": 1,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:1528x1646": {
+              "count": 1,
+              "total": 21,
+              "max": 21,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:119x128": {
+              "count": 1,
+              "total": 2,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1848x141": {
+              "count": 12,
+              "total": 220,
+              "max": 124,
+              "over50": 74
+            },
+            "texSubImage2D:ImageBitmap:1848x9": {
+              "count": 1,
+              "total": 3,
+              "max": 3,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1528x171": {
+              "count": 9,
+              "total": 333,
+              "max": 244,
+              "over50": 194
+            },
+            "texSubImage2D:ImageBitmap:1528x107": {
+              "count": 1,
+              "total": 9,
+              "max": 9,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:1444x1452": {
+              "count": 1,
+              "total": 95,
+              "max": 95,
+              "over50": 45
+            },
+            "texSubImage2D:ImageBitmap:1444x181": {
+              "count": 8,
+              "total": 309,
+              "max": 229,
+              "over50": 179
+            },
+            "texSubImage2D:ImageBitmap:1444x4": {
+              "count": 1,
+              "total": 3,
+              "max": 3,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:127x128": {
+              "count": 1,
+              "total": 2,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:89x128": {
+              "count": 3,
+              "total": 14,
+              "max": 10,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:92x128": {
+              "count": 16,
+              "total": 36,
+              "max": 9,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:92x92": {
+              "count": 11,
+              "total": 9,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:60x64": {
+              "count": 4,
+              "total": 2,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:52x45": {
+              "count": 4,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:94x15": {
+              "count": 4,
+              "total": 8,
+              "max": 3,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x78": {
+              "count": 2,
+              "total": 5,
+              "max": 3,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x91": {
+              "count": 2,
+              "total": 3,
+              "max": 3,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:103x119": {
+              "count": 12,
+              "total": 29,
+              "max": 4,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:119x103": {
+              "count": 1,
+              "total": 3,
+              "max": 3,
+              "over50": 0
+            }
+          }
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "before-webkit-final",
+      "concurrentBuild": false,
+      "firstFrameMs": 9560,
+      "completeMs": 25250,
+      "snapshot": {
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "frame": 84,
+        "resources": {
+          "asyncPreparation": {
+            "activeJobs": 0,
+            "jobLimit": 8,
+            "queuedDetailJobs": 0,
+            "queuedForegroundJobs": 0,
+            "queuedJobs": 0
+          },
+          "geometryUploads": {
+            "admittedBytes": 0,
+            "budgetBytes": 4194304,
+            "deferredUploads": 0,
+            "pendingSurfaces": 0
+          },
+          "gltfSharedGeometry": {
+            "pendingPreparationTasks": 0,
+            "preparedTaskBytes": 94236,
+            "preparedTasks": 41,
+            "preparationTaskClaims": 173,
+            "primitiveClaims": 173,
+            "retainedBytes": 94236,
+            "reusedClaims": 132,
+            "reusedPreparationClaims": 132,
+            "taskProducerPreparationDurationMs": 5798.999999999996,
+            "uniqueGeometries": 41
+          },
+          "gltfSourceReads": {
+            "activeReads": 0,
+            "queuedReads": 0,
+            "sourceReservationLimit": 64,
+            "sourceReservations": 0,
+            "stagedBytes": 0,
+            "stagedByteThreshold": 33554432
+          },
+          "imageTexturePreparation": {
+            "activePreparations": 0,
+            "browserStageTimings": {
+              "sourceCount": 77,
+              "totals": {
+                "decodeDurationMs": 10308,
+                "decodeQueueDurationMs": 3,
+                "transportDurationMs": 25977,
+                "transportQueueDurationMs": 1195
+              }
+            },
+            "decodedHandoffBytes": 0,
+            "decodedHandoffThresholdBytes": 67108864,
+            "encodedSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 128,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "pendingStorageRepresentations": 0,
+            "retainedEncodedSourceBytes": 472159,
+            "sourceReservationLimit": 64,
+            "sourceReservations": 0
+          },
+          "imageTextureUploads": {
+            "admittedBytes": 157076,
+            "budgetBytes": 33554432,
+            "deferredUploads": 0
+          },
+          "imageTextures": {
+            "compressedBytes": 0,
+            "compressedTextures": 0,
+            "fittedTextures": 19,
+            "residentBytes": 184346960,
+            "residentTextures": 77
+          },
+          "persistentGpu": {
+            "budgetBytes": 268435456,
+            "deniedClaims": 0,
+            "retainedBytes": 192912822
+          },
+          "virtualTextures": {
+            "admittedUploadBytes": 157076,
+            "atlasBytes": 4460544,
+            "atlasPools": 1,
+            "atlasGrowthFailures": 0,
+            "desiredPages": 64,
+            "admittedPages": 64,
+            "unresidentPages": 0,
+            "automaticCandidates": 71,
+            "automaticDecodedBytes": 62625172,
+            "automaticIneligible": 7,
+            "automaticResources": 64,
+            "automaticWaiting": 0,
+            "deferredUploads": 0,
+            "failedPages": 0,
+            "pageRequests": 64,
+            "pendingPages": 0,
+            "pendingPageBytes": 0,
+            "pendingPageByteLimit": 16777216,
+            "residentPages": 64,
+            "uploadedPages": 64,
+            "uploadBudgetBytes": 33554432
+          }
+        },
+        "size": {
+          "backingHeight": 477,
+          "backingWidth": 993,
+          "cssHeight": 477,
+          "cssWidth": 993,
+          "pixelRatio": 1,
+          "renderScale": 1
+        },
+        "filesystem": {
+          "documents": 221,
+          "bytes": 3099877,
+          "writeMs": 3261,
+          "readMs": 0,
+          "exportMs": 589
+        },
+        "sourceCount": 289,
+        "failedSources": 0
+      },
+      "rendererCalls": [
+        {
+          "url": "http://127.0.0.1:4187/onboarding?preview=play",
+          "calls": {
+            "texSubImage2D:Number:undefinedxundefined": {
+              "count": 6,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "getProgramParameter:37297": {
+              "count": 10,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "bufferData": {
+              "count": 30,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "getProgramParameter:35714": {
+              "count": 11,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "getUniformLocation": {
+              "count": 184,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x86": {
+              "count": 2,
+              "total": 15,
+              "max": 11,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:2048x1371": {
+              "count": 4,
+              "total": 158,
+              "max": 48,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:132x132": {
+              "count": 28,
+              "total": 58,
+              "max": 9,
+              "over50": 0
+            },
+            "texSubImage2D:Uint8Array:undefinedxundefined": {
+              "count": 85,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1960x1837": {
+              "count": 2,
+              "total": 129,
+              "max": 80,
+              "over50": 30
+            },
+            "texSubImage2D:ImageBitmap:128x120": {
+              "count": 1,
+              "total": 2,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1894x2039": {
+              "count": 1,
+              "total": 81,
+              "max": 81,
+              "over50": 31
+            },
+            "texSubImage2D:ImageBitmap:119x128": {
+              "count": 1,
+              "total": 2,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1902x2048": {
+              "count": 1,
+              "total": 91,
+              "max": 91,
+              "over50": 41
+            },
+            "texSubImage2D:ImageBitmap:1974x1818": {
+              "count": 2,
+              "total": 136,
+              "max": 84,
+              "over50": 36
+            },
+            "texSubImage2D:ImageBitmap:128x118": {
+              "count": 1,
+              "total": 5,
+              "max": 5,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:2038x2048": {
+              "count": 1,
+              "total": 82,
+              "max": 82,
+              "over50": 32
+            },
+            "texSubImage2D:ImageBitmap:1954x1964": {
+              "count": 1,
+              "total": 55,
+              "max": 55,
+              "over50": 5
+            },
+            "texSubImage2D:ImageBitmap:127x128": {
+              "count": 1,
+              "total": 3,
+              "max": 3,
+              "over50": 0
+            }
+          }
+        },
+        {
+          "url": "http://127.0.0.1:4187/play/?embedded=onboarding",
+          "calls": {
+            "getProgramParameter:37297": {
+              "count": 22,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "bufferData": {
+              "count": 407,
+              "total": 3,
+              "max": 1,
+              "over50": 0
+            },
+            "getProgramParameter:35714": {
+              "count": 26,
+              "total": 3,
+              "max": 1,
+              "over50": 0
+            },
+            "getUniformLocation": {
+              "count": 325,
+              "total": 2,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x86": {
+              "count": 2,
+              "total": 5,
+              "max": 3,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:2048x1371": {
+              "count": 4,
+              "total": 171,
+              "max": 52,
+              "over50": 2
+            },
+            "texSubImage2D:ImageBitmap:1960x1837": {
+              "count": 2,
+              "total": 88,
+              "max": 50,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x120": {
+              "count": 1,
+              "total": 6,
+              "max": 6,
+              "over50": 0
+            },
+            "texSubImage2D:Number:undefinedxundefined": {
+              "count": 6,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:1848x1701": {
+              "count": 1,
+              "total": 29,
+              "max": 29,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1848x1701": {
+              "count": 1,
+              "total": 163,
+              "max": 163,
+              "over50": 113
+            },
+            "texSubImage2D:ImageBitmap:128x118": {
+              "count": 1,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:1528x1646": {
+              "count": 1,
+              "total": 14,
+              "max": 14,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1528x1646": {
+              "count": 1,
+              "total": 118,
+              "max": 118,
+              "over50": 68
+            },
+            "texSubImage2D:ImageBitmap:119x128": {
+              "count": 1,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:1444x1452": {
+              "count": 1,
+              "total": 13,
+              "max": 13,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1444x1452": {
+              "count": 1,
+              "total": 81,
+              "max": 81,
+              "over50": 31
+            },
+            "texSubImage2D:ImageBitmap:127x128": {
+              "count": 1,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:89x128": {
+              "count": 3,
+              "total": 14,
+              "max": 8,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:92x128": {
+              "count": 16,
+              "total": 14,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:132x132": {
+              "count": 64,
+              "total": 103,
+              "max": 6,
+              "over50": 0
+            },
+            "texSubImage2D:Uint8Array:undefinedxundefined": {
+              "count": 432,
+              "total": 7,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:92x92": {
+              "count": 11,
+              "total": 8,
+              "max": 3,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:60x64": {
+              "count": 4,
+              "total": 5,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:52x45": {
+              "count": 4,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:94x15": {
+              "count": 4,
+              "total": 2,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x78": {
+              "count": 2,
+              "total": 2,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x91": {
+              "count": 2,
+              "total": 2,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:103x119": {
+              "count": 12,
+              "total": 18,
+              "max": 3,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:119x103": {
+              "count": 1,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            }
+          }
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "cropped-webkit-final",
+      "concurrentBuild": false,
+      "firstFrameMs": 10917,
+      "completeMs": 39928,
+      "snapshot": {
+        "context": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        },
+        "frame": 189,
+        "resources": {
+          "asyncPreparation": {
+            "activeJobs": 0,
+            "jobLimit": 8,
+            "queuedDetailJobs": 0,
+            "queuedForegroundJobs": 0,
+            "queuedJobs": 0
+          },
+          "geometryUploads": {
+            "admittedBytes": 0,
+            "budgetBytes": 4194304,
+            "deferredUploads": 0,
+            "pendingSurfaces": 0
+          },
+          "gltfSharedGeometry": {
+            "pendingPreparationTasks": 0,
+            "preparedTaskBytes": 94236,
+            "preparedTasks": 41,
+            "preparationTaskClaims": 173,
+            "primitiveClaims": 173,
+            "retainedBytes": 94236,
+            "reusedClaims": 132,
+            "reusedPreparationClaims": 132,
+            "taskProducerPreparationDurationMs": 7532.999999999997,
+            "uniqueGeometries": 41
+          },
+          "gltfSourceReads": {
+            "activeReads": 0,
+            "queuedReads": 0,
+            "sourceReservationLimit": 64,
+            "sourceReservations": 0,
+            "stagedBytes": 0,
+            "stagedByteThreshold": 33554432
+          },
+          "imageTexturePreparation": {
+            "activePreparations": 0,
+            "browserStageTimings": {
+              "sourceCount": 77,
+              "totals": {
+                "decodeDurationMs": 14965,
+                "decodeQueueDurationMs": 0,
+                "transportDurationMs": 36407,
+                "transportQueueDurationMs": 1248
+              }
+            },
+            "decodedHandoffBytes": 0,
+            "decodedHandoffThresholdBytes": 67108864,
+            "encodedSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 128,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "pendingStorageRepresentations": 0,
+            "retainedEncodedSourceBytes": 472159,
+            "sourceReservationLimit": 64,
+            "sourceReservations": 0
+          },
+          "imageTextureUploads": {
+            "admittedBytes": 157076,
+            "budgetBytes": 33554432,
+            "deferredUploads": 0
+          },
+          "imageTextures": {
+            "compressedBytes": 0,
+            "compressedTextures": 0,
+            "fittedTextures": 19,
+            "residentBytes": 184346960,
+            "residentTextures": 77
+          },
+          "persistentGpu": {
+            "budgetBytes": 268435456,
+            "deniedClaims": 0,
+            "retainedBytes": 192912822
+          },
+          "virtualTextures": {
+            "admittedUploadBytes": 157076,
+            "atlasBytes": 4460544,
+            "atlasPools": 1,
+            "atlasGrowthFailures": 0,
+            "desiredPages": 64,
+            "admittedPages": 64,
+            "unresidentPages": 0,
+            "automaticCandidates": 71,
+            "automaticDecodedBytes": 62625172,
+            "automaticIneligible": 7,
+            "automaticResources": 64,
+            "automaticWaiting": 0,
+            "deferredUploads": 0,
+            "failedPages": 0,
+            "pageRequests": 64,
+            "pendingPages": 0,
+            "pendingPageBytes": 0,
+            "pendingPageByteLimit": 16777216,
+            "residentPages": 64,
+            "uploadedPages": 64,
+            "uploadBudgetBytes": 33554432
+          }
+        },
+        "size": {
+          "backingHeight": 477,
+          "backingWidth": 993,
+          "cssHeight": 477,
+          "cssWidth": 993,
+          "pixelRatio": 1,
+          "renderScale": 1
+        },
+        "filesystem": {
+          "documents": 221,
+          "bytes": 3099901,
+          "writeMs": 3411,
+          "readMs": 0,
+          "exportMs": 710
+        },
+        "sourceCount": 289,
+        "failedSources": 0
+      },
+      "rendererCalls": [
+        {
+          "url": "http://127.0.0.1:4187/onboarding?preview=play",
+          "calls": {
+            "texSubImage2D:Number:undefinedxundefined": {
+              "count": 6,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "getProgramParameter:37297": {
+              "count": 10,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "bufferData": {
+              "count": 30,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "getProgramParameter:35714": {
+              "count": 11,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "getUniformLocation": {
+              "count": 184,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x86": {
+              "count": 2,
+              "total": 9,
+              "max": 5,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:2048x128": {
+              "count": 40,
+              "total": 371,
+              "max": 31,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:2048x91": {
+              "count": 4,
+              "total": 31,
+              "max": 18,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:132x132": {
+              "count": 28,
+              "total": 171,
+              "max": 30,
+              "over50": 0
+            },
+            "texSubImage2D:Uint8Array:undefinedxundefined": {
+              "count": 95,
+              "total": 3,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1960x133": {
+              "count": 26,
+              "total": 216,
+              "max": 45,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1960x108": {
+              "count": 2,
+              "total": 14,
+              "max": 9,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x120": {
+              "count": 1,
+              "total": 4,
+              "max": 4,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1902x137": {
+              "count": 14,
+              "total": 148,
+              "max": 61,
+              "over50": 11
+            },
+            "texSubImage2D:ImageBitmap:1902x130": {
+              "count": 1,
+              "total": 5,
+              "max": 5,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1894x138": {
+              "count": 14,
+              "total": 128,
+              "max": 35,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:119x128": {
+              "count": 1,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1894x107": {
+              "count": 1,
+              "total": 5,
+              "max": 5,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1974x132": {
+              "count": 26,
+              "total": 194,
+              "max": 30,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1974x102": {
+              "count": 2,
+              "total": 14,
+              "max": 8,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x118": {
+              "count": 1,
+              "total": 7,
+              "max": 7,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:2038x128": {
+              "count": 16,
+              "total": 235,
+              "max": 29,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:127x128": {
+              "count": 1,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1954x134": {
+              "count": 14,
+              "total": 195,
+              "max": 30,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1954x88": {
+              "count": 1,
+              "total": 28,
+              "max": 28,
+              "over50": 0
+            }
+          }
+        },
+        {
+          "url": "http://127.0.0.1:4187/play/?embedded=onboarding",
+          "calls": {
+            "getProgramParameter:37297": {
+              "count": 20,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "bufferData": {
+              "count": 545,
+              "total": 8,
+              "max": 3,
+              "over50": 0
+            },
+            "getProgramParameter:35714": {
+              "count": 23,
+              "total": 3,
+              "max": 1,
+              "over50": 0
+            },
+            "getUniformLocation": {
+              "count": 286,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "texSubImage2D:Number:undefinedxundefined": {
+              "count": 6,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:2048x128": {
+              "count": 40,
+              "total": 330,
+              "max": 70,
+              "over50": 21
+            },
+            "texSubImage2D:ImageBitmap:2048x91": {
+              "count": 4,
+              "total": 18,
+              "max": 7,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x86": {
+              "count": 2,
+              "total": 2,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1960x133": {
+              "count": 26,
+              "total": 143,
+              "max": 24,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x120": {
+              "count": 1,
+              "total": 0,
+              "max": 0,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1960x108": {
+              "count": 2,
+              "total": 7,
+              "max": 4,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:132x132": {
+              "count": 64,
+              "total": 116,
+              "max": 6,
+              "over50": 0
+            },
+            "texSubImage2D:Uint8Array:undefinedxundefined": {
+              "count": 448,
+              "total": 2,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:1848x1701": {
+              "count": 1,
+              "total": 26,
+              "max": 26,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x118": {
+              "count": 1,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1848x141": {
+              "count": 12,
+              "total": 131,
+              "max": 91,
+              "over50": 41
+            },
+            "texSubImage2D:ImageBitmap:1848x9": {
+              "count": 1,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:1528x1646": {
+              "count": 1,
+              "total": 29,
+              "max": 29,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1528x171": {
+              "count": 9,
+              "total": 157,
+              "max": 115,
+              "over50": 65
+            },
+            "texSubImage2D:ImageBitmap:1528x107": {
+              "count": 1,
+              "total": 4,
+              "max": 4,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:119x128": {
+              "count": 1,
+              "total": 2,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:HTMLCanvasElement:1444x1452": {
+              "count": 1,
+              "total": 31,
+              "max": 31,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:1444x181": {
+              "count": 8,
+              "total": 100,
+              "max": 72,
+              "over50": 22
+            },
+            "texSubImage2D:ImageBitmap:1444x4": {
+              "count": 1,
+              "total": 1,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:127x128": {
+              "count": 1,
+              "total": 2,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:89x128": {
+              "count": 3,
+              "total": 5,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:92x128": {
+              "count": 16,
+              "total": 17,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:92x92": {
+              "count": 11,
+              "total": 11,
+              "max": 4,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:60x64": {
+              "count": 4,
+              "total": 3,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:52x45": {
+              "count": 4,
+              "total": 4,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:94x15": {
+              "count": 4,
+              "total": 4,
+              "max": 1,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x78": {
+              "count": 2,
+              "total": 3,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:128x91": {
+              "count": 2,
+              "total": 3,
+              "max": 2,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:103x119": {
+              "count": 12,
+              "total": 20,
+              "max": 3,
+              "over50": 0
+            },
+            "texSubImage2D:ImageBitmap:119x103": {
+              "count": 1,
+              "total": 2,
+              "max": 2,
+              "over50": 0
+            }
+          }
+        }
+      ],
+      "errors": []
+    }
+  ]
+}
