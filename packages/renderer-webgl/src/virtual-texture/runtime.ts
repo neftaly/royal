@@ -322,8 +322,8 @@ const createGpuVirtualTexture = (
         settings1: new Float32Array([
           atlas.atlasColumns * atlas.storedPageSize,
           atlas.atlasRows * atlas.storedPageSize,
-          manifest.tableWidth,
-          manifest.tableHeight,
+          (asset.sampler?.minFilter ?? "linear-mipmap-linear").endsWith("mipmap-linear") ? 1 : 0,
+          0,
         ]),
         settings2: new Float32Array([
           manifest.mipCount,
@@ -1217,7 +1217,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         ...gpu.binding,
         atlas: { ...gpu.binding.atlas, texture: replacement.atlasTexture },
         settings1: new Float32Array([replacement.atlasColumns * replacement.storedPageSize,
-          replacement.atlasRows * replacement.storedPageSize, resource.manifest!.tableWidth, resource.manifest!.tableHeight]),
+          replacement.atlasRows * replacement.storedPageSize, gpu.binding.settings1[2]!, gpu.binding.settings1[3]!]),
       };
       if (layoutChanged) {
         gpu.pageTableDirty = true;

@@ -1,0 +1,172 @@
+{
+  "demand": {
+    "iterations": 120,
+    "results": [
+      {
+        "triangles": 2,
+        "ancestors": "coarsest",
+        "pages": 17,
+        "overflow": false,
+        "medianMs": 0.09999996423721313,
+        "p95Ms": 0.20000004768371582
+      },
+      {
+        "triangles": 2,
+        "ancestors": "all",
+        "pages": 21,
+        "overflow": false,
+        "medianMs": 0,
+        "p95Ms": 0.10000002384185791
+      },
+      {
+        "triangles": 200,
+        "ancestors": "coarsest",
+        "pages": 17,
+        "overflow": false,
+        "medianMs": 0.699999988079071,
+        "p95Ms": 0.9000000357627869
+      },
+      {
+        "triangles": 200,
+        "ancestors": "all",
+        "pages": 21,
+        "overflow": false,
+        "medianMs": 0.9000000357627869,
+        "p95Ms": 1.199999988079071
+      },
+      {
+        "triangles": 20000,
+        "ancestors": "coarsest",
+        "pages": 17,
+        "overflow": false,
+        "medianMs": 49.89999997615814,
+        "p95Ms": 65.39999997615814
+      },
+      {
+        "triangles": 20000,
+        "ancestors": "all",
+        "pages": 21,
+        "overflow": false,
+        "medianMs": 63.5,
+        "p95Ms": 81.19999998807907
+      }
+    ]
+  },
+  "filtering": {
+    "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+    "results": [
+      {
+        "mode": "nearestMip",
+        "transitions": [
+          {
+            "lod": 0,
+            "rgba": [
+              255,
+              0,
+              0,
+              255
+            ]
+          },
+          {
+            "lod": 0.25,
+            "rgba": [
+              255,
+              0,
+              0,
+              255
+            ]
+          },
+          {
+            "lod": 0.5,
+            "rgba": [
+              255,
+              0,
+              0,
+              255
+            ]
+          },
+          {
+            "lod": 0.75,
+            "rgba": [
+              255,
+              0,
+              0,
+              255
+            ]
+          },
+          {
+            "lod": 1,
+            "rgba": [
+              0,
+              0,
+              255,
+              255
+            ]
+          }
+        ],
+        "medianDrawReadbackMs": 0.6000000238418579,
+        "p95DrawReadbackMs": 11.699999988079071
+      },
+      {
+        "mode": "trilinear",
+        "transitions": [
+          {
+            "lod": 0,
+            "rgba": [
+              255,
+              0,
+              0,
+              255
+            ]
+          },
+          {
+            "lod": 0.25,
+            "rgba": [
+              191,
+              0,
+              64,
+              255
+            ]
+          },
+          {
+            "lod": 0.5,
+            "rgba": [
+              128,
+              0,
+              128,
+              255
+            ]
+          },
+          {
+            "lod": 0.75,
+            "rgba": [
+              64,
+              0,
+              191,
+              255
+            ]
+          },
+          {
+            "lod": 1,
+            "rgba": [
+              0,
+              0,
+              255,
+              255
+            ]
+          }
+        ],
+        "medianDrawReadbackMs": 0.699999988079071,
+        "p95DrawReadbackMs": 11.5
+      }
+    ],
+    "fallback": [
+      0,
+      0,
+      255,
+      255
+    ],
+    "note": "Synchronous draw/readback wall time; not GPU timer-query throughput."
+  }
+}

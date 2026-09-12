@@ -1,0 +1,61 @@
+{
+  "node": "v24.12.0",
+  "report": {
+    "iterations": 120,
+    "results": [
+      {
+        "triangles": 2,
+        "ancestors": "coarsest",
+        "pages": 17,
+        "overflow": false,
+        "medianMs": 0.013342000000193366,
+        "p95Ms": 0.023794000000634696
+      },
+      {
+        "triangles": 2,
+        "ancestors": "all",
+        "pages": 21,
+        "overflow": false,
+        "medianMs": 0.012201999999888358,
+        "p95Ms": 0.016392000000450935
+      },
+      {
+        "triangles": 200,
+        "ancestors": "coarsest",
+        "pages": 17,
+        "overflow": false,
+        "medianMs": 0.3594249999996464,
+        "p95Ms": 0.8210920000001352
+      },
+      {
+        "triangles": 200,
+        "ancestors": "all",
+        "pages": 21,
+        "overflow": false,
+        "medianMs": 0.557491000000482,
+        "p95Ms": 0.8436780000001818
+      },
+      {
+        "triangles": 20000,
+        "ancestors": "coarsest",
+        "pages": 17,
+        "overflow": false,
+        "medianMs": 42.68108000000029,
+        "p95Ms": 55.31677599999966
+      },
+      {
+        "triangles": 20000,
+        "ancestors": "all",
+        "pages": 21,
+        "overflow": false,
+        "medianMs": 63.89811399999962,
+        "p95Ms": 71.50714100000187
+      }
+    ]
+  },
+  "heapDelta": 4544136,
+  "arrayBufferDelta": 290544,
+  "gcEvents": 0,
+  "gcDurationMs": 0,
+  "note": "Aggregate demand-only run including fixture construction; excludes browser rendering, network, decode, and uploads."
+}

@@ -44,13 +44,63 @@ const view = (projection = identityMat4()) => ({
 });
 
 describe("VT2 clipped projected demand", () => {
+  it("stops a discarded overflow pass but visits every surface on the coarser retry", () => {
+    let visits = 0;
+    const later = { ...surface, get geometry() { visits += 1; return surfaceGeometry; } };
+    const workspace = createVirtualTextureDemandWorkspace(1);
+    collectVirtualTextureDemand(workspace, manifest, [surface, later], [view()], sampler);
+    expect(workspace.overflow).toBe(true);
+    expect(visits).toBe(0);
+    resetVirtualTextureDemand(workspace);
+    collectVirtualTextureDemand(workspace, manifest, [surface, later], [view()], sampler, manifest.mipCount - 1);
+    expect(workspace.overflow).toBe(false);
+    expect(visits).toBe(1);
+  });
+  it("keeps cache collisions and changing geometry equivalent to compact vertex indexing", () => {
+    const positions = new Float32Array([-.5,-.5,0, 0,-.5,0, -.5,.5,0, 0,-.5,0, .5,-.5,0, .5,.5,0]);
+    const uvs = new Float32Array([0,1, .5,1, 0,0, .5,1, 1,1, 1,0]);
+    const paddedPositions = new Float32Array(259 * 3);
+    const paddedUvs = new Float32Array(259 * 2);
+    paddedPositions.set(positions.subarray(0, 9)); paddedPositions.set(positions.subarray(9), 256 * 3);
+    paddedUvs.set(uvs.subarray(0, 6)); paddedUvs.set(uvs.subarray(6), 256 * 2);
+    const compact = { ...surface, geometry: { ...surfaceGeometry, positions,
+      textureCoordinates0: uvs, indices: new Uint16Array([0, 1, 2, 3, 4, 5]) } };
+    const colliding = { ...surface, geometry: { ...surfaceGeometry, positions: paddedPositions,
+      textureCoordinates0: paddedUvs, indices: new Uint16Array([0, 1, 2, 256, 257, 258]) } };
+    const expected = createVirtualTextureDemandWorkspace(64);
+    const actual = createVirtualTextureDemandWorkspace(64);
+    collectVirtualTextureDemand(expected, manifest, [compact], [view()], sampler);
+    collectVirtualTextureDemand(actual, manifest, [colliding], [view()], sampler);
+    expect([...actual.keys]).toEqual([...expected.keys]);
+    resetVirtualTextureDemand(actual);
+    collectVirtualTextureDemand(actual, manifest, [surface], [view()], sampler);
+    resetVirtualTextureDemand(expected);
+    collectVirtualTextureDemand(expected, manifest, [surface], [view()], sampler);
+    expect([...actual.keys]).toEqual([...expected.keys]);
+  });
+  it.each(["all", "coarsest"] as const)("keeps repeated %s demand idempotent after capacity truncation", (ancestors) => {
+    const workspace = createVirtualTextureDemandWorkspace(64, ancestors);
+    const surfaces = [surface];
+    const views = [view()];
+    const entries = () => Array.from({ length: workspace.count }, (_, index) => [
+      workspace.mips[index], workspace.xs[index], workspace.ys[index],
+    ]);
+    collectVirtualTextureDemand(workspace, manifest, surfaces, views, sampler);
+    const complete = entries();
+    truncateVirtualTextureDemand(workspace, 4);
+    collectVirtualTextureDemand(workspace, manifest, surfaces, views, sampler);
+    expect(entries().sort()).toEqual(complete.sort());
+    const restored = entries();
+    collectVirtualTextureDemand(workspace, manifest, surfaces, views, sampler);
+    expect(entries()).toEqual(restored);
+  });
   it("requests target pages and one fallback without intermediate SVG levels", () => {
     const source = parseVirtualTextureManifest({
       borderTexels: 2, contractVersion: 2, pageSize: 128,
       pages: { uriTemplate: "{mip}/{x}/{y}.png" }, virtualSize: [16384, 16384],
     });
     const workspace = createVirtualTextureDemandWorkspace(512, "coarsest");
-    collectVirtualTextureDemand(workspace, source, [surface], [view()], sampler);
+    collectVirtualTextureDemand(workspace, source, [surface], [view()], { ...sampler, minFilter: "linear-mipmap-nearest" });
     // This plane covers 512 backing pixels: sixteen 128px pages plus coverage.
     expect(workspace.count).toBe(17);
     expect(new Set(workspace.mips.slice(0, workspace.count))).toEqual(new Set([7, 5]));
@@ -60,12 +110,23 @@ describe("VT2 clipped projected demand", () => {
     distant[5] = 0.1;
     collectVirtualTextureDemand(workspace, source, [{
       ...surface, model: distant, worldBounds: transformedWorldBounds(surfaceGeometry.bounds, distant),
-    }], [view()], sampler);
+    }], [view()], { ...sampler, minFilter: "linear-mipmap-nearest" });
     expect(workspace.coarsestTarget).toBe(true);
     expect(workspace.count).toBe(17);
     truncateVirtualTextureDemand(workspace, 8);
     expect(workspace.count).toBe(5);
     expect(new Set(workspace.mips.slice(0, workspace.count))).toEqual(new Set([7, 6]));
+  });
+  it("adds only the adjacent blending level to automatic trilinear demand", () => {
+    const source = parseVirtualTextureManifest({
+      borderTexels: 2, contractVersion: 2, pageSize: 128,
+      pages: { uriTemplate: "{mip}/{x}/{y}.png" }, virtualSize: [16384, 16384],
+    });
+    const workspace = createVirtualTextureDemandWorkspace(512, "coarsest");
+    collectVirtualTextureDemand(workspace, source, [surface], [view()], sampler);
+    expect(workspace.count).toBe(21);
+    expect(new Set(workspace.mips.slice(0, workspace.count))).toEqual(new Set([7, 6, 5]));
+    expect(workspace.coarsestTarget).toBe(false);
   });
   it("requests finer pages as visible texel density increases", () => {
     const workspace = createVirtualTextureDemandWorkspace(64);

@@ -12,23 +12,9 @@ float royalVirtualWrap(float coordinate, float mode) {
   return min(0.99999994, 1.0 - abs(mod(coordinate, 2.0) - 1.0));
 }
 
-vec4 sampleVirtualBaseColor(vec2 authoredUv) {
-  vec2 uv = vec2(
-    royalVirtualWrap(authoredUv.x, virtualSettings2.y),
-    royalVirtualWrap(authoredUv.y, virtualSettings2.z)
-  );
-  vec2 virtualSize = virtualSettings0.xy;
+vec4 royalVirtualMip(vec2 virtualTexel, int desiredMip) {
   float pageSize = virtualSettings0.z;
-  vec2 texelDx = dFdx(authoredUv) * virtualSize;
-  vec2 texelDy = dFdy(authoredUv) * virtualSize;
-  float footprintSquared = max(dot(texelDx, texelDx), dot(texelDy, texelDy));
-  int desiredMip = int(clamp(
-    floor(0.5 * log2(max(footprintSquared, 1.0))),
-    0.0,
-    virtualSettings2.x - 1.0
-  ));
   float desiredScale = exp2(float(desiredMip));
-  vec2 virtualTexel = uv * virtualSize;
   vec2 desiredPage = floor((virtualTexel / desiredScale) / pageSize);
   vec4 entry = texelFetch(virtualPageTable, ivec2(desiredPage), desiredMip);
   // A fast zoom-out may request a mip that has never been loaded. The base
@@ -53,5 +39,21 @@ vec4 sampleVirtualBaseColor(vec2 authoredUv) {
     + vec2(virtualSettings0.w)
     + localTexel;
   return texture(baseColorTexture, atlasTexel / virtualSettings1.xy);
+}
+
+vec4 sampleVirtualBaseColor(vec2 authoredUv) {
+  vec2 uv = vec2(
+    royalVirtualWrap(authoredUv.x, virtualSettings2.y),
+    royalVirtualWrap(authoredUv.y, virtualSettings2.z)
+  );
+  vec2 texelDx = dFdx(authoredUv) * virtualSettings0.xy;
+  vec2 texelDy = dFdy(authoredUv) * virtualSettings0.xy;
+  float footprintSquared = max(dot(texelDx, texelDx), dot(texelDy, texelDy));
+  float lod = clamp(0.5 * log2(max(footprintSquared, 1.0)), 0.0, virtualSettings2.x - 1.0);
+  int mip = int(floor(lod));
+  vec2 texel = uv * virtualSettings0.xy;
+  vec4 lower = royalVirtualMip(texel, mip);
+  if (virtualSettings1.z < 0.5 || fract(lod) == 0.0) return lower;
+  return mix(lower, royalVirtualMip(texel, mip + 1), fract(lod));
 }
 `;

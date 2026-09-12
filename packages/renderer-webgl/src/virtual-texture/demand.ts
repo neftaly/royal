@@ -46,13 +46,16 @@ export type VirtualTextureDemandWorkspace = Readonly<{
   modelViewProjection: MutableMat4;
   screen: Float64Array;
   subdivision: Float64Array;
+  vertexCache: Float64Array;
+  vertexKeys: Int32Array;
   xs: Uint32Array;
   ys: Uint32Array;
-}> & { count: number; overflow: boolean; coarsestTarget: boolean; minimumMip: number };
+}> & { count: number; overflow: boolean; coarsestTarget: boolean; minimumMip: number; mipLinear: boolean };
 
 const CLIP_VERTEX_COMPONENTS = 6;
 const MAX_CLIPPED_VERTICES = 12;
 const MAX_DEMAND_SUBDIVISION_DEPTH = 4;
+const VERTEX_CACHE_SIZE = 256;
 
 export const createVirtualTextureDemandWorkspace = (
   maxPages: number,
@@ -65,6 +68,7 @@ export const createVirtualTextureDemandWorkspace = (
     ancestors,
     coarsestTarget: false,
     minimumMip: 0,
+    mipLinear: false,
     clipA: new Float64Array(MAX_CLIPPED_VERTICES * CLIP_VERTEX_COMPONENTS),
     clipB: new Float64Array(MAX_CLIPPED_VERTICES * CLIP_VERTEX_COMPONENTS),
     count: 0,
@@ -79,6 +83,8 @@ export const createVirtualTextureDemandWorkspace = (
     subdivision: new Float64Array(
       MAX_DEMAND_SUBDIVISION_DEPTH * 3 * CLIP_VERTEX_COMPONENTS,
     ),
+    vertexCache: new Float64Array(VERTEX_CACHE_SIZE * CLIP_VERTEX_COMPONENTS),
+    vertexKeys: new Int32Array(VERTEX_CACHE_SIZE),
     xs: new Uint32Array(maxPages),
     ys: new Uint32Array(maxPages),
   };
@@ -188,8 +194,12 @@ const addPageWithAncestors = (
   y: number,
 ): void => {
   if (mip === manifest.mipCount - 1) workspace.coarsestTarget = true;
+  // A retained target already has its required ancestors. Overlapping triangles
+  // often request the same pages; avoid walking that chain again for each one.
+  if (workspace.keys.has(virtualTexturePageKeyParts(mip, x, y))) return;
   for (let ancestorMip = manifest.mipCount - 1; ancestorMip >= mip; ancestorMip -= 1) {
-    if (workspace.ancestors === "coarsest" && ancestorMip !== manifest.mipCount - 1 && ancestorMip !== mip) continue;
+    if (workspace.ancestors === "coarsest" && ancestorMip !== manifest.mipCount - 1
+      && ancestorMip !== mip && !(workspace.mipLinear && ancestorMip === mip + 1)) continue;
     const divisor = 2 ** (ancestorMip - mip);
     addPage(workspace, ancestorMip, Math.floor(x / divisor), Math.floor(y / divisor));
   }
@@ -390,6 +400,7 @@ const addClampedRange = (
   for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y += 1) {
     for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x += 1) {
       addPageWithAncestors(workspace, manifest, mip, x, y);
+      if (workspace.overflow) return;
     }
   }
 };
@@ -512,7 +523,10 @@ const addClippedTriangleDemand = (
   let minimumMip = manifest.mipCount - 1;
   let maximumMip = 0;
   let sampled = false;
-  for (let sample = 0; sample < 4; sample += 1) {
+  // Constant clip W makes perspective-correct derivatives constant over the
+  // triangle. Flat cards and orthographic meshes need only one sample.
+  const sampleCount = q1 === 0 && q2 === 0 ? 1 : 4;
+  for (let sample = 0; sample < sampleCount; sample += 1) {
     const uq = sample === 3
       ? (screen[2]! + screen[7]! + screen[12]!) / 3
       : screen[sample * 5 + 2]!;
@@ -524,17 +538,16 @@ const addClippedTriangleDemand = (
       : screen[sample * 5 + 4]!;
     if (!(q > 0) || !Number.isFinite(q)) continue;
     const inverseQSquared = 1 / (q * q);
-    const duDx = (uqDx * q - uq * qDx) * inverseQSquared;
-    const dvDx = (vqDx * q - vq * qDx) * inverseQSquared;
-    const duDy = (uqDy * q - uq * qDy) * inverseQSquared;
-    const dvDy = (vqDy * q - vq * qDy) * inverseQSquared;
-    const rho = Math.max(
-      Math.hypot(duDx * manifest.width, dvDx * manifest.height),
-      Math.hypot(duDy * manifest.width, dvDy * manifest.height),
-    );
+    const duDx = (uqDx * q - uq * qDx) * inverseQSquared * manifest.width;
+    const dvDx = (vqDx * q - vq * qDx) * inverseQSquared * manifest.height;
+    const duDy = (uqDy * q - uq * qDy) * inverseQSquared * manifest.width;
+    const dvDy = (vqDy * q - vq * qDy) * inverseQSquared * manifest.height;
+    // Match the shader's squared footprint without variadic hypot calls in the
+    // triangle loop. Overflow selects the coarsest mip; values below one clamp.
+    const footprintSquared = Math.max(duDx * duDx + dvDx * dvDx, duDy * duDy + dvDy * dvDy);
     const mip = Math.max(workspace.minimumMip, Math.min(
       manifest.mipCount - 1,
-      Math.floor(Math.log2(Math.max(1, rho))),
+      Math.floor(0.5 * Math.log2(Math.max(1, footprintSquared))),
     ));
     minimumMip = Math.min(minimumMip, mip);
     maximumMip = Math.max(maximumMip, mip);
@@ -646,17 +659,21 @@ const collectModelDemand = (
   multiplyMat4Into(workspace.modelViewProjection, view.viewProjection, model);
   const { geometry } = surface;
   const indices = geometry.indices;
-  for (let index = 0; index + 2 < indices.length; index += 3) {
+  // A small direct-mapped cache bounds scratch memory regardless of mesh size.
+  // Clear per model/view so it cannot reuse transforms or UVs across instances.
+  workspace.vertexKeys.fill(-1);
+  for (let index = 0; index + 2 < indices.length && !workspace.overflow; index += 3) {
     let finite = true;
     for (let corner = 0; corner < 3; corner += 1) {
-      writeClipVertex(
-        workspace.clipA,
-        corner * CLIP_VERTEX_COMPONENTS,
-        indices[index + corner]! * 3,
-        geometry,
-        workspace.modelViewProjection,
-        surface.textureCoordinates,
-      );
+      const vertex = indices[index + corner]!;
+      const slot = vertex & (VERTEX_CACHE_SIZE - 1);
+      const cachedOffset = slot * CLIP_VERTEX_COMPONENTS;
+      if (workspace.vertexKeys[slot] !== vertex) {
+        writeClipVertex(workspace.vertexCache, cachedOffset, vertex * 3, geometry,
+          workspace.modelViewProjection, surface.textureCoordinates);
+        workspace.vertexKeys[slot] = vertex;
+      }
+      copyVertex(workspace.clipA, corner * CLIP_VERTEX_COMPONENTS, workspace.vertexCache, cachedOffset);
       const offset = corner * CLIP_VERTEX_COMPONENTS;
       for (let component = 0; component < CLIP_VERTEX_COMPONENTS; component += 1) {
         if (!Number.isFinite(workspace.clipA[offset + component]!)) finite = false;
@@ -718,7 +735,7 @@ const collectVirtualTextureSurfaceViewDemand = (
     collectModelDemand(workspace, manifest, surface, surface.model, view, sampler);
     return;
   }
-  for (let instance = 0; instance < instances.count; instance += 1) {
+  for (let instance = 0; instance < instances.count && !workspace.overflow; instance += 1) {
     copyInstanceModel(workspace.model, surface.model, instances.localModels, instance * 16);
     const bounds = workspace.instanceBounds;
     bounds.min[0] = Infinity;
@@ -742,11 +759,18 @@ export const collectVirtualTextureDemand = (
   sampler: CanonicalTextureSampler,
   minimumMip = 0,
 ): void => {
+  const previousOverflow = workspace.overflow;
+  workspace.overflow = false;
   workspace.minimumMip = minimumMip;
+  workspace.mipLinear = sampler.minFilter.endsWith("mipmap-linear");
   for (const view of views) {
     frustumPlanesInto(workspace.frustumPlanes, view.viewProjection);
     for (const surface of surfaces) {
       collectVirtualTextureSurfaceViewDemand(workspace, manifest, surface, view, sampler);
+      // The runtime restarts at a coarser minimum mip after overflow. Completing
+      // this discarded pass would multiply dense/repeated-UV work needlessly.
+      if (workspace.overflow) return;
     }
   }
+  workspace.overflow = previousOverflow;
 };

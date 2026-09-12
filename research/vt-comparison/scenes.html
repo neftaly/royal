@@ -1,0 +1,13 @@
+<!doctype html><meta charset="utf-8"><title>Royal VT renderer scene benchmark</title>
+<p>Renderer scenes: zoom, oblique artwork, hidden dense geometry, generated pages.</p>
+<button id="run">Run renderer scenarios</button>
+<div id="canvases"></div><pre id="output"></pre>
+<script type="module">
+import { runSceneBenchmarks } from './scenes.ts';
+window.runVTComparison = runSceneBenchmarks;
+document.querySelector('#run').onclick = async () => {
+  document.querySelector('#run').disabled = true;
+  try { document.querySelector('#output').textContent = JSON.stringify(await runSceneBenchmarks(), (k,v) => k === 'screenshot' ? '(captured)' : v, 2); }
+  finally { document.querySelector('#run').disabled = false; }
+};
+</script>

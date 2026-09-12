@@ -1,0 +1,188 @@
+{
+  "demand": {
+    "iterations": 120,
+    "results": [
+      {
+        "triangles": 2,
+        "ancestors": "coarsest",
+        "pages": 17,
+        "overflow": false,
+        "medianMs": 0,
+        "p95Ms": 0.19999998807907104
+      },
+      {
+        "triangles": 2,
+        "ancestors": "all",
+        "pages": 21,
+        "overflow": false,
+        "medianMs": 0,
+        "p95Ms": 0.10000002384185791
+      },
+      {
+        "triangles": 200,
+        "ancestors": "coarsest",
+        "pages": 17,
+        "overflow": false,
+        "medianMs": 0.30000001192092896,
+        "p95Ms": 0.6000000238418579
+      },
+      {
+        "triangles": 200,
+        "ancestors": "all",
+        "pages": 21,
+        "overflow": false,
+        "medianMs": 0.30000001192092896,
+        "p95Ms": 0.40000003576278687
+      },
+      {
+        "triangles": 20000,
+        "ancestors": "coarsest",
+        "pages": 17,
+        "overflow": false,
+        "medianMs": 23.100000023841858,
+        "p95Ms": 31
+      },
+      {
+        "triangles": 20000,
+        "ancestors": "all",
+        "pages": 21,
+        "overflow": false,
+        "medianMs": 22.899999976158142,
+        "p95Ms": 29.5
+      }
+    ]
+  },
+  "filtering": {
+    "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+    "results": [
+      {
+        "mode": "nearestMip",
+        "transitions": [
+          {
+            "lod": 0,
+            "rgba": [
+              255,
+              0,
+              0,
+              255
+            ]
+          },
+          {
+            "lod": 0.25,
+            "rgba": [
+              255,
+              0,
+              0,
+              255
+            ]
+          },
+          {
+            "lod": 0.5,
+            "rgba": [
+              255,
+              0,
+              0,
+              255
+            ]
+          },
+          {
+            "lod": 0.75,
+            "rgba": [
+              255,
+              0,
+              0,
+              255
+            ]
+          },
+          {
+            "lod": 1,
+            "rgba": [
+              0,
+              0,
+              255,
+              255
+            ]
+          }
+        ],
+        "medianDrawReadbackMs": 0.699999988079071,
+        "p95DrawReadbackMs": 19.099999964237213
+      },
+      {
+        "mode": "trilinear",
+        "transitions": [
+          {
+            "lod": 0,
+            "rgba": [
+              255,
+              0,
+              0,
+              255
+            ]
+          },
+          {
+            "lod": 0.25,
+            "rgba": [
+              191,
+              0,
+              64,
+              255
+            ]
+          },
+          {
+            "lod": 0.5,
+            "rgba": [
+              128,
+              0,
+              128,
+              255
+            ]
+          },
+          {
+            "lod": 0.75,
+            "rgba": [
+              64,
+              0,
+              191,
+              255
+            ]
+          },
+          {
+            "lod": 1,
+            "rgba": [
+              0,
+              0,
+              255,
+              255
+            ]
+          }
+        ],
+        "medianDrawReadbackMs": 0.800000011920929,
+        "p95DrawReadbackMs": 20.80000001192093
+      }
+    ],
+    "fallback": [
+      0,
+      0,
+      255,
+      255
+    ],
+    "gpu": [
+      {
+        "mode": "nearestMip",
+        "medianMsPerDraw": 0.04115721875,
+        "maxMsPerDraw": 0.1189566875,
+        "samples": 8,
+        "drawsPerQuery": 32
+      },
+      {
+        "mode": "trilinear",
+        "medianMsPerDraw": 0.0865299375,
+        "maxMsPerDraw": 0.16002440625,
+        "samples": 8,
+        "drawsPerQuery": 32
+      }
+    ],
+    "note": "Draw/readback is synchronous wall time. GPU timings, when available, use non-disjoint timer queries at 256x256."
+  }
+}

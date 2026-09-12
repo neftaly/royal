@@ -43,6 +43,7 @@ it.each(["unlit", "standard"])("refreshes %s atlas dimensions after resizing wit
         (location as { name?: string }).name === "virtualSettings1").at(-1)![1]);
       expect(Number(dimensions[0]) * Number(dimensions[1]) * 4)
         .toBe(root.getSnapshot().resources.virtualTextures.atlasBytes);
+      expect(dimensions[2]).toBe(1); // Trilinear selection survives atlas migration.
     };
     expectCurrentDimensions();
     const grownBytes = root.getSnapshot().resources.virtualTextures.atlasBytes;

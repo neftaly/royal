@@ -1,5 +1,10 @@
 # Textures and virtual texturing
 
+For offline PNG and native ASTC VT2 page generation, see the
+[page authoring recipe](../../research/vt-comparison/README.md#offline-page-authoring)
+and `scripts/bake-vt-pages.py`. The tool produces complete mip/page trees without
+adding runtime encoding or transcoding dependencies.
+
 ## Canonical texture semantics
 
 Royal has one authored texture orientation: upper-left source origin. Ordinary
@@ -163,8 +168,8 @@ and ETC1S/UASTC transcoding are outside this direct LDR profile.
 ## Representation choice
 
 Authored `virtualTexture(...)` always requests the authored VT path. Automatic
-VT is a root creation policy and is disabled by default. When enabled, the
-current raster policy considers base-color triangle textures whose decoded
+VT is selected automatically for eligible sources. The current raster policy
+considers base-color triangle textures whose decoded
 RGBA texel count exceeds the default 24-slot atlas payload and whose longest
 edge spans more than two 128-texel pages. This prevents the representation from
 costing more GPU storage than the ordinary image it replaces. SVG uses the same
@@ -247,9 +252,12 @@ preferred to a hard moving boundary between sharp and ancestor-resolved areas.
 The GPU page table is one mipmapped `RGBA8` texture. Its base page grid is
 padded to power-of-two dimensions so every ceil-divided logical grid fits the
 corresponding WebGL mip level; unused cells remain invalid. Sampling selects
-the desired mip with derivatives and performs one explicit-level page-table
-fetch followed by one atlas fetch. This avoids dynamic uniform-array indexing
-in every fragment. Publication uploads each retained table level after an atlas
+the desired mip with derivatives. Each mip lookup uses an explicit-level
+page-table fetch and an atlas fetch, with an optional base-table fallback during
+zoom-out. Linear mip filters blend two adjacent virtual mips; automatic demand
+requests that adjacent mip and the coarsest fallback without loading the entire
+ancestor chain. Other filters retain single-mip selection. This avoids dynamic
+uniform-array indexing. Publication uploads each retained table level after an atlas
 batch, trading a few cold driver calls and bounded padding bytes for the smaller
 Quest/Safari fragment path. All padded storage is charged to the VT GPU and
 per-frame upload budgets.
@@ -264,6 +272,11 @@ Instanced surfaces additionally test each affine-transformed local bound against
 that retained frustum before visiting its triangles. One retained bounds
 workspace avoids per-instance allocation, and exact clipped coverage remains authoritative for
 every surviving instance.
+Projected vertices use a fixed 256-entry cache reset for each model and view;
+cache collisions cannot reuse another vertex's coordinates. Constant-W
+triangles need one derivative sample, while perspective-varying triangles keep
+the bounded sampling/subdivision path. CPU demand remains linear in surviving
+triangles and does not infer depth occlusion.
 Atlas uploads admitted in one resource/frame batch normally publish through one
 complete page-table revision and one lifecycle notification after every
 successful atlas write. A failed overwrite may publish an immediate repair
@@ -355,7 +368,8 @@ a group. The root-owned SVG raster cache reserves at most
 ceiling. It evicts idle images, pins active consumers, closes rejected or
 discarded images, and releases source entries when demand or ownership ends.
 Single-page regions and larger wrapped targets retain bounded region rasterization. The cache
-does not rasterize intermediate levels or the full 16,384px logical extent.
+only rasterizes requested targets, including an adjacent mip for linear mip
+filtering, rather than every intermediate level or the full 16,384px logical extent.
 `automaticDecodedBytes` includes reserved and retained shared SVG raster bytes.
 Cached target pages are scheduled before cold reads can evict their rasters;
 they still use the existing bounded detail-preparation lane.

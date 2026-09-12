@@ -515,7 +515,7 @@ describe("surface program ownership", () => {
       "vec2 residentPage = floor(residentTexel / pageSize);",
     );
     expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).toContain(
-      "vec2 virtualTexel = uv * virtualSize;",
+      "vec2 texel = uv * virtualSettings0.xy;",
     );
     expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).not.toContain("virtualMipOffsets");
     expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).not.toContain("length(texelDx)");

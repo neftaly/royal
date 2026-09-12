@@ -1,0 +1,399 @@
+{
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+  "results": [
+    {
+      "name": "hidden",
+      "minFilter": "linear-mipmap-nearest",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 195.70000004768372,
+      "readyMs": 303.10000002384186,
+      "submissionMs": {
+        "median": 12.700000047683716,
+        "p95": 19.899999976158142,
+        "max": 28.399999976158142
+      },
+      "frameIntervalMs": {
+        "median": 16.80000001192093,
+        "p95": 25.399999976158142,
+        "max": 31.69999998807907
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 2230272,
+      "peakDecodedBytes": 0,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 22,
+        "transferredBytes": 28115,
+        "bodyBytes": 21515
+      },
+      "heapBefore": 9291022,
+      "heapLive": 12374176,
+      "pixel": [
+        124,
+        149,
+        170,
+        255
+      ],
+      "screenshot": "research/vt-comparison/hidden-profile-images/hidden-linear-mipmap-nearest.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 2230272,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "hidden",
+      "minFilter": "linear-mipmap-linear",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 129.5,
+      "readyMs": 267.2000000476837,
+      "submissionMs": {
+        "median": 12.199999988079071,
+        "p95": 19.80000001192093,
+        "max": 21.899999976158142
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 23.599999964237213,
+        "max": 25.80000001192093
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 2230272,
+      "peakDecodedBytes": 0,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 22,
+        "transferredBytes": 6600,
+        "bodyBytes": 21515
+      },
+      "heapBefore": 13267033,
+      "heapLive": 12871083,
+      "pixel": [
+        124,
+        149,
+        170,
+        255
+      ],
+      "screenshot": "research/vt-comparison/hidden-profile-images/hidden-linear-mipmap-linear.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 2230272,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      }
+    }
+  ],
+  "note": "512x512 real renderer scenes; rAF intervals include host scheduling and cold diagnostics. Local HTTP transport; no mobile claims.",
+  "profile": {
+    "cpu": [
+      {
+        "name": "addClippedTriangleDemand",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "hits": 1197
+      },
+      {
+        "name": "(program)",
+        "url": "",
+        "hits": 815
+      },
+      {
+        "name": "collectModelDemand",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "hits": 361
+      },
+      {
+        "name": "planeDistance",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "hits": 245
+      },
+      {
+        "name": "addClampedRange",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "hits": 242
+      },
+      {
+        "name": "(idle)",
+        "url": "",
+        "hits": 211
+      },
+      {
+        "name": "copyVertex",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "hits": 205
+      },
+      {
+        "name": "writeClipVertex",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "hits": 133
+      },
+      {
+        "name": "(garbage collector)",
+        "url": "",
+        "hits": 95
+      },
+      {
+        "name": "triangleClipKind",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "hits": 92
+      },
+      {
+        "name": "addWrappedRange",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "hits": 69
+      },
+      {
+        "name": "addPageWithAncestors",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "hits": 24
+      },
+      {
+        "name": "update",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/runtime.ts?t=1789208816924",
+        "hits": 16
+      },
+      {
+        "name": "runSceneBenchmarks",
+        "url": "http://127.0.0.1:5184/research/vt-comparison/scenes.ts?t=1789208854521",
+        "hits": 15
+      },
+      {
+        "name": "toDataURL",
+        "url": "",
+        "hits": 12
+      },
+      {
+        "name": "virtualTexturePageKeyParts",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/manifest.ts",
+        "hits": 10
+      },
+      {
+        "name": "addClippedTriangleDemand",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "hits": 10
+      },
+      {
+        "name": "fetch",
+        "url": "",
+        "hits": 9
+      },
+      {
+        "name": "getContext",
+        "url": "",
+        "hits": 9
+      },
+      {
+        "name": "createImageBitmap",
+        "url": "",
+        "hits": 9
+      },
+      {
+        "name": "createImageBitmap",
+        "url": "",
+        "hits": 8
+      },
+      {
+        "name": "getContext",
+        "url": "",
+        "hits": 7
+      },
+      {
+        "name": "drawViews",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+        "hits": 7
+      },
+      {
+        "name": "clear",
+        "url": "",
+        "hits": 7
+      },
+      {
+        "name": "#resizeAtlas",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/runtime.ts?t=1789208816924",
+        "hits": 5
+      }
+    ],
+    "allocations": [
+      {
+        "name": "addClippedTriangleDemand",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "bytes": 272977584
+      },
+      {
+        "name": "hypot",
+        "url": "",
+        "bytes": 88489800
+      },
+      {
+        "name": "addClippedTriangleDemand",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "bytes": 36837972
+      },
+      {
+        "name": "hypot",
+        "url": "",
+        "bytes": 11175936
+      },
+      {
+        "name": "collectModelDemand",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "bytes": 9930528
+      },
+      {
+        "name": "addWrappedRange",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "bytes": 3179672
+      },
+      {
+        "name": "denseGeometry",
+        "url": "http://127.0.0.1:5184/research/vt-comparison/scenes.ts?t=1789208854521",
+        "bytes": 1771332
+      },
+      {
+        "name": "push",
+        "url": "",
+        "bytes": 1432388
+      },
+      {
+        "name": "denseGeometry",
+        "url": "http://127.0.0.1:5184/research/vt-comparison/scenes.ts?t=1789208854521",
+        "bytes": 1168548
+      },
+      {
+        "name": "finiteFloat32Channel",
+        "url": "http://127.0.0.1:5184/packages/renderer-core/src/geometry.ts",
+        "bytes": 1015992
+      },
+      {
+        "name": "validateFiniteChannel",
+        "url": "http://127.0.0.1:5184/packages/renderer-core/src/geometry.ts",
+        "bytes": 557160
+      },
+      {
+        "name": "multiplyMat4Into",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/math/mat4.ts",
+        "bytes": 557160
+      },
+      {
+        "name": "push",
+        "url": "",
+        "bytes": 516884
+      },
+      {
+        "name": "planeDistance",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "bytes": 458832
+      },
+      {
+        "name": "writeClipVertex",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/demand.ts?t=1789208816776",
+        "bytes": 426060
+      },
+      {
+        "name": "multiplyMat4Into",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/math/mat4.ts",
+        "bytes": 294972
+      },
+      {
+        "name": "multiplyMat4Into",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/math/mat4.ts",
+        "bytes": 294972
+      },
+      {
+        "name": "frustumPlanesInto",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/surface/surface-visibility.ts",
+        "bytes": 262188
+      },
+      {
+        "name": "frustumPlanesInto",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/surface/surface-visibility.ts",
+        "bytes": 262188
+      },
+      {
+        "name": "min",
+        "url": "",
+        "bytes": 196644
+      },
+      {
+        "name": "filter",
+        "url": "",
+        "bytes": 164008
+      },
+      {
+        "name": "next",
+        "url": "",
+        "bytes": 163900
+      },
+      {
+        "name": "authoredTriangleGeometry",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/surface/canonical-geometry.ts",
+        "bytes": 163872
+      },
+      {
+        "name": "addVirtualTexturePageTablePage",
+        "url": "http://127.0.0.1:5184/packages/renderer-webgl/src/virtual-texture/residency.ts",
+        "bytes": 163872
+      },
+      {
+        "name": "add",
+        "url": "",
+        "bytes": 131920
+      }
+    ],
+    "note": "Sampling profiles add overhead; use these for attribution, not frame-rate comparisons."
+  },
+  "gc": {
+    "events": 221,
+    "totalMs": 91.93999999999998,
+    "maxMs": 4.743,
+    "heapBefore": {
+      "usedSize": 3329040,
+      "totalSize": 4153344,
+      "embedderHeapUsedSize": 448184,
+      "backingStorageSize": 2864438
+    },
+    "heapAfter": {
+      "usedSize": 5053248,
+      "totalSize": 6135808,
+      "embedderHeapUsedSize": 489496,
+      "backingStorageSize": 3394566
+    },
+    "note": "Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run."
+  }
+}
