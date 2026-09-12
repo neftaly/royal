@@ -23,6 +23,18 @@ import { canvasRootHarness } from "./support/canvas-root-harness";
 import { waitFor } from "./support/wait-for";
 
 describe("automatic canonical surface instancing", () => {
+  it("keeps required and optional embedded SVG preview recipes distinct", () => {
+    const material: CanonicalSurfaceMaterial = {
+      kind: "unlit", baseColor: [1, 1, 1, 1], requiresTextureCoordinates: true,
+      baseColorAsset: { kind: "embedded-asset", contentKey: "svg", label: "svg", mimeType: "image/svg+xml",
+        sourceEncoding: "svg", bytes: new Uint8Array([1]), svgPreview: true,
+        fallback: { kind: "embedded-asset", contentKey: "native", label: "native", mimeType: "image/ktx2",
+          sourceEncoding: "ktx2-astc", bytes: new Uint8Array([2]) } },
+    };
+    const required: CanonicalSurfaceMaterial = { ...material, baseColorAsset: { ...material.baseColorAsset!, svgPreview: "required" } };
+    expect(canonicalMaterialInstanceIdentityKey(required)).not.toBe(canonicalMaterialInstanceIdentityKey(material));
+  });
+
   it("converges independent opaque glTF roots with exact geometry and material identity", () => {
     const bytes = staticTexturedTriangleGlb(new Uint8Array([1, 2, 3, 4]));
     const leftAsset = prepareStaticGlb(bytes, "left-root");

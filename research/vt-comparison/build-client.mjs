@@ -17,7 +17,7 @@ await build({ configFile: false, publicDir: false, logLevel: 'warn',
   worker: { format: 'es', plugins: () => [codecModulePlugin(true)] },
   build: { outDir: output, emptyOutDir: true, sourcemap: false,
     rollupOptions: { input: baseline ? ['research/vt-comparison/scenes.html']
-      : ['research/vt-comparison/scenes.html', 'research/vt-comparison/index.html'] } },
+      : ['research/vt-comparison/scenes.html', 'research/vt-comparison/index.html', 'research/vt-comparison/source-combinations.html'] } },
 });
 await mkdir(`${output}/research/vt-comparison`, { recursive: true });
 await cp('research/vt-comparison/generated', `${output}/research/vt-comparison/generated`, { recursive: true });

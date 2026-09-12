@@ -130,10 +130,33 @@ experimental SVG contract, not an ecosystem-wide scheduling guarantee.
 
 The [published ASTC draft](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Vendor/EXT_texture_astc/README.md)
 requires ASTC-specific DFD metadata and a complete mip pyramid when using a
-mipmapped sampler. Optional ASTC keeps core PNG/JPEG; required ASTC may omit it.
+mipmapped sampler. Optional ASTC needs a core PNG/JPEG or a supported required
+source extension; required ASTC may omit those sources.
 An unsupported required ASTC source settles as a texture error without fetching
 the image or allocating compressed storage. These fetch savings apply to
 external images; embedded images still travel with their GLB container.
+
+Required SVG can retain optional ASTC without a redundant PNG:
+
+```json
+{
+  "extensionsUsed": ["GS_texture_svg", "EXT_texture_astc"],
+  "extensionsRequired": ["GS_texture_svg"],
+  "images": [
+    { "uri": "art.svg", "mimeType": "image/svg+xml" },
+    { "uri": "preview.ktx2", "mimeType": "image/ktx2" }
+  ],
+  "textures": [{ "extensions": {
+    "GS_texture_svg": { "source": 0 },
+    "EXT_texture_astc": { "source": 1 }
+  } }]
+}
+```
+
+This composition follows Royal's experimental SVG contract. Consumers that do
+not support required SVG must reject the asset. Required WebP or AVIF can also
+provide the non-ASTC source without core PNG/JPEG. For those raster sources,
+ASTC remains a final alternative, not an implicit low-resolution preview.
 
 ## SVG content profile
 
@@ -210,8 +233,12 @@ The raster is fitted to a bounded preview, then retained as the coarsest VT
 page while demanded SVG regions refine in the detail lane. Early external-image
 discovery and material preparation MUST use the same logical recipe. The SVG
 is read and validated lazily once per decoded source, without first decoding a
-full SVG bitmap. Required SVG and non-base-color uses keep preferred-first
-behavior; they MUST NOT silently settle on a preview that cannot refine.
+full SVG bitmap. Required SVG with ASTC may read ASTC first, but MUST read and
+validate the required SVG profile before completing the texture load. It retains
+that validated authority for VT without decoding a full SVG bitmap. Invalid
+authority fails the load and releases the preview. Unsupported or failed ASTC
+uses SVG directly. Required SVG without ASTC and non-base-color uses keep
+preferred-first behavior.
 
 The selected raster preference is supported ASTC LDR, AVIF, WebP, then core.
 ASTC selection happens before read-ahead and transport. Retained CPU alpha
@@ -281,7 +308,8 @@ semantic contract should survive that rename.
 
 Royal implements one canonical source recipe per representation use, shared
 by early discovery and material preparation. Optional base-color textures use
-a raster preview plus lazy validated SVG detail; required and emissive uses
+a raster preview plus lazy validated SVG detail. Required SVG with ASTC
+validates detail before completing the load; other required and emissive uses
 retain the direct SVG path. The ordinary and VT owners share decoded leases,
 source cancellation, samplers, and material bindings. Preview leases remain
 bounded and survive context restoration until their final claim is released.

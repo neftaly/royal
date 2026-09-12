@@ -212,9 +212,10 @@ export const createTextureAssetReader = (
     const raster = (source: StaticTextureImageSource): TextureLeafSourceRef => imagePlan.astc === undefined
       ? readImage(source) : { ...readImage(source), astc: readImage(imagePlan.astc) };
     const primary = imagePlan.fallback === undefined ? raster(imagePlan.primary) : readImage(imagePlan.primary);
-    const asset: TextureSourceRef = imagePlan.fallback === undefined
+    const asset: TextureSourceRef = imagePlan.fallback === undefined || (imagePlan.requiredSvg && !svgPreview)
       ? primary
-      : { ...primary, fallback: raster(imagePlan.fallback), ...(svgPreview ? { svgPreview: true as const } : {}) };
+      : { ...primary, fallback: raster(imagePlan.fallback), ...(svgPreview
+        ? { svgPreview: imagePlan.requiredSvg ? "required" as const : true as const } : {}) };
     prepared.set(preparedKey, asset);
     return asset;
   };

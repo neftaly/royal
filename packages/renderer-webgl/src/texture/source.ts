@@ -113,8 +113,8 @@ export type TextureLeafSourceRef = (
 /** Cold logical source recipe; a preferred SVG may recover to one ordinary leaf. */
 export type TextureSourceRef = TextureLeafSourceRef & Readonly<{
   fallback?: TextureLeafSourceRef;
-  /** Internal base-color representation recipe; required SVG never sets this. */
-  svgPreview?: true;
+  /** Required SVG validates its authority before publishing a native preview. */
+  svgPreview?: true | "required";
 }>;
 
 const identityPart = (
@@ -169,7 +169,7 @@ const validateLeafAsset = (asset: TextureLeafSourceRef): void => {
 
 const validateAsset = (asset: TextureSourceRef): void => {
   validateLeafAsset(asset);
-  if (asset.svgPreview !== undefined && (asset.svgPreview !== true || asset.fallback === undefined)) {
+  if (asset.svgPreview !== undefined && ((asset.svgPreview !== true && asset.svgPreview !== "required") || asset.fallback === undefined)) {
     throw new TypeError("Royal SVG preview requires an optional raster fallback");
   }
   if (asset.fallback === undefined) return;
@@ -205,7 +205,7 @@ export const decodedTextureKey = (asset: TextureSourceRef): string => {
   const preferred = decodedTextureLeafKey(asset);
   return JSON.stringify(asset.fallback === undefined
     ? preferred
-    : [asset.svgPreview ? "svg-with-preview" : "preferred-with-fallback", preferred, decodedTextureLeafKey(asset.fallback)]);
+    : [asset.svgPreview === "required" ? "required-svg-with-preview" : asset.svgPreview ? "svg-with-preview" : "preferred-with-fallback", preferred, decodedTextureLeafKey(asset.fallback)]);
 };
 
 /** GPU storage identity; one decoded image may be interpreted in both color spaces. */

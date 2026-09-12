@@ -11,6 +11,7 @@ import { parseKtx2Native } from "../../packages/renderer-webgl/src/texture/ktx2-
 import type { JsonObject } from "../../packages/renderer-webgl/src/gltf/gltf-values";
 import { fakeGl } from "./support/canvas-root-harness";
 import { createKtx2Fixture } from "./support/ktx2-fixture";
+import { waitFor } from "./support/wait-for";
 
 const documentFor = (svg = true): JsonObject => ({
   asset: { version: "2.0" }, scene: 0, scenes: [{ nodes: [0] }], nodes: [{ mesh: 0 }],
@@ -39,6 +40,99 @@ const setup = (supported: boolean, vk = 166) => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("glTF ASTC alternatives", () => {
+  it.each(["EXT_texture_webp", "EXT_texture_avif"])("uses required %s without a redundant core image", async (extension) => {
+    const document = documentFor(false);
+    const texture = (document.textures as JsonObject[])[0]!;
+    delete texture.source;
+    (texture.extensions as JsonObject)[extension] = { source: 0 };
+    document.extensionsRequired = [extension];
+    (document.images as JsonObject[])[0] = { uri: "full", mimeType: extension === "EXT_texture_webp" ? "image/webp" : "image/avif" };
+    for (const supported of [false, true]) {
+      const { decoder, fetch } = setup(supported);
+      const source = await decoder.decode(read(document), new AbortController().signal);
+      expect(fetch.mock.calls.map(([uri]) => uri)).toEqual([`https://example.test/${supported ? "native" : "full"}`]);
+      source.close?.();
+    }
+    (document.images as JsonObject[])[0]!.mimeType = "image/png";
+    expect(() => read(document)).toThrow("must be image/");
+    (texture.extensions as JsonObject)[extension] = { source: 99 };
+    expect(() => read(document)).toThrow();
+  });
+
+  it("retains ASTC for required SVG and rejects invalid required authority", async () => {
+    const document = documentFor();
+    delete (document.textures as JsonObject[])[0]!.source;
+    document.extensionsRequired = ["GS_texture_svg"];
+    const asset = read(document);
+    expect(asset).toMatchObject({ sourceEncoding: "svg", svgPreview: "required", fallback: { sourceEncoding: "ktx2-astc" } });
+    const early = discoverExternalStaticGltfTextures(new TextEncoder().encode(JSON.stringify(document)),
+      "test", "test", "https://example.test/model.gltf");
+    expect(decodedTextureKey(early.textureAssets[0]!)).toBe(decodedTextureKey(asset));
+    const { decoder, fetch } = setup(true);
+    vi.stubGlobal("DOMParser", class { parseFromString = () => ({ documentElement: { localName: "invalid" } }); });
+    await expect(decoder.decode(asset, new AbortController().signal)).rejects.toThrow("not valid SVG XML");
+    expect(fetch.mock.calls.map(([uri]) => uri)).toEqual(["https://example.test/native", "https://example.test/detail.svg"]);
+    const direct = createTextureAssetReader(document, new Uint8Array(), 0, [], "test", "https://example.test/model.gltf", "test")(0, "texture", "srgb", false);
+    expect(direct.fallback).toBeUndefined();
+    expect(direct.svgPreview).toBeUndefined();
+    (document.images as JsonObject[])[1]!.mimeType = "image/png";
+    expect(() => read(document)).toThrow("must be image/svg+xml");
+  });
+
+  it("validates required SVG without rasterizing it, including when ASTC is also required", async () => {
+    vi.stubGlobal("DOMParser", class {
+      parseFromString = () => ({ childNodes: [], doctype: null, documentElement: {
+        localName: "svg", attributes: [], querySelector: () => null, querySelectorAll: () => [],
+        getAttribute: (name: string) => name === "viewBox" ? "0 0 512 512" : null,
+      } });
+    });
+    for (const required of [["GS_texture_svg"], ["GS_texture_svg", "EXT_texture_astc"]]) {
+      const document = documentFor();
+      delete (document.textures as JsonObject[])[0]!.source;
+      document.extensionsRequired = required;
+      const { decoder, fetch, bitmap } = setup(true);
+      const source = await decoder.decode(read(document), new AbortController().signal);
+      expect(source).toMatchObject({ kind: "ktx2-native", svgPreview: { encoded: { parsed: { viewBox: [0, 0, 512, 512] } } } });
+      await source.svgPreview!.load();
+      expect(fetch.mock.calls.map(([uri]) => uri)).toEqual(["https://example.test/native", "https://example.test/detail.svg"]);
+      expect(bitmap).not.toHaveBeenCalled();
+      source.close?.();
+    }
+  });
+
+  it("skips unsupported ASTC and fails invalid required SVG directly", async () => {
+    const document = documentFor();
+    delete (document.textures as JsonObject[])[0]!.source;
+    document.extensionsRequired = ["GS_texture_svg"];
+    const { decoder, fetch } = setup(false);
+    vi.stubGlobal("DOMParser", class { parseFromString = () => ({ documentElement: { localName: "invalid" } }); });
+    const signal = new AbortController().signal;
+    decoder.preload(read(document), signal);
+    await expect(decoder.decode(read(document), signal)).rejects.toThrow("not valid SVG XML");
+    expect(fetch.mock.calls.map(([uri]) => uri)).toEqual(["https://example.test/detail.svg"]);
+  });
+
+  it("cancels the required SVG read while a native preview is held", async () => {
+    const document = documentFor();
+    delete (document.textures as JsonObject[])[0]!.source;
+    document.extensionsRequired = ["GS_texture_svg"];
+    const { decoder, fetch } = setup(true);
+    let detailSignal: AbortSignal | undefined;
+    const nativeFetch = fetch.getMockImplementation()!;
+    vi.stubGlobal("fetch", vi.fn((uri: string, init: RequestInit) => uri.endsWith("native") ? nativeFetch(uri)
+      : new Promise<Response>((_resolve, reject) => {
+        detailSignal = init.signal!;
+        detailSignal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+      })));
+    const controller = new AbortController();
+    const pending = decoder.decode(read(document), controller.signal);
+    const rejected = expect(pending).rejects.toThrow("abort");
+    await waitFor(() => expect(detailSignal).toBeDefined());
+    controller.abort();
+    await rejected;
+    expect(detailSignal!.aborted).toBe(true);
+  });
+
   it.each([166, 172])("requests only ASTC %i for an SVG preview, including read-ahead", async (vk) => {
     const { decoder, fetch, bitmap } = setup(true, vk);
     const asset = read(documentFor());

@@ -840,6 +840,17 @@ export const createBrowserTextureDecoder = (
           throw error;
         }),
       };
+      if (asset.svgPreview === "required") {
+        const cancel = () => lifetime.abort();
+        signal.addEventListener("abort", cancel, { once: true });
+        try {
+          if (signal.aborted) throw aborted();
+          await detail.load();
+          if (signal.aborted) throw aborted();
+        }
+        catch (error) { lifetime.abort(); preview.close?.(); throw error; }
+        finally { signal.removeEventListener("abort", cancel); }
+      }
       return {
         ...preview,
         close: () => {

@@ -15,6 +15,7 @@ export type StaticTextureImageSource = Readonly<{
 export type StaticTextureImagePlan = Readonly<{
   astc?: StaticTextureImageSource;
   fallback?: StaticTextureImageSource;
+  requiredSvg?: true;
   primary: StaticTextureImageSource;
   texture: JsonObject;
 }>;
@@ -59,9 +60,6 @@ export const createStaticTextureImagePlanner = (
       ? undefined
       : object(extensions.EXT_texture_astc, label, `${texturePath}.extensions.EXT_texture_astc`);
     const requiredAstc = astc !== undefined && required.has("EXT_texture_astc");
-    if (astc !== undefined && texture.source === undefined && !requiredAstc) {
-      fail(label, `${texturePath}.source`, "is required when EXT_texture_astc is optional");
-    }
     const svg = extensions.GS_texture_svg === undefined
       ? undefined
       : object(extensions.GS_texture_svg, label, `${texturePath}.extensions.GS_texture_svg`);
@@ -87,6 +85,11 @@ export const createStaticTextureImagePlanner = (
       label,
       texturePath,
     );
+    const requiredSvg = svg !== undefined && required.has("GS_texture_svg");
+    if (astc !== undefined && texture.source === undefined && !requiredAstc
+      && !requiredSvg && !hasRequiredAvif && !hasRequiredWebp) {
+      fail(label, `${texturePath}.source`, "or a required supported source extension is required when EXT_texture_astc is optional");
+    }
     if (svg !== undefined && colorSpace !== "srgb") {
       fail(
         label,
@@ -166,8 +169,8 @@ export const createStaticTextureImagePlanner = (
       `${texturePath}.extensions.GS_texture_svg.source`,
       "svg",
     );
-    return required.has("GS_texture_svg")
-      ? { primary, texture }
+    return requiredSvg
+      ? { primary, texture, ...(native === undefined ? {} : { fallback: native, requiredSvg: true as const }) }
       : { fallback: fallback(), primary, texture, ...alternative };
   };
 };

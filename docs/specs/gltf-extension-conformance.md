@@ -115,7 +115,8 @@ transform math is generic.
   preview first. The raster priority is supported ASTC LDR, AVIF, WebP,
   or core and fetches only that fallback. Required use may omit the fallback
   and fails rather than silently changing
-  representations. The chosen representation lowers through one texture
+  representations. Required SVG with ASTC may load native bytes first, but must
+  validate SVG authority before publishing that preview. The chosen representation lowers through one texture
   identity and lifecycle.
 - Meshopt validates the ratified buffer-view schema, lazily loads its decoder,
   requests only compressed ranges reachable from the selected scene, skips

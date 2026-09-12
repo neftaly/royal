@@ -332,7 +332,9 @@ fits within one page, so one SVG rasterization plus canvas-generated gutters
 suffices when that image is the target. Vector authority is read
 and validated once on demand; it MUST NOT require a full ordinary SVG bitmap.
 A failed preview permits direct SVG recovery; failed optional detail keeps the
-preview. Required SVG and non-base-color uses preserve direct-source semantics.
+preview. Required SVG with ASTC validates and retains the SVG authority before publishing
+the native preview. Other required SVG and non-base-color uses preserve
+direct-source semantics.
 
 When automatic VT has a drawable ordinary preview and parallel shader
 compilation is available, its non-transmission detail variant may link while
