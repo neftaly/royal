@@ -351,9 +351,9 @@ const lazyBrowserTextureDecoder = (
   return {
     decode: async (asset, signal, maxStorageBytes, retainAlpha) =>
       (await load()).decode(asset, signal, maxStorageBytes, retainAlpha),
-    preload: (asset, signal) => {
+    preload: (asset, signal, retainAlpha) => {
       void load().then((value) => {
-        if (!signal.aborted) value.preload(asset, signal);
+        if (!signal.aborted) value.preload(asset, signal, retainAlpha);
       }).catch(() => undefined);
     },
     readAheadSnapshot: () => loadedDecoder?.readAheadSnapshot(),

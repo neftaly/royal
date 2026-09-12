@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "fixtures": {
+    "environment": {
+      "initial": 143476,
+      "lazy": 128622,
+      "total": 272098,
+      "worker": 23413
+    },
+    "gltf": {
+      "initial": 144381,
+      "lazy": 128636,
+      "total": 273017,
+      "worker": 23413
+    },
+    "react": {
+      "initial": 59288,
+      "lazy": 0,
+      "total": 59288,
+      "worker": 0
+    },
+    "royal": {
+      "initial": 143389,
+      "lazy": 128623,
+      "total": 272012,
+      "worker": 23413
+    },
+    "xr": {
+      "initial": 3895,
+      "lazy": 2543,
+      "total": 6438,
+      "worker": 0
+    }
+  },
+  "measurements": {
+    "gltfAuthoringDeltaGzipBytes": 992,
+    "royalIncrementalGzipBytes": 84101,
+    "royalOnlyGraphGzipBytes": 212724
+  },
+  "phaseSemantics": "Initial and lazy partition emitted JavaScript; worker is a subset of lazy; total counts each fixture file once."
+}

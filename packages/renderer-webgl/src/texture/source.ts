@@ -52,6 +52,7 @@ export type DecodedKtx2Etc2TextureSource = Readonly<{
   alpha?: DecodedTextureAlpha;
   close?: () => void;
   colorSpace: TextureColorSpace;
+  svgPreview?: SvgPreviewSource;
   fallbackReason?: string;
   height: number;
   kind: "ktx2-etc2";
@@ -77,13 +78,13 @@ export type DecodedTextureLease = Readonly<{
   source: DecodedTextureSource;
 }>;
 
-export type TextureSourceEncoding = "ktx2-etc2" | "ktx2-native" | "svg";
+export type TextureSourceEncoding = "ktx2-etc2" | "ktx2-native" | "ktx2-astc" | "svg";
 
 export type GltfTextureAssetRef = TextureAssetRef & Readonly<{
   /** @internal Routes this source through the root's glTF resource reader. */
   gltfResource: true;
   /** @internal Exact format selected by a glTF texture-source extension. */
-  mimeType?: "image/avif" | "image/webp";
+  mimeType?: "image/avif" | "image/webp" | "image/ktx2";
   sourceEncoding?: TextureSourceEncoding;
 }>;
 
@@ -98,13 +99,16 @@ export type EmbeddedTextureAssetRef = Readonly<{
   sourceEncoding?: TextureSourceEncoding;
 }>;
 
-export type TextureLeafSourceRef =
+export type TextureLeafSourceRef = (
   | (TextureAssetRef & Readonly<{
     gltfResource?: true;
-    mimeType?: "image/avif" | "image/webp";
+    mimeType?: "image/avif" | "image/webp" | "image/ktx2";
     sourceEncoding?: TextureSourceEncoding;
   }>)
-  | EmbeddedTextureAssetRef;
+  | EmbeddedTextureAssetRef) & Readonly<{
+  /** Optional hardware-native alternative; selected before any transport. */
+  astc?: TextureLeafSourceRef;
+}>;
 
 /** Cold logical source recipe; a preferred SVG may recover to one ordinary leaf. */
 export type TextureSourceRef = TextureLeafSourceRef & Readonly<{
@@ -136,9 +140,17 @@ const validateLeafAsset = (asset: TextureLeafSourceRef): void => {
     asset.sourceEncoding !== undefined
     && asset.sourceEncoding !== "ktx2-etc2"
     && asset.sourceEncoding !== "ktx2-native"
+    && asset.sourceEncoding !== "ktx2-astc"
     && asset.sourceEncoding !== "svg"
   ) {
-    throw new TypeError("Royal texture sourceEncoding must be ktx2-etc2 or svg or ktx2-native when present");
+    throw new TypeError("Royal texture sourceEncoding must be ktx2-etc2, ktx2-native, ktx2-astc or svg when present");
+  }
+  if (asset.astc !== undefined) {
+    if (asset.astc.astc !== undefined || asset.astc.sourceEncoding !== "ktx2-astc"
+      || (asset.astc.colorSpace ?? "srgb") !== (asset.colorSpace ?? "srgb")) {
+      throw new TypeError("Royal ASTC alternative must be a same-color-space ASTC leaf");
+    }
+    validateLeafAsset(asset.astc);
   }
   if (asset.kind === "embedded-asset") {
     if (asset.contentKey.length === 0) {
@@ -166,7 +178,7 @@ const validateAsset = (asset: TextureSourceRef): void => {
   }
   validateLeafAsset(asset.fallback);
   if (asset.fallback.sourceEncoding === "svg") {
-    throw new TypeError("Royal texture fallback must be an ordinary raster or ETC2 source");
+    throw new TypeError("Royal texture fallback must be a raster or native compressed source");
   }
   if ((asset.fallback.colorSpace ?? "srgb") !== (asset.colorSpace ?? "srgb")) {
     throw new TypeError("Royal texture fallback must share the preferred source colorSpace");
@@ -175,17 +187,16 @@ const validateAsset = (asset: TextureSourceRef): void => {
 
 const decodedTextureLeafKey = (asset: TextureLeafSourceRef): unknown => {
   validateLeafAsset(asset);
-  if (asset.kind === "embedded-asset") {
-    return ["content", asset.contentKey, asset.sourceEncoding ?? asset.mimeType];
-  }
-  const content = asset.contentKey === undefined
-    ? ["src", asset.src] as const
-    : ["content", ...identityPart(asset.contentKey, "contentKey")] as const;
-  return [
-    content,
-    identityPart(asset.version, "version"),
-    asset.sourceEncoding ?? "auto",
-  ];
+  const leaf = asset.kind === "embedded-asset"
+    ? ["content", asset.contentKey, asset.sourceEncoding ?? asset.mimeType]
+    : [
+      asset.contentKey === undefined
+        ? ["src", asset.src]
+        : ["content", ...identityPart(asset.contentKey, "contentKey")],
+      identityPart(asset.version, "version"),
+      asset.sourceEncoding ?? "auto",
+    ];
+  return asset.astc === undefined ? leaf : ["astc-alternative", leaf, decodedTextureLeafKey(asset.astc)];
 };
 
 /** Identity of logical decoded pixels; preferred/fallback alternates form one recipe. */

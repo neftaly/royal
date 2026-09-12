@@ -14,7 +14,7 @@ const events = [];
 const observer = new PerformanceObserver(list => events.push(...list.getEntries()));
 observer.observe({ entryTypes: ['gc'] });
 const results = [];
-for (const mode of ['etc2', 'astc', 'unsupported', 'parse']) {
+for (const mode of ['etc2', 'astc', 'astc-preview', 'unsupported', 'parse']) {
   const workload = createWorkload(mode);
   for (let i = 0; i < 100000; i++) workload.run();
   global.gc();
@@ -37,5 +37,5 @@ for (const mode of ['etc2', 'astc', 'unsupported', 'parse']) {
 }
 observer.disconnect();
 const report = { node: process.version, results, note: 'After 100k warm-up calls. No-op driver isolates JS cost; GC and heap deltas are noisy, not proof of zero allocation. Parse allocates metadata/views, never a payload buffer.' };
-writeFileSync('research/native-texture-formats/gc-results.json', JSON.stringify(report,null,2)+'\n');
+writeFileSync(process.argv[2] ?? 'research/native-texture-formats/gc-results.json', JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify(report,null,2));

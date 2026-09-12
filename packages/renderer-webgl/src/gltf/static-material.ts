@@ -152,7 +152,7 @@ export const createTextureAssetReader = (
       const mimeError = sourceEncoding === "svg"
         ? "must be image/svg+xml for GS_texture_svg"
         : `must be ${expectedMimeType} for ${
-          expectedMimeType === "image/avif" ? "EXT_texture_avif" : "EXT_texture_webp"
+          expectedMimeType === "image/ktx2" ? "EXT_texture_astc" : expectedMimeType === "image/avif" ? "EXT_texture_avif" : "EXT_texture_webp"
         }`;
       if (image.bufferView === undefined) {
         const uri = image.uri;
@@ -209,10 +209,12 @@ export const createTextureAssetReader = (
         ...(sourceEncoding === undefined ? {} : { sourceEncoding }),
       };
     };
-    const primary = readImage(imagePlan.primary);
+    const raster = (source: StaticTextureImageSource): TextureLeafSourceRef => imagePlan.astc === undefined
+      ? readImage(source) : { ...readImage(source), astc: readImage(imagePlan.astc) };
+    const primary = imagePlan.fallback === undefined ? raster(imagePlan.primary) : readImage(imagePlan.primary);
     const asset: TextureSourceRef = imagePlan.fallback === undefined
       ? primary
-      : { ...primary, fallback: readImage(imagePlan.fallback), ...(svgPreview ? { svgPreview: true as const } : {}) };
+      : { ...primary, fallback: raster(imagePlan.fallback), ...(svgPreview ? { svgPreview: true as const } : {}) };
     prepared.set(preparedKey, asset);
     return asset;
   };

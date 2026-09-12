@@ -179,7 +179,7 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(() => decodedTextureKey({
       ...ordinary,
       sourceEncoding: "basis" as "ktx2-etc2",
-    })).toThrow("sourceEncoding must be ktx2-etc2 or svg");
+    })).toThrow("sourceEncoding must be ktx2-etc2, ktx2-native, ktx2-astc or svg");
   });
 
   it("keeps a preferred SVG and fallback in one logical decoded identity", async () => {

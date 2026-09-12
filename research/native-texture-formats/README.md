@@ -106,3 +106,59 @@ not duplicated). The renderer still has one compressed upload branch, one
 native format table, and no new dependency.
 The [review record](review.md) covers both adversarial passes and the regression
 checks added for their findings.
+
+## SVG preview follow-up
+
+The published [EXT_texture_astc draft](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Vendor/EXT_texture_astc/README.md)
+provides native ASTC alternatives to core PNG/JPEG. The earlier research missed
+this draft. Royal now implements its unsupercompressed LDR 6x6/8x8 subset and
+composes it with experimental `GS_texture_svg`: ASTC first when supported,
+portable raster otherwise, vector pages when detail is needed. No new codec.
+
+`svg-preview-browser-results.json` measures Chromium 152 / SwiftShader using
+in-memory encoded bytes, 40 trials per case with 10 discarded warmups. Native
+128px ASTC 6x6 and 8x8 preview preparation both measured 1.0 ms median; the
+1024px PNG fitted to the preview budget measured 8.4–8.6 ms. ASTC trials made
+40 ASTC reads, zero PNG reads and zero SVG reads. Simulated unsupported trials
+made only 40 PNG reads. Retained upload payloads were 10,512 / 5,504 bytes for
+ASTC versus 49,284 bytes for the fitted PNG (excluding generated GPU mips).
+Sub-resolution upload timings of zero mean below the timer resolution, not
+zero work. These results exclude network and GPU draw completion and do not
+supersede the software-GPU draw caveat above.
+
+`svg-preview-gc-results.json` adds native previews to the existing no-op-driver
+GC workload. One million cached preview binds measured 43.0 ns/call versus
+42.4 ns for plain ASTC, with zero observed GC, no ArrayBuffer growth, one
+capability query and one upload. This tests ordinary cached GPU ownership, not
+whole-frame allocation. Source planning/identity and decoding are cold work
+and still allocate metadata; the preview field introduces no per-bind work.
+
+Reproduce with the dev server and browser:
+`(await import('/research/native-texture-formats/svg-preview-benchmark.ts')).runSvgPreviewBenchmark()`.
+For GC: `node --expose-gc research/native-texture-formats/gc-benchmark.mjs research/native-texture-formats/svg-preview-gc-results.json`.
+
+Two adversarial passes were performed by the implementing agent. The first
+covered selection before fetch, retained-alpha selection, embedded transfer,
+content identity, MIME/metadata and context loss; it also found and removed
+unneeded VT allocation while native preview demand stays coarse. The second
+covered native-to-vector publication, cancellation, failure retention, source
+lifetimes and hot-path churn. It found the existing raster-error coarse-page
+recovery would retry an unavailable vector source for native previews; native
+failures now keep ordinary coverage without entering that raster-only recovery.
+Tests exercise ordinary ASTC plus deferred vector
+coverage, including the transition to an RGBA page atlas without decompression.
+
+Final follow-up source growth is 67 net production lines, with no dependencies.
+The compact `svg-preview-bundle-results.json` records 143,389 bytes initial,
+128,623 lazy, 272,012 total and 23,413 worker gzip (worker is included in lazy).
+Against the native-format commit this adds 111 initial and 839 lazy bytes.
+The feature has an explicit 1,024-byte lazy/total and 384-byte worker allowance;
+the initial bundle remains inside its existing cap. The renderer package is
+742,617 bytes with an explicit 2,048-byte package/declaration allowance.
+
+Validation: 1,206 tests in 148 files plus the glTF manifest check; typecheck,
+renderer lint, full build, package imports, packed-consumer checks and size gates. Two full-suite
+failures during follow-up were investigated: an assertion still expected the
+old source-encoding diagnostic, and an existing VT timing test exceeded its
+short deadline during a concurrent build. The assertion was updated and the
+full suite passed with the build finished; no timeout was widened.

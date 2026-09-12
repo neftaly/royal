@@ -633,8 +633,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       const svg = automaticVirtualTextureIsSvg(decoded);
       const preview = automaticVirtualTextureHasPreview(decoded);
       if (
-        decoded.kind !== undefined
-        || (!svg && !preview && !automaticVirtualTextureEligible(decoded))
+        !svg && !preview && !automaticVirtualTextureEligible(decoded)
       ) {
         this.#automaticIneligible += 1;
         continue;
@@ -917,6 +916,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       }
       return false;
     }
+    const preview = resource.lease?.source;
+    if (preview?.kind !== undefined && preview.svgPreview !== undefined
+      && resource.workspace.coarsestTarget && preview.svgPreview.encoded === undefined) return false;
     let gpuCreated = false;
     if (resource.gpu === undefined) {
       const atlas = this.#atlases.get(virtualTextureAtlasKey(resource.asset, manifest));
@@ -1438,6 +1440,10 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     const preview = resource.lease?.source;
     const svgPreview = preview !== undefined && automaticVirtualTextureHasPreview(preview)
       ? preview.svgPreview : undefined;
+    // Native preview stays bound until screen demand needs vector detail.
+    if (preview?.kind !== undefined && svgPreview !== undefined
+      && (svgPreview.error !== undefined || resource.previewSourceFailed
+        || (resource.workspace.coarsestTarget && svgPreview.encoded === undefined))) return false;
     const manifest = resource.manifest!;
     const byteLength = virtualTexturePageBytes(manifest);
     for (let index = 0; index < resource.workspace.count; index += 1) {

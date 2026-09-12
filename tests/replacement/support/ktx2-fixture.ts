@@ -19,7 +19,7 @@ export const createKtx2Fixture = (
     : vkFormat === 151 || vkFormat === 152 ? 161 : 162;
   const indexEnd = 80 + levelCount * 24;
   const dfdByteOffset = indexEnd;
-  const dfdByteLength = 28;
+  const dfdByteLength = model === 162 ? 44 : 28;
   const metadataByteLength = metadata.reduce(
     (total, [key, value]) => total + 4 + align4(key.length + 1 + value.length + 1),
     0,
@@ -49,7 +49,12 @@ export const createKtx2Fixture = (
   view.setUint32(60, metadataByteLength, true);
   view.setUint32(dfdByteOffset, dfdByteLength, true);
   view.setUint16(dfdByteOffset + 8, 2, true);
-  view.setUint16(dfdByteOffset + 10, 24, true);
+  view.setUint16(dfdByteOffset + 10, dfdByteLength - 4, true);
+  bytes[dfdByteOffset + 13] = vkFormat % 2 === 0 ? 1 : 0;
+  if (model === 162) {
+    bytes[dfdByteOffset + 30] = 127;
+    view.setUint32(dfdByteOffset + 40, 0xffffffff, true);
+  }
   bytes[dfdByteOffset + 14] = vkFormat % 2 === 0 ? 2 : 1;
   bytes[dfdByteOffset + 12] = model;
   bytes.set([blockSize - 1, blockSize - 1, 0, 0, blockBytes], dfdByteOffset + 16);

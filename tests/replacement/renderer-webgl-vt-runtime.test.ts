@@ -313,6 +313,112 @@ describe("browser virtual texture runtime", () => {
     expect(close).toHaveBeenCalledTimes(9);
   });
 
+  it.each([false, true])("keeps native preview separate from deferred vector coverage (failure: %s)", async (failure) => {
+    const context = {
+      clearRect: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(), save: vi.fn(), restore: vi.fn(),
+      scale: vi.fn(), translate: vi.fn(),
+    };
+    vi.stubGlobal("document", {
+      baseURI: "https://example.test/",
+      createElement: () => ({ getContext: () => context, height: 0, width: 0 }),
+    });
+    const sizes: number[] = [];
+    const attrs = new Map<string, string>();
+    vi.stubGlobal("XMLSerializer", class { serializeToString = (): string => "<svg/>"; });
+    const close = vi.fn();
+    const decode = vi.fn(async () => {
+      const width = Number(attrs.get("width"));
+      sizes.push(width);
+      return { width, height: Number(attrs.get("height")), close };
+    });
+    vi.stubGlobal("createImageBitmap", decode);
+    const encoded: EncodedSvgTextureSource = {
+      blob: new Blob(["<svg/>"]), byteLength: 6,
+      parsed: { document: {
+        documentElement: { getAttribute: () => null, cloneNode: () => ({ setAttribute: vi.fn() }) },
+        createElementNS: () => ({ appendChild: vi.fn(), setAttribute: (key: string, value: string) => attrs.set(key, value) }),
+      } as unknown as XMLDocument, viewBox: [0, 0, 64, 64] },
+    };
+    let resolve!: (value: EncodedSvgTextureSource) => void;
+    let reject!: (error: Error) => void;
+    const detail: { error?: string; encoded?: EncodedSvgTextureSource; load: () => Promise<EncodedSvgTextureSource> } = {
+      load: vi.fn(() => detail.encoded === undefined
+        ? new Promise<EncodedSvgTextureSource>((done, fail) => { resolve = done; reject = fail; })
+        : Promise.resolve(detail.encoded)),
+    };
+    const decoded = { kind: "ktx2-native" as const, format: "astc-8x8" as const, colorSpace: "srgb" as const,
+      width: 64, height: 64, levels: [{ width: 64, height: 64, blocks: new Uint8Array(1024) }], svgPreview: detail };
+    const asset = imageTexture("https://example.test/preview.png");
+    const prepared = prepareCanonicalSurfaceScene(scene({
+      camera: perspectiveCamera({}),
+      nodes: [mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) })],
+    }), undefined, undefined, () => decoded);
+    const gl = fakeGl();
+    const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn(), undefined, undefined, {
+      acquireDecoded: () => ({ source: decoded, release: vi.fn() }),
+      decoded: () => decoded, onChanged: vi.fn(),
+    });
+    const matrix = identityMat4();
+    const view = { view: matrix, viewProjection: matrix, viewport: { width: 1024, height: 1024, x: 0, y: 0 } };
+    try {
+      runtime.setScene(prepared);
+      view.viewport.width = 32;
+      view.viewport.height = 32;
+      for (let frame = 0; frame < 10; frame++) runtime.update([view]);
+      expect(detail.load).not.toHaveBeenCalled();
+      expect(gl.createTexture).not.toHaveBeenCalled();
+      expect(runtime.runtimeSnapshot().residentPages).toBe(0);
+      expect(runtime.automaticBinding(asset)).toBeUndefined();
+      view.viewport.width = 1024;
+      view.viewport.height = 1024;
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(detail.load).toHaveBeenCalledOnce();
+      });
+      expect(runtime.automaticBinding(asset)).toBeUndefined();
+      expect(decode).not.toHaveBeenCalled();
+      expect(runtime.runtimeSnapshot().residentPages).toBe(0);
+      if (failure) {
+        detail.error = "SVG unavailable";
+        reject(new Error(detail.error));
+        await waitFor(() => {
+          runtime.update([view]);
+          expect(runtime.runtimeSnapshot().pendingPages).toBe(0);
+        });
+
+        for (let frame = 0; frame < 100; frame++) runtime.update([view]);
+        expect(detail.load).toHaveBeenCalledOnce();
+        expect(runtime.automaticBinding(asset)).toBeUndefined();
+        expect(runtime.runtimeSnapshot().residentPages).toBe(0);
+        expect(decode).not.toHaveBeenCalled();
+        return;
+      }
+      detail.encoded = encoded;
+      resolve(encoded);
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 65, pendingPages: 0 });
+      });
+      expect(sizes).toHaveLength(9);
+      expect(sizes.every(size => size <= 1028)).toBe(true);
+      expect(runtime.runtimeSnapshot().pageRequests).toBe(65);
+      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(64 * 64 * 4 + 4 * 1024 * 1024);
+      view.viewport.width = 64;
+      view.viewport.height = 64;
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(sizes).toHaveLength(9);
+        expect(runtime.runtimeSnapshot().pendingPages).toBe(0);
+      });
+      expect(runtime.automaticBinding(asset)).toBeDefined();
+      expect(runtime.runtimeSnapshot().pageRequests).toBe(65);
+      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBe(64 * 64 * 4);
+    } finally {
+      runtime.dispose();
+    }
+    expect(close).toHaveBeenCalledTimes(9);
+  });
+
   it.each([false, true])("restores coarse preview coverage after vector failure (already failed: %s)", async (alreadyFailed) => {
     const context = {
       clearRect: vi.fn(), drawImage: vi.fn(), save: vi.fn(), restore: vi.fn(),

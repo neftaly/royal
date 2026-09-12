@@ -121,6 +121,7 @@ const discoverExternalStaticGltfDocumentTextures = (
     const sources = plan.fallback === undefined
       ? [plan.primary]
       : [plan.primary, plan.fallback];
+    if (plan.astc !== undefined) sources.push(plan.astc);
     let external = true;
     for (const source of sources) {
       const imagePath = `images[${source.imageIndex}]`;

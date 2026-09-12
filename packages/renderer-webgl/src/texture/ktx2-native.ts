@@ -84,7 +84,7 @@ const levelDimension = (base: number, level: number): number =>
   Math.max(1, Math.floor(base / 2 ** level));
 
 /** Parses Royal's offline-authored, 2D native compressed KTX2 subset without transcoding or copies. */
-export const parseKtx2Native = (bytes: Uint8Array): Ktx2NativeTexture => {
+export const parseKtx2Native = (bytes: Uint8Array, gltfAstc = false): Ktx2NativeTexture => {
   if (bytes.byteLength < HEADER_BYTES + LEVEL_INDEX_BYTES) {
     throw new TypeError("Royal KTX2 texture is truncated");
   }
@@ -160,6 +160,11 @@ export const parseKtx2Native = (bytes: Uint8Array): Ktx2NativeTexture => {
   if (safeUint64(view, 64, "supercompression data offset") !== 0
     || safeUint64(view, 72, "supercompression data length") !== 0) {
     throw new TypeError("Royal unsupercompressed KTX2 textures must not contain global data");
+  }
+  if (gltfAstc && (!format.startsWith("astc-") || descriptorBlockSize !== 40
+    || bytes[dfdByteOffset + 13] !== (srgb ? 1 : 0)
+    || bytes[dfdByteOffset + 31] !== 0)) {
+    throw new TypeError("EXT_texture_astc requires ASTC LDR with matching primaries and ASTC_DATA channel");
   }
   const kvdByteOffset = view.getUint32(56, true);
   const kvdByteLength = view.getUint32(60, true);

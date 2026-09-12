@@ -5,6 +5,8 @@ import type { TextureSamplerWrap } from "@royal/renderer-core";
 import type { CanonicalTextureSampler } from "../texture/sampler";
 import type {
   DecodedImageTextureSource,
+  DecodedTextureSource,
+  SvgPreviewSource,
   EncodedSvgTextureSource,
 } from "../texture/source";
 import type { ParsedSvgTextureSource } from "../texture/svg-source";
@@ -337,7 +339,7 @@ const automaticSvgManifest = (
 
 /** Small preview coverage and vector detail share one logical page source. */
 export const createAutomaticSvgPreviewPageSource = (
-  preview: DecodedImageTextureSource & Readonly<{ svgPreview: NonNullable<DecodedImageTextureSource["svgPreview"]> }>,
+  preview: DecodedTextureSource & Readonly<{ svgPreview: SvgPreviewSource }>,
   sampler: CanonicalTextureSampler,
   colorSpace: "linear" | "srgb",
   rasterCache = new SvgRasterCache(),
@@ -353,11 +355,11 @@ export const createAutomaticSvgPreviewPageSource = (
       demand = pages;
       vector?.setDemand?.(pages);
     },
-    readPreview: async (page, signal) => {
+    ...(preview.kind !== undefined ? {} : { readPreview: async (page: VirtualTexturePageId, signal: AbortSignal) => {
       if (closed || signal.aborted) throw new DOMException("SVG preview was aborted", "AbortError");
       return renderAutomaticPage(manifest, sampler, preview.source as CanvasImageSource,
         preview.width / manifest.width, preview.height / manifest.height, page, signal);
-    },
+    } }),
     close: () => {
       closed = true;
       vector?.close?.();
@@ -367,7 +369,7 @@ export const createAutomaticSvgPreviewPageSource = (
       if (closed || signal.aborted) throw new DOMException("SVG preview was aborted", "AbortError");
       // The portable image is a loading/error fallback, not authoritative
       // coarse detail. Small on-screen pieces may never request a finer mip.
-      if (page.mip === manifest.mipCount - 1 && preview.svgPreview.error !== undefined) {
+      if (preview.kind === undefined && page.mip === manifest.mipCount - 1 && preview.svgPreview.error !== undefined) {
         return renderAutomaticPage(
           manifest, sampler, preview.source as CanvasImageSource,
           preview.width / manifest.width, preview.height / manifest.height,

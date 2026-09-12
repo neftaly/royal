@@ -4,7 +4,7 @@ import { createKtx2Fixture } from "../../tests/replacement/support/ktx2-fixture"
 import type { CanonicalTextureBinding } from "../../packages/renderer-webgl/src/surface/canonical-material";
 
 /** Minimal driver isolates JS allocations; these are not GPU timings. */
-export const createWorkload = (mode: "etc2" | "astc" | "unsupported" | "parse") => {
+export const createWorkload = (mode: "etc2" | "astc" | "astc-preview" | "unsupported" | "parse") => {
   let extensionCalls = 0, uploads = 0;
   const extension = { getSupportedProfiles: () => ["ldr"] };
   const noop = () => undefined;
@@ -24,6 +24,9 @@ export const createWorkload = (mode: "etc2" | "astc" | "unsupported" | "parse") 
     decoded: texture.format === "etc2-rgba" ? { ...texture, kind: "ktx2-etc2" }
       : { ...texture, format: texture.format, kind: "ktx2-native" },
   };
+  if (mode === "astc-preview") Object.assign(binding.decoded!, {
+    svgPreview: { load: () => { throw new Error("Cached preview must not load SVG"); } },
+  });
   const expected = owner.retain(binding);
   return {
     run: mode === "parse" ? () => { parseKtx2Native(payload); }

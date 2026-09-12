@@ -24,6 +24,7 @@ const materialOnly: PlacementProfile = (path) => material.test(path);
 const REQUIRED_EXTENSION_PLACEMENTS: Readonly<Record<string, PlacementProfile>> = {
   EXT_mesh_gpu_instancing: (path) => node.test(path),
   EXT_meshopt_compression: (path) => meshoptStorage.test(path),
+  EXT_texture_astc: (path) => texture.test(path),
   EXT_texture_avif: (path) => texture.test(path),
   EXT_texture_webp: (path) => texture.test(path),
   GS_texture_svg: (path) => texture.test(path),
@@ -126,7 +127,7 @@ export const validateRequiredExtensionProfile = (
         }
         const profile = REQUIRED_EXTENSION_PLACEMENTS[extension];
         if (
-          extension === "EXT_texture_avif"
+          (extension === "EXT_texture_avif" || extension === "EXT_texture_astc")
           && profile !== undefined
           && !profile(path)
         ) {

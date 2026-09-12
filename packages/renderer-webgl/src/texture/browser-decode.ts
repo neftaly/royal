@@ -1,4 +1,4 @@
-import { fitKtx2Etc2Storage } from "./etc2-storage";
+import { completeKtx2MipLevelCount, fitKtx2Etc2Storage } from "./etc2-storage";
 import { nativeTextureAvailable, validateNativeBaseDimensions } from "./native-storage";
 import { selectAsyncPreparationLane, type AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 import type {
@@ -30,7 +30,7 @@ export type BrowserTextureDecoder = Readonly<{
     maxStorageBytes?: number,
     retainAlpha?: boolean,
   ): Promise<DecodedTextureSource>;
-  preload(asset: TextureSourceRef, signal: AbortSignal): void;
+  preload(asset: TextureSourceRef, signal: AbortSignal, retainAlpha?: boolean): void;
   readAheadSnapshot(): StagedByteReadSnapshot;
 }>;
 
@@ -267,7 +267,7 @@ const isSvgUri = (uri: string): boolean => /\.svg(?:[?#]|$)/i.test(uri);
 
 const textureBlobType = (asset: TextureLeafSourceRef & Readonly<{ src: string }>): string => {
   if (asset.mimeType !== undefined) return asset.mimeType;
-  if (asset.sourceEncoding === "ktx2-etc2" || asset.sourceEncoding === "ktx2-native" || isKtx2Uri(asset.src)) return "image/ktx2";
+  if (asset.sourceEncoding?.startsWith("ktx2-") === true || isKtx2Uri(asset.src)) return "image/ktx2";
   if (asset.sourceEncoding === "svg" || isSvgUri(asset.src)) return "image/svg+xml";
   if (/\.avif(?:[?#]|$)/i.test(asset.src)) return "image/avif";
   if (/\.jpe?g(?:[?#]|$)/i.test(asset.src)) return "image/jpeg";
@@ -334,7 +334,7 @@ const readTextureBlob = async (
     ? {
       blob: new Blob([asset.bytes as Uint8Array<ArrayBuffer>], { type: asset.mimeType }),
       byteLength: asset.bytes.byteLength,
-      ktx2: asset.sourceEncoding === "ktx2-etc2" || asset.sourceEncoding === "ktx2-native" || isKtx2MimeType(asset.mimeType),
+      ktx2: asset.sourceEncoding?.startsWith("ktx2-") === true || isKtx2MimeType(asset.mimeType),
       svg: asset.sourceEncoding === "svg" || isSvgMimeType(asset.mimeType),
     }
     : await (async () => {
@@ -343,7 +343,7 @@ const readTextureBlob = async (
         return {
           blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: textureBlobType(asset) }),
           byteLength: bytes.byteLength,
-          ktx2: asset.sourceEncoding === "ktx2-etc2" || asset.sourceEncoding === "ktx2-native" || isKtx2Uri(asset.src),
+          ktx2: asset.sourceEncoding?.startsWith("ktx2-") === true || isKtx2Uri(asset.src),
           svg: asset.sourceEncoding === "svg" || isSvgUri(asset.src),
         };
       }
@@ -355,12 +355,29 @@ const readTextureBlob = async (
       return {
         blob,
         byteLength: blob.size,
-        ktx2: (asset.sourceEncoding === "ktx2-etc2" || asset.sourceEncoding === "ktx2-native")
+        ktx2: (asset.sourceEncoding?.startsWith("ktx2-") === true)
           || isKtx2Uri(asset.src)
           || isKtx2MimeType(blob.type),
         svg: asset.sourceEncoding === "svg" || isSvgUri(asset.src) || isSvgMimeType(blob.type),
       };
     })();
+
+const waitForTextureContext = async (gl: WebGL2RenderingContext, signal: AbortSignal): Promise<void> => {
+  while (gl.isContextLost()) {
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = (): void => {
+        gl.canvas.removeEventListener("webglcontextrestored", restored);
+        signal.removeEventListener("abort", cancel);
+      };
+      const restored = (): void => { cleanup(); resolve(); };
+      const cancel = (): void => { cleanup(); reject(aborted()); };
+      gl.canvas.addEventListener("webglcontextrestored", restored, { once: true });
+      signal.addEventListener("abort", cancel, { once: true });
+      if (signal.aborted) cancel();
+      else if (!gl.isContextLost()) restored();
+    });
+  }
+};
 
 const decodeKtx2Texture = async (
   asset: TextureLeafSourceRef,
@@ -373,7 +390,7 @@ const decodeKtx2Texture = async (
 ): Promise<DecodedTextureSource> => {
   if (signal.aborted) throw aborted();
   const { parseKtx2Native } = await import("./ktx2-native");
-  const sourceTexture = parseKtx2Native(new Uint8Array(await blob.arrayBuffer()));
+  const sourceTexture = parseKtx2Native(new Uint8Array(await blob.arrayBuffer()), asset.sourceEncoding === "ktx2-astc");
   if (signal.aborted) throw aborted();
   if (sourceTexture.format === "etc2-rgba" && !etc2Available) {
     throw new Error("Royal ETC2 KTX2 textures require WEBGL_compressed_texture_etc");
@@ -386,22 +403,15 @@ const decodeKtx2Texture = async (
         if (nativeTextureAvailable(gl, sourceTexture.format, sourceTexture.colorSpace)) break;
         if (!gl.isContextLost()) throw new Error(`Royal ${sourceTexture.format} texture is unsupported by this device`);
       }
-      await new Promise<void>((resolve, reject) => {
-        const cleanup = (): void => {
-          gl.canvas.removeEventListener("webglcontextrestored", restored);
-          signal.removeEventListener("abort", cancel);
-        };
-        const restored = (): void => { cleanup(); resolve(); };
-        const cancel = (): void => { cleanup(); reject(aborted()); };
-        gl.canvas.addEventListener("webglcontextrestored", restored, { once: true });
-        signal.addEventListener("abort", cancel, { once: true });
-        if (signal.aborted) cancel();
-        else if (!gl.isContextLost()) restored();
-      });
+      await waitForTextureContext(gl, signal);
     }
   }
   if (asset.sourceEncoding === "ktx2-etc2" && sourceTexture.format !== "etc2-rgba") {
     throw new TypeError("Royal KTX2 format does not match sourceEncoding");
+  }
+  if (asset.sourceEncoding === "ktx2-astc" && alphaMipmapsRequired(asset)
+    && sourceTexture.levels.length !== completeKtx2MipLevelCount(sourceTexture.width, sourceTexture.height)) {
+    throw new TypeError("EXT_texture_astc requires a full mip pyramid for mipmapped samplers");
   }
   const colorSpace = asset.colorSpace ?? "srgb";
   if (sourceTexture.colorSpace !== colorSpace) {
@@ -713,6 +723,9 @@ export const createBrowserTextureDecoder = (
     const prefetched = readAhead.take(asset);
     return prefetched === undefined ? transport(asset, signal, detail) : await prefetched;
   };
+  const selectRaster = (asset: TextureLeafSourceRef, retainAlpha = false): TextureLeafSourceRef =>
+    asset.astc !== undefined && !retainAlpha && gl !== undefined
+      && nativeTextureAvailable(gl, "astc-6x6", asset.colorSpace ?? "srgb") ? asset.astc : asset;
   const decodeLeaf = async (
     asset: TextureLeafSourceRef,
     signal: AbortSignal,
@@ -720,6 +733,15 @@ export const createBrowserTextureDecoder = (
     retainAlpha: boolean | undefined,
     fallback = false,
   ): Promise<DecodedTextureSource> => {
+    if ((asset.astc !== undefined || asset.sourceEncoding === "ktx2-astc") && gl !== undefined) {
+      await waitForTextureContext(gl, signal);
+      if (signal.aborted) throw aborted();
+      asset = selectRaster(asset, retainAlpha);
+      if (asset.sourceEncoding === "ktx2-astc" && (retainAlpha
+        || !nativeTextureAvailable(gl, "astc-6x6", asset.colorSpace ?? "srgb"))) {
+        throw new Error("Royal ASTC source requires native LDR support without retained CPU alpha");
+      }
+    }
     if (!etc2Available && asset.sourceEncoding === "ktx2-etc2") {
       throw new Error("Royal ETC2 KTX2 textures require WEBGL_compressed_texture_etc");
     }
@@ -783,10 +805,6 @@ export const createBrowserTextureDecoder = (
         // A missing preview must not prevent a usable authoritative source.
         return decodeLeaf(asset, signal, maxStorageBytes, retainAlpha);
       }
-      if (preview.kind !== undefined) {
-        preview.close?.();
-        return decodeLeaf(asset, signal, maxStorageBytes, retainAlpha);
-      }
       const lifetime = new AbortController();
       let pending: Promise<import("./source").EncodedSvgTextureSource> | undefined;
       const detail: {
@@ -832,8 +850,13 @@ export const createBrowserTextureDecoder = (
   };
   return {
     decode,
-    preload: (asset: TextureSourceRef, signal: AbortSignal): void =>
-      readAhead.preload(asset.svgPreview ? asset.fallback! : asset, signal),
+    preload: (asset: TextureSourceRef, signal: AbortSignal, retainAlpha = false): void => {
+      if (signal.aborted || gl?.isContextLost()) return;
+      const leaf = selectRaster(asset.svgPreview ? asset.fallback! : asset, retainAlpha);
+      if (leaf.sourceEncoding === "ktx2-astc" && (retainAlpha || gl === undefined
+        || !nativeTextureAvailable(gl, "astc-6x6", leaf.colorSpace ?? "srgb"))) return;
+      readAhead.preload(leaf, signal);
+    },
     readAheadSnapshot: (): StagedByteReadSnapshot => readAhead.snapshot(),
   };
 };

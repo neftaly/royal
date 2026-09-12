@@ -1,0 +1,66 @@
+{
+  "node": "v24.12.0",
+  "results": [
+    {
+      "mode": "etc2",
+      "iterations": 1000000,
+      "nsPerCall": 40.09977100000003,
+      "heapGrowthBytes": 11768,
+      "retainedHeapDeltaBytes": -77584,
+      "arrayBufferDeltaBytes": 0,
+      "gcCount": 0,
+      "gcMs": 0,
+      "extensionCalls": 0,
+      "uploads": 1
+    },
+    {
+      "mode": "astc",
+      "iterations": 1000000,
+      "nsPerCall": 42.43906799999991,
+      "heapGrowthBytes": 19704,
+      "retainedHeapDeltaBytes": -30328,
+      "arrayBufferDeltaBytes": 0,
+      "gcCount": 0,
+      "gcMs": 0,
+      "extensionCalls": 1,
+      "uploads": 1
+    },
+    {
+      "mode": "astc-preview",
+      "iterations": 1000000,
+      "nsPerCall": 43.02717599999994,
+      "heapGrowthBytes": 26264,
+      "retainedHeapDeltaBytes": -24384,
+      "arrayBufferDeltaBytes": 0,
+      "gcCount": 0,
+      "gcMs": 0,
+      "extensionCalls": 1,
+      "uploads": 1
+    },
+    {
+      "mode": "unsupported",
+      "iterations": 1000000,
+      "nsPerCall": 36.82336300000009,
+      "heapGrowthBytes": 22184,
+      "retainedHeapDeltaBytes": -34008,
+      "arrayBufferDeltaBytes": 0,
+      "gcCount": 0,
+      "gcMs": 0,
+      "extensionCalls": 1,
+      "uploads": 0
+    },
+    {
+      "mode": "parse",
+      "iterations": 100000,
+      "nsPerCall": 593.3642900000007,
+      "heapGrowthBytes": 182616,
+      "retainedHeapDeltaBytes": -252736,
+      "arrayBufferDeltaBytes": 0,
+      "gcCount": 21,
+      "gcMs": 2.1609858870506287,
+      "extensionCalls": 1,
+      "uploads": 1
+    }
+  ],
+  "note": "After 100k warm-up calls. No-op driver isolates JS cost; GC and heap deltas are noisy, not proof of zero allocation. Parse allocates metadata/views, never a payload buffer."
+}

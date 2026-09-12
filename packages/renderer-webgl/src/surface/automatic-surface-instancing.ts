@@ -25,6 +25,7 @@ const ordinaryTextureIdentity = (
         asset.bytes.byteLength,
         numericArrayHash(asset.bytes),
         asset.fallback === undefined ? null : ordinaryTextureIdentity(asset.fallback),
+        asset.astc === undefined ? null : ordinaryTextureIdentity(asset.astc),
       ]
     : ["declared", textureStorageKey(asset)],
   canonicalTextureSamplerKey(canonicalTextureSampler(asset)),

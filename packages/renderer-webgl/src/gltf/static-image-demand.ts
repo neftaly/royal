@@ -170,6 +170,7 @@ export const createStaticPrimitiveImageDemand = (
   return createStaticPrimitiveTextureDemand(document, label, ({ colorSpace, textureIndex }) => {
     const plan = planTextureImages(textureIndex, colorSpace);
     claimImage(plan.primary.imageIndex);
+    if (plan.astc !== undefined) claimImage(plan.astc.imageIndex);
     if (plan.fallback !== undefined) claimImage(plan.fallback.imageIndex);
   });
 };

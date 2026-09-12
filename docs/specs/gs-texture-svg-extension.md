@@ -71,7 +71,7 @@ unaware consumers.
 When the extension is not listed in `extensionsRequired`, an aware consumer
 SHOULD use the SVG source and MUST have a portable raster fallback. That
 fallback may be the parent texture's valid core `source`, or a present
-lower-priority AVIF or WebP extension which is itself required. An
+lower-priority ASTC, AVIF or WebP extension which is itself required. An
 unaware consumer uses the core source or follows its ordinary
 required-extension policy.
 
@@ -90,6 +90,50 @@ The fallback and SVG images are alternate representations of one texture. They
 inherit the parent texture's sampler, material-slot color interpretation, UV
 set, and `KHR_texture_transform`. They MUST NOT be combined or loaded as two
 independent material layers.
+
+## Composing with native ASTC
+
+The draft `EXT_texture_astc` extension can accompany `GS_texture_svg` on the
+same texture. Keep PNG/JPEG in core `source` for portable optional use:
+
+```json
+{
+  "extensionsUsed": ["GS_texture_svg", "EXT_texture_astc"],
+  "images": [
+    { "uri": "artwork.png" },
+    { "uri": "artwork.svg", "mimeType": "image/svg+xml" },
+    { "uri": "artwork-6x6.ktx2", "mimeType": "image/ktx2" }
+  ],
+  "textures": [{
+    "source": 0,
+    "extensions": {
+      "GS_texture_svg": { "source": 1 },
+      "EXT_texture_astc": { "source": 2 }
+    }
+  }]
+}
+```
+
+Royal supports unsupercompressed ASTC LDR 6x6/8x8 KTX2 here. On supported
+hardware, optional base-color SVG uses ASTC immediately without fetching PNG
+or SVG. Unsupported hardware selects the portable raster before transport.
+A native preview stays in its ordinary compressed GPU texture. Once demand
+exceeds the coarsest vector level, SVG detail uses the existing RGBA VT pages;
+publication switches only after vector coverage is ready. Small previews
+reserve no VT atlas or page-table GPU storage. Vector failure leaves the native
+preview visible, with a bounded diagnostic and no per-frame retry.
+
+These are alternate representations, not mixed-format mips or simultaneous
+material layers. SVG remains authoritative detail. `EXT_texture_astc` specifies
+format selection; the preview schedule and SVG precedence are Royal's
+experimental SVG contract, not an ecosystem-wide scheduling guarantee.
+
+The [published ASTC draft](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Vendor/EXT_texture_astc/README.md)
+requires ASTC-specific DFD metadata and a complete mip pyramid when using a
+mipmapped sampler. Optional ASTC keeps core PNG/JPEG; required ASTC may omit it.
+An unsupported required ASTC source settles as a texture error without fetching
+the image or allocating compressed storage. These fetch savings apply to
+external images; embedded images still travel with their GLB container.
 
 ## SVG content profile
 
@@ -169,7 +213,10 @@ is read and validated lazily once per decoded source, without first decoding a
 full SVG bitmap. Required SVG and non-base-color uses keep preferred-first
 behavior; they MUST NOT silently settle on a preview that cannot refine.
 
-The selected portable raster preference is AVIF, WebP, then core. A failed
+The selected raster preference is supported ASTC LDR, AVIF, WebP, then core.
+ASTC selection happens before read-ahead and transport. Retained CPU alpha
+requires a raster alternative and therefore skips optional ASTC before fetching.
+A failed
 preview falls back to authoritative SVG decoding. A failed optional detail read
 keeps preview coverage and records one bounded failure without per-frame retries.
 

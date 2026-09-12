@@ -5,6 +5,8 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## 0.0.27 - 2026-09-12
 
+- Prefer native ASTC LDR 6x6/8x8 glTF alternatives before fetching raster images; compose draft `EXT_texture_astc` with SVG previews and defer vector pages until needed.
+
 - Add direct native ASTC LDR 6x6/8x8 and BC1/BC3/BC7 KTX2 textures and
   authored VT pages through the shared ETC2 pipeline, with capability-gated
   omission, exact block-byte accounting, and no runtime transcoding.

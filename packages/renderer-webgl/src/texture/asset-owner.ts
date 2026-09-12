@@ -106,7 +106,7 @@ export type TextureAssetOwnerPlatform = Readonly<{
   onListenerError(error: unknown): void;
   onSnapshotChanged(key: string): void;
   now?(): number;
-  preload?(asset: TextureSourceRef, signal: AbortSignal): void;
+  preload?(asset: TextureSourceRef, signal: AbortSignal, retainAlpha?: boolean): void;
   readAheadSnapshot?(): StagedByteReadSnapshot | undefined;
 }>;
 
@@ -267,7 +267,7 @@ export class TextureAssetOwner {
     const encodedSourceReads = this.#platform.readAheadSnapshot?.();
     for (const entry of this.#entries.values()) {
       retainedEncodedSourceBytes += entry.decoded?.kind !== undefined
-        ? 0
+        ? entry.decoded.svgPreview?.encoded?.byteLength ?? 0
         : entry.decoded?.encodedSvg?.byteLength ?? entry.decoded?.svgPreview?.encoded?.byteLength ?? 0;
       for (const storageKey of entry.claimedStorageKeys) {
         if (!entry.residentStorageKeys.has(storageKey)) pendingStorageRepresentations += 1;
@@ -505,7 +505,7 @@ export class TextureAssetOwner {
     entry.preparationDeferred = false;
     if (entry.queued) return;
     entry.controller ??= new AbortController();
-    this.#platform.preload?.(entry.asset, entry.controller.signal);
+    this.#platform.preload?.(entry.asset, entry.controller.signal, entry.retainAlpha);
     entry.preparationQueuedAt = this.#now();
     entry.queued = true;
     this.#preparationQueue.enqueue(entry);

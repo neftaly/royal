@@ -56,6 +56,7 @@ oracle.
 | `EXT_meshopt_compression` | buffer view and optional fallback-buffer marker; async preparation with available decoder | demanded decoded buffer-view bytes enter the ordinary canonical accessor path |
 | `EXT_texture_avif` (open draft) | texture | ordinary cold texture recipe using the draft extension image source |
 | `EXT_texture_webp` | texture | ordinary cold texture recipe using the extension image source |
+| `EXT_texture_astc` | texture | draft subset: native LDR 6x6/8x8 KTX2; capability-selected alternate or required source |
 | `GS_texture_svg` | texture | experimental preferred SVG recipe with required failure or one deferred ordinary fallback |
 | `KHR_draco_mesh_compression` | mesh primitive, async preparation with available decoder | validated canonical triangle attributes and indices |
 | `KHR_lights_punctual` | document and node | canonical punctual light definition and transformed occurrences |
@@ -96,10 +97,22 @@ transform math is generic.
   corrupt-data retry recipe. Royal's supported browser floor has AVIF decode;
   Royal therefore adds no user-agent branch or startup codec probe. Browsers
   below that floor cross the ordinary bounded decode-failure boundary.
+- Draft [`EXT_texture_astc`](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Vendor/EXT_texture_astc/README.md)
+  accepts unsupercompressed, 2D, straight-alpha ASTC LDR 6x6/8x8 KTX2.
+  Optional use requires a core PNG/JPEG source; required use may omit it.
+  Native LDR capability and retained-CPU-alpha requirements select the source
+  before read-ahead, shared by early discovery and canonical preparation.
+  Embedded alternate buffers transfer explicitly. MIME, DFD primaries/channel,
+  color-space use, and complete mip chains for mipmapped samplers are validated.
+  Unsupported optional ASTC selects the raster; unsupported required ASTC
+  settles at the texture-error boundary without a download or GPU upload.
+  Other block sizes, HDR, supercompression and transcoding remain unsupported.
+  Combined SVG behavior is defined by the experimental SVG contract.
 - `GS_texture_svg` accepts one self-contained, bounded SVG image source for
   sRGB color slots. Optional use requires a core source or a present
   lower-priority texture extension which is itself required, and attempts SVG
-  first; on SVG transport, profile, or decode failure it selects AVIF, WebP,
+  first for non-base-color uses; optional base color publishes a selected raster
+  preview first. The raster priority is supported ASTC LDR, AVIF, WebP,
   or core and fetches only that fallback. Required use may omit the fallback
   and fails rather than silently changing
   representations. The chosen representation lowers through one texture
