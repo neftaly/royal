@@ -1,3 +1,4 @@
+import { ktx2Etc2StorageBytes } from "../texture/etc2-storage";
 import { allocateVirtualTexturePoolBytes } from "./pool-budget";
 import type { VirtualTextureAssetRef } from "@royal/renderer-core";
 import type { SurfaceFrameView } from "../frame/surface-frame";
@@ -69,6 +70,9 @@ import {
   type VirtualTextureAtlasStoragePlan,
   virtualTextureResidentPageCapacity,
 } from "./storage-plan";
+
+const automaticSourceBytes = (source: DecodedTextureSource): number => source.kind === undefined
+  ? source.width * source.height * 4 : ktx2Etc2StorageBytes(source);
 
 const MAX_DECODE_JOBS = 4;
 const MAX_PENDING_PAGE_BYTES = 16 * 1024 * 1024;
@@ -499,8 +503,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       if (!resource.authored) {
         automaticResources += 1;
         if (resource.lease !== undefined) {
-          automaticDecodedBytes += resource.lease.source.width
-            * resource.lease.source.height * 4;
+          automaticDecodedBytes += automaticSourceBytes(resource.lease.source);
         }
       }
       failedPages += resource.failedPages.size + (resource.previewSourceFailed ? 1 : 0);
@@ -615,8 +618,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     for (const key of candidates.keys()) {
       const existing = this.#resources.get(key);
       if (existing?.lease !== undefined) {
-        retainedDecodedBytes += existing.lease.source.width
-          * existing.lease.source.height * 4;
+        retainedDecodedBytes += automaticSourceBytes(existing.lease.source);
       }
     }
     for (const [key, asset] of candidates) {
@@ -638,7 +640,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         this.#automaticIneligible += 1;
         continue;
       }
-      const decodedBytes = decoded.width * decoded.height * 4;
+      const decodedBytes = automaticSourceBytes(decoded);
       if (!svg && retainedDecodedBytes + decodedBytes > MAX_AUTOMATIC_DECODED_BYTES) {
         this.#automaticIneligible += 1;
         continue;
@@ -666,7 +668,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           this.#automaticIneligible += 1;
           continue;
         }
-        retainedDecodedBytes += lease.source.width * lease.source.height * 4;
+        retainedDecodedBytes += automaticSourceBytes(lease.source);
         source = automaticVirtualTextureHasPreview(lease.source)
           ? createAutomaticSvgPreviewPageSource(lease.source, sampler, asset.colorSpace ?? "srgb", this.#svgRasterCache)
           : createAutomaticRasterPageSource(lease.source, sampler, asset.colorSpace ?? "srgb");

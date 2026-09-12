@@ -162,3 +162,40 @@ failures during follow-up were investigated: an assertion still expected the
 old source-encoding diagnostic, and an existing VT timing test exceeded its
 short deadline during a concurrent build. The assertion was updated and the
 full suite passed with the build finished; no timeout was widened.
+
+## Adversarial retention review of `99d59425`
+
+Three findings were fixed:
+
+- **High: fitted previews pinned discarded mips.** Dropping levels retained
+  typed-array views into the entire decoded KTX2 payload. Fitted decodes now
+  compact retained levels into one allocation. Already-fitting textures retain
+  their original views; no new copy or per-frame allocation is introduced there.
+- **High: closed sources could pin decoder temporaries.** The cleanup closure
+  shared its lexical scope with parser/alpha work. A separate cleanup factory
+  captures only the upload levels, so closing a still-reachable source releases
+  the original decode buffer as intended.
+- **Medium: VT counted native previews as RGBA.** Admission and diagnostic byte
+  counts now sum compressed mip bytes through the existing allocation-free
+  storage helper, avoiding premature rejection under the retained-source budget.
+
+`retention-baseline.json` and `retention-results.json` record an explicit-GC
+WeakRef oracle on Node 24.12.0. For 4096px ASTC 6x6/8x8, the baseline retained
+original 9.96/5.59 MB decode buffers both after fitting and after close. The fix
+releases the original buffers after fitting, retaining only 40,096/21,888 bytes
+under a 64 KiB cap. Unfitted sources keep the original buffer until close, then
+release it. Encoded GLB/source assets have separate lifetimes; this oracle checks
+the Blob arrayBuffer created by decoding.
+
+Reproduce the fixed check with
+`node --expose-gc research/native-texture-formats/retention-benchmark.mjs`.
+For the baseline, first write
+`git show 99d59425:packages/renderer-webgl/src/texture/browser-decode.ts > /tmp/royal-review-baseline-decode.ts`,
+then run the same command with `--baseline /tmp/royal-review-baseline-decode.ts`.
+
+Regression tests check retained block contents, a single bounded backing buffer,
+close behavior for all five native formats, and corrected VT preview byte
+accounting. All 1,211 tests and the glTF manifest check pass; typecheck and renderer
+lint, full build, packed-consumer and bundle/package size checks pass without
+raising size budgets. The implementing agent performed this review, without
+delegation.

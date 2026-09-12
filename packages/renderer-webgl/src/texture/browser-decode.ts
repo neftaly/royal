@@ -1,4 +1,4 @@
-import { completeKtx2MipLevelCount, fitKtx2Etc2Storage } from "./etc2-storage";
+import { completeKtx2MipLevelCount, fitKtx2Etc2Storage, ktx2Etc2StorageBytes } from "./etc2-storage";
 import { nativeTextureAvailable, validateNativeBaseDimensions } from "./native-storage";
 import { selectAsyncPreparationLane, type AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 import type {
@@ -379,6 +379,12 @@ const waitForTextureContext = async (gl: WebGL2RenderingContext, signal: AbortSi
   }
 };
 
+const emptyTextureBlocks = new Uint8Array(0);
+// Separate closure scope: decoded sources must not retain parser/alpha temporaries.
+const closeKtx2Levels = (levels: { blocks: Uint8Array }[]): (() => void) => () => {
+  for (const level of levels) level.blocks = emptyTextureBlocks;
+};
+
 const decodeKtx2Texture = async (
   asset: TextureLeafSourceRef,
   blob: Blob,
@@ -440,19 +446,24 @@ const decodeKtx2Texture = async (
       ? { ...base, levels }
       : base;
   }
-  const emptyBlocks = new Uint8Array(0);
   const levels = texture.levels.map((level) => ({
     blocks: level.blocks,
     height: level.height,
     width: level.width,
   }));
-  let released = false;
+  // Dropped mip views must not pin the full source allocation for a small preview.
+  if (texture !== sourceTexture) {
+    const blocks = new Uint8Array(ktx2Etc2StorageBytes(texture));
+    let offset = 0;
+    for (const level of levels) {
+      blocks.set(level.blocks, offset);
+      const end = offset + level.blocks.byteLength;
+      level.blocks = blocks.subarray(offset, end);
+      offset = end;
+    }
+  }
   return {
-    close: () => {
-      if (released) return;
-      released = true;
-      for (const level of levels) level.blocks = emptyBlocks;
-    },
+    close: closeKtx2Levels(levels),
     colorSpace,
     height: texture.height,
     ...(texture.format === "etc2-rgba"

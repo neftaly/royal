@@ -402,7 +402,7 @@ describe("browser virtual texture runtime", () => {
       expect(sizes).toHaveLength(9);
       expect(sizes.every(size => size <= 1028)).toBe(true);
       expect(runtime.runtimeSnapshot().pageRequests).toBe(65);
-      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(64 * 64 * 4 + 4 * 1024 * 1024);
+      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(1024 + 4 * 1024 * 1024);
       view.viewport.width = 64;
       view.viewport.height = 64;
       await waitFor(() => {
@@ -412,7 +412,7 @@ describe("browser virtual texture runtime", () => {
       });
       expect(runtime.automaticBinding(asset)).toBeDefined();
       expect(runtime.runtimeSnapshot().pageRequests).toBe(65);
-      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBe(64 * 64 * 4);
+      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBe(1024);
     } finally {
       runtime.dispose();
     }

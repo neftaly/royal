@@ -61,6 +61,26 @@ describe.each(formats)("native $format", ({ vk, format, block, bytes, linear, sr
     expect(budget.snapshot().retainedBytes).toBe(0);
   });
 
+  it("compacts fitted mip storage without retaining discarded payload bytes", async () => {
+    const payload = createKtx2Fixture(vk + 1, 1024, 1024, 11);
+    const original = parseKtx2Native(payload);
+    const source = await createBrowserTextureDecoder().decode({
+      kind: "embedded-asset", bytes: payload, contentKey: "large", label: "large",
+      mimeType: "image/ktx2", sourceEncoding: "ktx2-native",
+    }, new AbortController().signal, 65536);
+    if (source.kind === undefined) throw new Error("Missing compressed source");
+    const bytes = source.levels.reduce((sum, level) => sum + level.blocks.byteLength, 0);
+    expect(bytes).toBeLessThanOrEqual(65536);
+    expect(source.levels[0]!.blocks.buffer.byteLength).toBe(bytes);
+    const originalBase = original.levels.findIndex(level => level.width === source.width);
+    for (const [index, level] of source.levels.entries()) {
+      expect(level.blocks.buffer).toBe(source.levels[0]!.blocks.buffer);
+      expect(level.blocks).toEqual(original.levels[originalBase + index]!.blocks);
+    }
+    source.close?.();
+    expect(source.levels.every(level => level.blocks.byteLength === 0)).toBe(true);
+  });
+
   it("omits unsupported native textures while ordinary textures continue rendering", () => {
     const gl = fakeGl();
     const budget = new PersistentGpuBudgetOwner(4096);

@@ -1,0 +1,35 @@
+{
+  "node": "v24.12.0",
+  "baseline": "99d59425",
+  "results": [
+    {
+      "vk": 166,
+      "fitted": false,
+      "retainedBytes": 9961536,
+      "originalRetained": true,
+      "originalRetainedAfterClose": true
+    },
+    {
+      "vk": 166,
+      "fitted": true,
+      "retainedBytes": 40096,
+      "originalRetained": true,
+      "originalRetainedAfterClose": true
+    },
+    {
+      "vk": 172,
+      "fitted": false,
+      "retainedBytes": 5592448,
+      "originalRetained": true,
+      "originalRetainedAfterClose": true
+    },
+    {
+      "vk": 172,
+      "fitted": true,
+      "retainedBytes": 21888,
+      "originalRetained": true,
+      "originalRetainedAfterClose": true
+    }
+  ],
+  "note": "4096px authored mip chains; fitted budget 64KiB. Explicit GC and WeakRef test original Blob arrayBuffer lifetime while decoded source remains reachable. This is a retention oracle, not a timing benchmark."
+}
