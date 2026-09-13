@@ -1,0 +1,128 @@
+{
+  "summaries": [
+    {
+      "file": "research/vt-comparison/idle-scan-after.json",
+      "sampledBytes": 15762540,
+      "frames": 600,
+      "allocations": [
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:384",
+          "bytes": 4836300
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-visibility.ts:93",
+          "bytes": 1966428
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:746",
+          "bytes": 1541036
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:112",
+          "bytes": 1410920
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/pool-budget.ts:8",
+          "bytes": 1278940
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:693",
+          "bytes": 753920
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:100",
+          "bytes": 655980
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:197",
+          "bytes": 427820
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1365",
+          "bytes": 393360
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1349",
+          "bytes": 360560
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:803",
+          "bytes": 327824
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:892",
+          "bytes": 196800
+        },
+        {
+          "source": "packages/renderer-core/src/camera-resource.ts:101",
+          "bytes": 196668
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1065",
+          "bytes": 163952
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-depth-order.ts:15",
+          "bytes": 163872
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:376",
+          "bytes": 131100
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:408",
+          "bytes": 131100
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:436",
+          "bytes": 131100
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:140",
+          "bytes": 131088
+        },
+        {
+          "source": "packages/renderer-webgl/src/frame/frame-clock-owner.ts:129",
+          "bytes": 104792
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/lod-selection.ts:285",
+          "bytes": 98344
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1003",
+          "bytes": 98340
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-program-owner.ts:565",
+          "bytes": 65560
+        },
+        {
+          "source": "packages/renderer-webgl/src/runtime/canvas-root.ts:1790",
+          "bytes": 32820
+        },
+        {
+          "source": "packages/renderer-webgl/src/texture/gpu-owner.ts:123",
+          "bytes": 32820
+        },
+        {
+          "source": "packages/renderer-webgl/src/frame/frame-clock-owner.ts:118",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-gpu-owner.ts:1386",
+          "bytes": 32772
+        },
+        {
+          "source": "research/vt-comparison/steady.ts:19",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-core/src/camera-resource.ts:117",
+          "bytes": 32772
+        }
+      ]
+    }
+  ],
+  "note": "Sampling estimates, not exact allocation counts. Native allocation frames inherit the nearest source-mapped JavaScript ancestor. Source maps must match the captured build."
+}

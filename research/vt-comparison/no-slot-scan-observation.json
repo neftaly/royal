@@ -1,0 +1,110 @@
+{
+  "decision": "Do not add an early-return shortcut without a representative workload demonstrating redundant scans.",
+  "scope": "183 runtime unit tests; fake GL, observational counters, no timing or host-GPU claim",
+  "sourceSha256": "b6573774a9ac93f9bd6eff1c9a113faab2e1b392a1e1a2061d604dd1f2337ec1",
+  "rawSha256": "c3987627f2becf4dfcddf25ef98eb25afb08bb1b0b681114424e1032175318f6",
+  "slotLookups": 4620,
+  "groups": [
+    {
+      "authored": false,
+      "demandPages": 1,
+      "previewCoarse": false,
+      "noSlot": false,
+      "calls": 38
+    },
+    {
+      "authored": false,
+      "demandPages": 1,
+      "previewCoarse": true,
+      "noSlot": false,
+      "calls": 1
+    },
+    {
+      "authored": false,
+      "demandPages": 5,
+      "previewCoarse": false,
+      "noSlot": false,
+      "calls": 3
+    },
+    {
+      "authored": false,
+      "demandPages": 17,
+      "previewCoarse": false,
+      "noSlot": false,
+      "calls": 1
+    },
+    {
+      "authored": false,
+      "demandPages": 21,
+      "previewCoarse": false,
+      "noSlot": false,
+      "calls": 6
+    },
+    {
+      "authored": false,
+      "demandPages": 21,
+      "previewCoarse": true,
+      "noSlot": false,
+      "calls": 476
+    },
+    {
+      "authored": false,
+      "demandPages": 41,
+      "previewCoarse": false,
+      "noSlot": false,
+      "calls": 3
+    },
+    {
+      "authored": false,
+      "demandPages": 81,
+      "previewCoarse": false,
+      "noSlot": false,
+      "calls": 153
+    },
+    {
+      "authored": false,
+      "demandPages": 81,
+      "previewCoarse": true,
+      "noSlot": false,
+      "calls": 3248
+    },
+    {
+      "authored": true,
+      "demandPages": 1,
+      "previewCoarse": false,
+      "noSlot": false,
+      "calls": 411
+    },
+    {
+      "authored": true,
+      "demandPages": 1,
+      "previewCoarse": false,
+      "noSlot": true,
+      "calls": 37
+    },
+    {
+      "authored": true,
+      "demandPages": 2,
+      "previewCoarse": false,
+      "noSlot": false,
+      "calls": 28
+    },
+    {
+      "authored": true,
+      "demandPages": 5,
+      "previewCoarse": false,
+      "noSlot": false,
+      "calls": 179
+    },
+    {
+      "authored": true,
+      "demandPages": 21,
+      "previewCoarse": false,
+      "noSlot": false,
+      "calls": 36
+    }
+  ],
+  "instrumentation": "At the existing scheduler slot lookup, record [resource.authored, resource.workspace.count, gpu.previewCoarse === true, selectedSlot] using appendFileSync into workspace cache. Preserve original continue behavior. Restore byte-for-byte in finally.",
+  "excludedAttempts": "Console output was unavailable. First file-based attempt failed from ENOSPC on /tmp and is excluded. Final observation uses workspace cache and all 183 tests pass.",
+  "productionChange": false
+}

@@ -1,0 +1,519 @@
+{
+  "node": "v24.12.0",
+  "equivalentInputs": 16,
+  "results": [
+    {
+      "size": 5184,
+      "round": 0,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 18.320422000000008,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 0,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 18.078571999999994,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 1,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 16.345313000000004,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 1,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 17.917496999999997,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 2,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 17.998069999999984,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 2,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 16.672185999999982,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 3,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 15.61006199999997,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 3,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 19.478921000000014,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 4,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 18.649298999999985,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 4,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 18.749619999999993,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 5,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 17.069669999999974,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 5,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 18.873980999999958,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 6,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 16.997019000000023,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 6,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 16.936757999999998,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 7,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 16.86293599999999,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 7,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 16.40885400000002,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 0,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 27.562864999999988,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 0,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 26.725997000000007,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 1,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 26.216308000000026,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 1,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 27.60958299999993,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 2,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 28.442122999999924,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 2,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 17.04466000000002,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 3,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 17.514470999999958,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 3,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 20.145820999999955,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 4,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 19.563527000000022,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 4,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 18.534374999999955,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 5,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 16.78307899999993,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 5,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 19.574418000000037,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 6,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 18.50663099999997,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 6,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 17.678556999999955,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 7,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 18.387302999999974,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 7,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 18.167202999999972,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 0,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 22.95897500000001,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 0,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 21.728566,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 1,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 19.962980000000016,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 1,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 21.171041999999943,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 2,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 22.979428000000098,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 2,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 17.937487999999803,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 3,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 18.52716200000009,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 3,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 19.454975999999988,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 4,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 19.464095000000043,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 4,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 19.954762999999957,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 5,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 16.323016999999936,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 5,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 18.632148000000143,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 6,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 19.458143000000064,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 6,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 17.807628000000022,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 7,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 16.85125099999982,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 7,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 19.19018700000015,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 0,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 43.96527199999991,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 0,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 42.88123900000005,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 1,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 43.091093,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 1,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 30.75165600000014,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 2,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 43.880942000000005,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 2,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 44.93583599999988,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 3,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 41.270804,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 3,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 44.102792000000136,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 4,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 28.45378699999992,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 4,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 44.03439800000024,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 5,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 28.64825000000019,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 5,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 29.709941999999955,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 6,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 43.08805099999972,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 6,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 49.232776999999714,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 7,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 27.80789199999981,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 7,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 31.288653000000068,
+      "checksum": 1460000
+    }
+  ],
+  "note": "Isolated Node CPU screening: ordinary Uint8Array views at nonzero offsets. No native parser, Response, GPU, retained-page queue or full-read throughput is measured. Copy bytes are consumed; allocation and GC costs occur in both variants."
+}

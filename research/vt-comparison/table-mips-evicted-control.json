@@ -1,0 +1,7 @@
+{
+  "expectedFailure": true,
+  "mutation": "Preserve initial empty-table rebuild uploads but skip coarse rebuild uploads once the CPU table previously contained resident mappings.",
+  "case": "First ASTC6x6 byte-cap neighbor-first case; subsequent cases did not run",
+  "error": "Uncaught (in promise) Error: Stale coarse GPU table: actual 0,0,1,255,0,0,0,0; expected 0,0,0,0,0,0,1,255",
+  "renderer": "Renderer: ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

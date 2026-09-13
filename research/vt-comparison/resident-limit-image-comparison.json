@@ -1,0 +1,44 @@
+{
+  "comparisons": [
+    {
+      "before": "before",
+      "after": "after",
+      "differentPixels": 3306,
+      "totalPixels": 262144,
+      "maxChannelDifferences": [
+        2,
+        1,
+        2,
+        0
+      ],
+      "equalVtSnapshots": true
+    },
+    {
+      "before": "after",
+      "after": "after-repeat",
+      "differentPixels": 7444,
+      "totalPixels": 262144,
+      "maxChannelDifferences": [
+        4,
+        2,
+        2,
+        0
+      ],
+      "equalVtSnapshots": true
+    },
+    {
+      "before": "before",
+      "after": "after-repeat",
+      "differentPixels": 6458,
+      "totalPixels": 262144,
+      "maxChannelDifferences": [
+        4,
+        2,
+        2,
+        0
+      ],
+      "equalVtSnapshots": true
+    }
+  ],
+  "note": "Exact RGBA pixel comparisons. The repeated after build has identical source and build artifacts; runs use separate browser processes."
+}

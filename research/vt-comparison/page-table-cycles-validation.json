@@ -1,0 +1,17 @@
+{
+  "scope": "Pure page-table CPU correctness; no GPU upload-order or performance claim",
+  "cases": 24,
+  "stepsPerCase": 80,
+  "checks": {
+    "residencyAndPropertyTests": "8 pass across 2 files, before and after mutations",
+    "rootTypecheck": "pass",
+    "noClearMutation": "new property fails at step 31",
+    "overwriteFineMutation": "new property fails at step 8"
+  },
+  "productionChanged": false,
+  "committed": false,
+  "sha256": {
+    "packages/renderer-webgl/src/virtual-texture/residency.ts": "78b501474b674366564d1223e6386602c714cb2feaa27e7ddf677f04d1a8a49a",
+    "tests/replacement/renderer-webgl-vt.property.test.ts": "f0cbd00463e4ea31d39f0c52cef86765ac2e0fff61710e5b426d021b18b4b820"
+  }
+}

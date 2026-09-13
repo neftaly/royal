@@ -1,0 +1,205 @@
+{
+  "results": [
+    {
+      "size": 128,
+      "round": 0,
+      "cancelled": false,
+      "outcome": "ready",
+      "calls": 2,
+      "closes": 2,
+      "decodedPixels": 37120,
+      "elapsedMs": 3.4000000953674316
+    },
+    {
+      "size": 128,
+      "round": 0,
+      "cancelled": true,
+      "outcome": "ready",
+      "calls": 2,
+      "closes": 2,
+      "decodedPixels": 37120,
+      "elapsedMs": 1.5999999046325684
+    },
+    {
+      "size": 128,
+      "round": 1,
+      "cancelled": false,
+      "outcome": "ready",
+      "calls": 2,
+      "closes": 2,
+      "decodedPixels": 37120,
+      "elapsedMs": 2.100000023841858
+    },
+    {
+      "size": 128,
+      "round": 1,
+      "cancelled": true,
+      "outcome": "ready",
+      "calls": 2,
+      "closes": 2,
+      "decodedPixels": 37120,
+      "elapsedMs": 1.2999999523162842
+    },
+    {
+      "size": 128,
+      "round": 2,
+      "cancelled": false,
+      "outcome": "ready",
+      "calls": 2,
+      "closes": 2,
+      "decodedPixels": 37120,
+      "elapsedMs": 1.600000023841858
+    },
+    {
+      "size": 128,
+      "round": 2,
+      "cancelled": true,
+      "outcome": "ready",
+      "calls": 2,
+      "closes": 2,
+      "decodedPixels": 37120,
+      "elapsedMs": 1.5
+    },
+    {
+      "size": 144,
+      "round": 0,
+      "cancelled": false,
+      "outcome": "ready",
+      "calls": 1,
+      "closes": 1,
+      "decodedPixels": 20736,
+      "elapsedMs": 0.5999999046325684
+    },
+    {
+      "size": 144,
+      "round": 0,
+      "cancelled": true,
+      "outcome": "ready",
+      "calls": 1,
+      "closes": 1,
+      "decodedPixels": 20736,
+      "elapsedMs": 0.5
+    },
+    {
+      "size": 144,
+      "round": 1,
+      "cancelled": false,
+      "outcome": "ready",
+      "calls": 1,
+      "closes": 1,
+      "decodedPixels": 20736,
+      "elapsedMs": 0.40000009536743164
+    },
+    {
+      "size": 144,
+      "round": 1,
+      "cancelled": true,
+      "outcome": "ready",
+      "calls": 1,
+      "closes": 1,
+      "decodedPixels": 20736,
+      "elapsedMs": 0.5999999046325684
+    },
+    {
+      "size": 144,
+      "round": 2,
+      "cancelled": false,
+      "outcome": "ready",
+      "calls": 1,
+      "closes": 1,
+      "decodedPixels": 20736,
+      "elapsedMs": 0.30000007152557373
+    },
+    {
+      "size": 144,
+      "round": 2,
+      "cancelled": true,
+      "outcome": "ready",
+      "calls": 1,
+      "closes": 1,
+      "decodedPixels": 20736,
+      "elapsedMs": 0.5
+    },
+    {
+      "size": 2048,
+      "round": 0,
+      "cancelled": false,
+      "outcome": "ready",
+      "calls": 2,
+      "closes": 2,
+      "decodedPixels": 4215040,
+      "elapsedMs": 55.59999990463257
+    },
+    {
+      "size": 2048,
+      "round": 0,
+      "cancelled": true,
+      "outcome": "ready",
+      "calls": 2,
+      "closes": 2,
+      "decodedPixels": 4215040,
+      "elapsedMs": 47
+    },
+    {
+      "size": 2048,
+      "round": 1,
+      "cancelled": false,
+      "outcome": "ready",
+      "calls": 2,
+      "closes": 2,
+      "decodedPixels": 4215040,
+      "elapsedMs": 43.90000009536743
+    },
+    {
+      "size": 2048,
+      "round": 1,
+      "cancelled": true,
+      "outcome": "ready",
+      "calls": 2,
+      "closes": 2,
+      "decodedPixels": 4215040,
+      "elapsedMs": 44.89999997615814
+    },
+    {
+      "size": 2048,
+      "round": 2,
+      "cancelled": false,
+      "outcome": "ready",
+      "calls": 2,
+      "closes": 2,
+      "decodedPixels": 4215040,
+      "elapsedMs": 45.89999997615814
+    },
+    {
+      "size": 2048,
+      "round": 2,
+      "cancelled": true,
+      "outcome": "ready",
+      "calls": 2,
+      "closes": 2,
+      "decodedPixels": 4215040,
+      "elapsedMs": 42
+    }
+  ],
+  "baseline": true,
+  "note": "Real PNG bitmap decoding with controlled cancellation immediately after decode submission. Fetch uses a prepared Blob. Instrumentation and promise scheduling affect elapsed time; bitmap output pixels are not peak memory. No frame-time or GPU-upload measurement.",
+  "gc": {
+    "events": 0,
+    "totalMs": 0,
+    "maxMs": 0,
+    "heapBefore": {
+      "usedSize": 669804,
+      "totalSize": 1310720,
+      "embedderHeapUsedSize": 333544,
+      "backingStorageSize": 18412
+    },
+    "heapAfter": {
+      "usedSize": 761276,
+      "totalSize": 1572864,
+      "embedderHeapUsedSize": 337152,
+      "backingStorageSize": 18439
+    },
+    "note": "Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

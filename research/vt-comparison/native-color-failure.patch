@@ -1,0 +1,14 @@
+--- runtime.before.ts
++++ runtime.after.ts
+@@ -1638,7 +1638,10 @@
+         || this.#disposed
+         || !resource.workspace.keys.has(pageKey)
+       ) decoded.close();
+-      else {
++      else if (decoded.kind !== "image" && decoded.colorSpace !== (resource.asset.colorSpace ?? resource.manifest!.colorSpace)) {
++        decoded.close();
++        resource.failedPages.add(pageKey);
++      } else {
+         resource.readyPageKeys.add(pageKey);
+         resource.readyPages.push({ byteLength, decoded, page, pageKey, preview });
+         retained = true;

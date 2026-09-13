@@ -1,0 +1,5 @@
+{
+  "packages/renderer-webgl/src/virtual-texture/runtime.ts": "46770634ff54b8f2ae9dc8a351fdcec13e00360a2e65aa0cb43b20d90ab95b62",
+  "packages/renderer-webgl/src/texture/asset-owner.ts": "1340eb1640475d7e2b18f09b65281d26f41dc4e5f86507a600869d44784d93b6",
+  "packages/renderer-webgl/src/texture/browser-decode.ts": "73dae45f1e78a0f5d9446dca2816d53b14d7eb8ddf16e6b4fb89840d5b544365"
+}

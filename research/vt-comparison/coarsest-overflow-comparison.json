@@ -1,0 +1,242 @@
+{
+  "sourceHashes": {
+    "before": "a70aba78b53dab29bc3d2ee9492b68a3ebe2cd23fa31e45b6b2c0f2c7c9ce774",
+    "after": "2877512c1bd214a3d925b1312f9fbebe5d406a2cb90338bad6943f8619d27895"
+  },
+  "node": "v24.12.0",
+  "results": [
+    {
+      "version": "before",
+      "round": 0,
+      "width": 1,
+      "iterations": 100000,
+      "elapsedMs": 15.319519000000014,
+      "cpuMs": 25.387,
+      "count": 1,
+      "overflow": false,
+      "keys": [
+        0
+      ]
+    },
+    {
+      "version": "after",
+      "round": 0,
+      "width": 1,
+      "iterations": 100000,
+      "elapsedMs": 10.551662000000022,
+      "cpuMs": 20.563,
+      "count": 1,
+      "overflow": false,
+      "keys": [
+        0
+      ]
+    },
+    {
+      "version": "after",
+      "round": 1,
+      "width": 1,
+      "iterations": 100000,
+      "elapsedMs": 9.301529000000016,
+      "cpuMs": 14.804,
+      "count": 1,
+      "overflow": false,
+      "keys": [
+        0
+      ]
+    },
+    {
+      "version": "before",
+      "round": 1,
+      "width": 1,
+      "iterations": 100000,
+      "elapsedMs": 10.89870400000001,
+      "cpuMs": 22.208,
+      "count": 1,
+      "overflow": false,
+      "keys": [
+        0
+      ]
+    },
+    {
+      "version": "before",
+      "round": 2,
+      "width": 1,
+      "iterations": 100000,
+      "elapsedMs": 10.157830999999987,
+      "cpuMs": 15.315,
+      "count": 1,
+      "overflow": false,
+      "keys": [
+        0
+      ]
+    },
+    {
+      "version": "after",
+      "round": 2,
+      "width": 1,
+      "iterations": 100000,
+      "elapsedMs": 9.729351000000008,
+      "cpuMs": 13.851,
+      "count": 1,
+      "overflow": false,
+      "keys": [
+        0
+      ]
+    },
+    {
+      "version": "after",
+      "round": 3,
+      "width": 1,
+      "iterations": 100000,
+      "elapsedMs": 10.526467000000025,
+      "cpuMs": 14.455,
+      "count": 1,
+      "overflow": false,
+      "keys": [
+        0
+      ]
+    },
+    {
+      "version": "before",
+      "round": 3,
+      "width": 1,
+      "iterations": 100000,
+      "elapsedMs": 9.104242999999997,
+      "cpuMs": 13.103,
+      "count": 1,
+      "overflow": false,
+      "keys": [
+        0
+      ]
+    },
+    {
+      "version": "before",
+      "round": 0,
+      "width": 1024,
+      "iterations": 10,
+      "elapsedMs": 267.72715300000004,
+      "cpuMs": 275.943,
+      "count": 4,
+      "overflow": true,
+      "keys": [
+        0,
+        256,
+        512,
+        768
+      ]
+    },
+    {
+      "version": "after",
+      "round": 0,
+      "width": 1024,
+      "iterations": 10,
+      "elapsedMs": 0.038873999999964326,
+      "cpuMs": 0.031,
+      "count": 4,
+      "overflow": true,
+      "keys": [
+        0,
+        256,
+        512,
+        768
+      ]
+    },
+    {
+      "version": "after",
+      "round": 1,
+      "width": 1024,
+      "iterations": 10,
+      "elapsedMs": 0.041119000000094275,
+      "cpuMs": 0.033,
+      "count": 4,
+      "overflow": true,
+      "keys": [
+        0,
+        256,
+        512,
+        768
+      ]
+    },
+    {
+      "version": "before",
+      "round": 1,
+      "width": 1024,
+      "iterations": 10,
+      "elapsedMs": 269.4506909999999,
+      "cpuMs": 277.32,
+      "count": 4,
+      "overflow": true,
+      "keys": [
+        0,
+        256,
+        512,
+        768
+      ]
+    },
+    {
+      "version": "before",
+      "round": 2,
+      "width": 1024,
+      "iterations": 10,
+      "elapsedMs": 286.120819,
+      "cpuMs": 295.338,
+      "count": 4,
+      "overflow": true,
+      "keys": [
+        0,
+        256,
+        512,
+        768
+      ]
+    },
+    {
+      "version": "after",
+      "round": 2,
+      "width": 1024,
+      "iterations": 10,
+      "elapsedMs": 0.032294999999976426,
+      "cpuMs": 0.024,
+      "count": 4,
+      "overflow": true,
+      "keys": [
+        0,
+        256,
+        512,
+        768
+      ]
+    },
+    {
+      "version": "after",
+      "round": 3,
+      "width": 1024,
+      "iterations": 10,
+      "elapsedMs": 0.03238699999997152,
+      "cpuMs": 0.025,
+      "count": 4,
+      "overflow": true,
+      "keys": [
+        0,
+        256,
+        512,
+        768
+      ]
+    },
+    {
+      "version": "before",
+      "round": 3,
+      "width": 1024,
+      "iterations": 10,
+      "elapsedMs": 272.231178,
+      "cpuMs": 280.338,
+      "count": 4,
+      "overflow": true,
+      "keys": [
+        0,
+        256,
+        512,
+        768
+      ]
+    }
+  ],
+  "note": "Actual coarsest helper from Vite-built source; warmed alternating rounds, includes workspace reset, excludes rendering and decoding. Large case deliberately exhausts capacity. Not a GC benchmark."
+}

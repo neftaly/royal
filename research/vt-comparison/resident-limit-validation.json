@@ -1,0 +1,31 @@
+{
+  "testFiles": 149,
+  "tests": 1438,
+  "gltfManifestCases": 65,
+  "testExitCode": 0,
+  "typecheckExitCode": 0,
+  "researchTypecheckExitCode": 0,
+  "lintExitCode": 0,
+  "packageExitCode": 0,
+  "bundleExitCode": 0,
+  "mutationFailures": 12,
+  "sources": {
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "b6573774a9ac93f9bd6eff1c9a113faab2e1b392a1e1a2061d604dd1f2337ec1",
+    "packages/renderer-webgl/src/virtual-texture/residency.ts": "78b501474b674366564d1223e6386602c714cb2feaa27e7ddf677f04d1a8a49a",
+    "tests/replacement/renderer-webgl-vt-runtime.test.ts": "6890554a94901e91f965c463b6573d1d53bb7e08c4f2bf49b8b3363b67e58f82",
+    "tests/replacement/renderer-webgl-vt-residency.test.ts": "767283fff585343ea282f4d19dfb18190d6ee35cef702cd5c6511fd7813abe53",
+    "scripts/package-size-budget.json": "260f855f82852c12054c97a3a472b3ad957e5adbf8883193502d7402f272d52f",
+    "scripts/bundle-size-budget.json": "40d2346789a721959fa9b3fe3fd3cf5ee69cc5e97391df382bb9f2b83e17c0d5"
+  },
+  "logs": {
+    "/tmp/royal-vt-resident-limit-full-test.log": "7b931e093cc78c1d8ef82fc01a69aaf708b0276396236d21eed3c42b6c310118",
+    "/tmp/royal-vt-resident-limit-types.log": "5ac71a99decf5b92dbfe798066cbe8ea317395f8f764f5a8879fd3511ca99454",
+    "/tmp/royal-vt-resident-limit-research-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/tmp/royal-vt-resident-limit-lint.log": "376ca9de1f8e26ecd64fd86c2273f9d623325fc0ba64edbb31155195702aa149",
+    "/tmp/royal-vt-resident-limit-package-final.log": "a616868b30416c71c6e2ca7d7e041c16d61c07ccdeaedf2b70be3d805e4a2a8b",
+    "/tmp/royal-vt-resident-limit-bundle-final.log": "70af396ae115eafca1c856da535bf00173983a3e45754d2e42af479a86ed34fa",
+    "/tmp/royal-vt-resident-limit-mutation.log": "ba48c01705fdb77b3a82b39ebaad67baef65124fe09da6b37f705a372b8700d6",
+    "/tmp/royal-vt-resident-limit-restored.log": "0ec4533d202e5daf1688c0af8f1324dfd078a9735d4d2e4ac21a4abf06c49791"
+  },
+  "note": "Authored residency ceiling fix and adversarial verification. Package allowance +256 bytes; lazy and total bundle allowances +64 gzip bytes. Initial and worker ceilings unchanged. No commits."
+}

@@ -1,0 +1,6 @@
+{
+  "packages/renderer-webgl/src/virtual-texture/runtime.ts": {
+    "before": "b6573774a9ac93f9bd6eff1c9a113faab2e1b392a1e1a2061d604dd1f2337ec1",
+    "candidate": "aefb80a9b93f8c2294eafd68099f1857833cf797a8e06f87f97b8c7a8071eb48"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "checks": [
+    {
+      "astc": "6x6",
+      "artifact": "image-cancellation-gpu-6x6.json",
+      "submissionMs": {
+        "median": 0.5,
+        "p95": 0.8999999761581421,
+        "max": 1.2000000476837158
+      },
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "gcEvents": 1
+    },
+    {
+      "astc": "8x8",
+      "artifact": "image-cancellation-gpu-8x8.json",
+      "submissionMs": {
+        "median": 0.5,
+        "p95": 0.8999999761581421,
+        "max": 1.1999999284744263
+      },
+      "pixel": [
+        254,
+        254,
+        254,
+        255
+      ],
+      "gcEvents": 1
+    }
+  ],
+  "sources": {
+    "packages/renderer-webgl/src/virtual-texture/browser-page-source.ts": "7fcf3c73df7fecd34dd058e63f7afa74114cf48d9b8d2e5133f737e9a53e3478",
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "e4e94e2ab212d037b057549142493b17e45135fe2b1be92f4c95fbdd271742fa"
+  },
+  "scope": "Current-worktree integration; no cancellation timing or comparative gain claim",
+  "committed": false
+}

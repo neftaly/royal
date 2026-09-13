@@ -1,0 +1,537 @@
+{
+  "results": [
+    {
+      "size": 5184,
+      "round": 0,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 28.19999998807907,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 0,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 13.799999952316284,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 1,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 25.5,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 1,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 23,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 2,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 25,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 2,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 18.099999964237213,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 3,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 15.199999988079071,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 3,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 18.100000023841858,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 4,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 17.5,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 4,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 16,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 5,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 16.100000023841858,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 5,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 17,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 6,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 16.399999976158142,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 6,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 18.799999952316284,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 7,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 14.400000035762787,
+      "checksum": 1460000
+    },
+    {
+      "size": 5184,
+      "round": 7,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 19.100000023841858,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 0,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 56.10000002384186,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 0,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 38.5,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 1,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 28.80000001192093,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 1,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 31.69999998807907,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 2,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 27.80000001192093,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 2,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 25.700000047683716,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 3,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 24.900000035762787,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 3,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 32.60000002384186,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 4,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 33.40000003576279,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 4,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 29.700000047683716,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 5,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 34.09999996423721,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 5,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 38.69999998807907,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 6,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 38.5,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 6,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 32.69999998807907,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 7,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 32.80000001192093,
+      "checksum": 1460000
+    },
+    {
+      "size": 9216,
+      "round": 7,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 37.30000001192093,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 0,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 40.30000001192093,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 0,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 33.30000001192093,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 1,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 36.89999997615814,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 1,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 47.59999996423721,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 2,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 41.80000001192093,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 2,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 33.10000002384186,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 3,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 31.19999998807907,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 3,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 32,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 4,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 39.10000002384186,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 4,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 31.399999976158142,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 5,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 32.5,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 5,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 42.299999952316284,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 6,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 42.10000002384186,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 6,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 32.30000001192093,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 7,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 37.90000003576279,
+      "checksum": 1460000
+    },
+    {
+      "size": 10368,
+      "round": 7,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 41,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 0,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 127.59999996423721,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 0,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 102.30000001192093,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 1,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 125.5,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 1,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 127.30000001192093,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 2,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 125.09999996423721,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 2,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 115.10000002384186,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 3,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 95,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 3,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 118.69999998807907,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 4,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 126.19999998807907,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 4,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 118.5,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 5,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 127,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 5,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 131,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 6,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 125.90000003576279,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 6,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 120.19999998807907,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 7,
+      "method": "constructor",
+      "calls": 10000,
+      "elapsedMs": 143,
+      "checksum": 1460000
+    },
+    {
+      "size": 20736,
+      "round": 7,
+      "method": "slice",
+      "calls": 10000,
+      "elapsedMs": 132.20000004768372,
+      "checksum": 1460000
+    }
+  ],
+  "equivalentInputs": 16,
+  "note": "Isolated browser typed-array copy screening. Per-batch timings exclude validation and warm-up; aggregate trace includes them. No parser, Response, runtime queue or upload. Each output is exact-size, separate storage and every byte is verified before timing.",
+  "gc": {
+    "events": 171,
+    "totalMs": 59.73500000000001,
+    "maxMs": 3.667,
+    "heapBefore": {
+      "usedSize": 654120,
+      "totalSize": 1310720,
+      "embedderHeapUsedSize": 308600,
+      "backingStorageSize": 2112
+    },
+    "heapAfter": {
+      "usedSize": 676588,
+      "totalSize": 1572864,
+      "embedderHeapUsedSize": 308600,
+      "backingStorageSize": 2112
+    },
+    "note": "Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

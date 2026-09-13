@@ -1,0 +1,15 @@
+{
+  "sha256": {
+    "packages/renderer-webgl/src/virtual-texture/demand.ts": "64a72192ad60199cfe2fb3f6bfb52ec7116f9d57e55333a1ab545c30f8dfcce5",
+    "tests/replacement/renderer-webgl-vt.property.test.ts": "f4ebd140d1b9f25875e86dcce09c64f240a335a1314a99c29f4855d5e885b705"
+  },
+  "scenarios": 256,
+  "scope": "64 seeded rectangular direct-demand sets, optional adjacent mip requests, four capacities each. Independent projection oracle for finest feasible complete-level coarsening.",
+  "checks": {
+    "types": "pass",
+    "propertiesAndDemand": "pass after mutation restoration",
+    "overCoarseningMutation": "fails when usable capacity is artificially halved"
+  },
+  "productionChanged": false,
+  "committed": false
+}

@@ -1,0 +1,18 @@
+{
+  "sha256": {
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "ac809cb036df45aaf1e0742b8d8a443274f1d7b7ea239aab9ad5a3a54519184a",
+    "research/vt-comparison/resident-limit-gpu.ts": "97cd841f1bf05d44f60d15109c995b49155b09c8d90a01ca7d893956df2166eb",
+    "research/vt-comparison/table-mips-coarse-readback.json": "ba8d4225db8b743ea038e8f2c8a381d2f9111ed49434345a9f5c9cd6a7e33d4e"
+  },
+  "checks": {
+    "researchTypes": "pass",
+    "researchBuild": "pass",
+    "hostGpu": "8 cases, 6 phases, 144 color samples and 96 coarse-level CPU/GPU comparisons; all pass",
+    "controlInitial": "rejected missing coarse upload",
+    "controlEviction": "rejected stale GPU table after preserving initial uploads",
+    "originalSingleMipFixture": "8 cases also pass with enhanced shared fixture"
+  },
+  "scope": "Headless Intel GPU correctness only, no timing/GC measurement",
+  "productionChanges": false,
+  "committed": false
+}

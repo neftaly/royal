@@ -1,0 +1,24 @@
+--- a/packages/renderer-webgl/src/virtual-texture/runtime.ts
++++ b/packages/renderer-webgl/src/virtual-texture/runtime.ts
+@@ -1761,10 +1761,12 @@
+   #publishPageTable(resource: RuntimeResource): void {
+     const gpu = resource.gpu!;
+     const manifest = resource.manifest!;
++    let highestMip = gpu.pageTableRebuild ? manifest.mipCount - 1 : 0;
+     if (gpu.pageTableRebuild) {
+       writeVirtualTexturePageTable(manifest, gpu.residentSlots, gpu.atlas.atlasColumns, gpu.pageTableBytes);
+     } else {
+       for (const page of gpu.pageTableAdditions) {
++        highestMip = Math.max(highestMip, page.mip);
+         const slot = gpu.residentSlots.get(virtualTexturePageKeyParts(page.mip, page.x, page.y));
+         if (slot !== undefined) addVirtualTexturePageTablePage(manifest, page, slot, gpu.atlas.atlasColumns, gpu.pageTableBytes);
+       }
+@@ -1774,7 +1776,7 @@
+     const gl = this.#gl;
+     gl.activeTexture(gl.TEXTURE5);
+     gl.bindTexture(gl.TEXTURE_2D, gpu.pageTableTexture);
+-    for (let mip = 0; mip < manifest.mipCount; mip += 1) {
++    for (let mip = 0; mip <= highestMip; mip += 1) {
+       gl.texSubImage2D(
+         gl.TEXTURE_2D,
+         mip,

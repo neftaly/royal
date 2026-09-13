@@ -1,0 +1,22 @@
+{
+  "sourceHashes": {
+    "before": "c6a8f5b090d27994893d4b6e477e54493cf4f4f6c591ca68ab950699dda41fd4",
+    "after": "7710910e60df0a2a11dca8dc0030870dd914e9b7f22b0a964a2b89bf5ea8c9d5"
+  },
+  "oracleCases": 10000,
+  "originResults": [
+    {
+      "version": "before",
+      "frames": 10000,
+      "invalidations": 10000,
+      "cachedBytes": 160
+    },
+    {
+      "version": "after",
+      "frames": 10000,
+      "invalidations": 1,
+      "cachedBytes": 144
+    }
+  ],
+  "note": "Actual view-comparison body checked against independently serialized relevant inputs. Exercises zero/multiple views, replacements, translations and each dimension. Origin-only invalidation counts are deterministic; not a renderer frame-time benchmark."
+}

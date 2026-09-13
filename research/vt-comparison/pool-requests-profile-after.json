@@ -1,0 +1,124 @@
+{
+  "summaries": [
+    {
+      "file": "research/vt-comparison/pool-requests-after.json",
+      "sampledBytes": 17232464,
+      "frames": 600,
+      "allocations": [
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:384",
+          "bytes": 5625680
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1493",
+          "bytes": 3671352
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-visibility.ts:93",
+          "bytes": 1573140
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:746",
+          "bytes": 1540820
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/pool-budget.ts:8",
+          "bytes": 1082144
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:693",
+          "bytes": 622808
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:197",
+          "bytes": 493840
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:803",
+          "bytes": 458956
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:892",
+          "bytes": 327960
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1365",
+          "bytes": 327800
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:100",
+          "bytes": 196800
+        },
+        {
+          "source": "packages/renderer-core/src/camera-resource.ts:101",
+          "bytes": 196680
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:376",
+          "bytes": 163872
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:408",
+          "bytes": 131100
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1003",
+          "bytes": 98340
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-gpu-owner.ts:1386",
+          "bytes": 98316
+        },
+        {
+          "source": "packages/renderer-webgl/src/texture/gpu-owner.ts:123",
+          "bytes": 65580
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-program-owner.ts:565",
+          "bytes": 65560
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1349",
+          "bytes": 65560
+        },
+        {
+          "source": "packages/renderer-webgl/src/runtime/overlay-owner.ts:113",
+          "bytes": 65560
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:140",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-depth-order.ts:15",
+          "bytes": 65544
+        },
+        {
+          "source": "research/vt-comparison/steady.ts:20",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/frame/frame-clock-owner.ts:129",
+          "bytes": 32832
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1065",
+          "bytes": 32796
+        },
+        {
+          "source": "packages/renderer-webgl/src/runtime/retained-presentation-owner.ts:130",
+          "bytes": 32784
+        },
+        {
+          "source": "packages/renderer-webgl/src/frame/frame-clock-owner.ts:118",
+          "bytes": 32780
+        },
+        {
+          "source": "research/vt-comparison/steady.ts:53",
+          "bytes": 32772
+        }
+      ]
+    }
+  ],
+  "note": "Sampling estimates, not exact allocation counts. Native allocation frames inherit the nearest source-mapped JavaScript ancestor. Source maps must match the captured build."
+}

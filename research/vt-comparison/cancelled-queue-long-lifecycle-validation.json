@@ -1,0 +1,54 @@
+{
+  "cases": [
+    {
+      "kind": "svg",
+      "artifact": "cancelled-queue-svg-lifecycle-long.json",
+      "liveJsBytes": [
+        2561312,
+        2970856,
+        3135992,
+        3155388,
+        3297260,
+        3350316,
+        3359872,
+        3361136,
+        3371424,
+        3374804,
+        3394804,
+        3430424,
+        3440836
+      ],
+      "lastSixRange": 79700,
+      "backingStorageBytes": [
+        405536
+      ]
+    },
+    {
+      "kind": "raster",
+      "artifact": "cancelled-queue-raster-lifecycle-long.json",
+      "liveJsBytes": [
+        2315792,
+        2700172,
+        2846560,
+        2887412,
+        2949756,
+        2984984,
+        3039792,
+        3041668,
+        3051980,
+        3055464,
+        3067716,
+        3080944,
+        3091308
+      ],
+      "lastSixRange": 49640,
+      "backingStorageBytes": [
+        402533
+      ]
+    }
+  ],
+  "source": "packages/renderer-webgl/src/resource/async-preparation-owner.ts",
+  "sha256": "c3f583e24e925bbae9ce61be79d7937e5f15dd8e876c0e898ce37ee12c115bb0",
+  "scope": "Resource release and progress; residual heap growth remains unattributed at this checkpoint",
+  "committed": false
+}

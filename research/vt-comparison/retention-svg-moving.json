@@ -1,0 +1,122 @@
+{
+  "results": [
+    {
+      "name": "steady-svg",
+      "minFilter": "moving",
+      "frames": 600,
+      "submissionMs": {
+        "median": 0.2999999523162842,
+        "p95": 0.5,
+        "max": 5
+      },
+      "frameIntervalMs": {
+        "median": 16.69999999999709,
+        "p95": 16.700000000004366,
+        "max": 33.30000000000291
+      },
+      "before": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 2230272,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 1310720,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      },
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 2230272,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 1310720,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      },
+      "pixel": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/retention-svg-moving-images/steady-svg-moving.png"
+    }
+  ],
+  "note": "Warm-up, snapshots, pixel readback and screenshots are outside the measurement window. Measured frames use camera resource commits or explicit invalidation; One reusable rAF callback and timing calls remain harness overhead. CPU/GPU source owners remain alive through heap measurement.",
+  "retention": {
+    "windows": 6,
+    "heaps": [
+      {
+        "usedSize": 2336080,
+        "totalSize": 2621440,
+        "embedderHeapUsedSize": 446672,
+        "backingStorageSize": 524440
+      },
+      {
+        "usedSize": 2617968,
+        "totalSize": 3407872,
+        "embedderHeapUsedSize": 577928,
+        "backingStorageSize": 524440
+      },
+      {
+        "usedSize": 2616848,
+        "totalSize": 3407872,
+        "embedderHeapUsedSize": 592288,
+        "backingStorageSize": 524440
+      },
+      {
+        "usedSize": 2631192,
+        "totalSize": 3407872,
+        "embedderHeapUsedSize": 573504,
+        "backingStorageSize": 524440
+      },
+      {
+        "usedSize": 2631764,
+        "totalSize": 3407872,
+        "embedderHeapUsedSize": 445216,
+        "backingStorageSize": 524440
+      },
+      {
+        "usedSize": 2632172,
+        "totalSize": 3407872,
+        "embedderHeapUsedSize": 593256,
+        "backingStorageSize": 524440
+      },
+      {
+        "usedSize": 2633584,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 573544,
+        "backingStorageSize": 524440
+      }
+    ],
+    "note": "Same live scene across all windows. Forced GC between windows; no tracing or sampling. Final timing statistics describe only the last window; diagnostics run after the last heap sample."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

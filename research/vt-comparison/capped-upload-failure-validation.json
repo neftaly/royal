@@ -1,0 +1,17 @@
+{
+  "nativeCases": 6,
+  "mutationFailures": 6,
+  "relatedTests": 249,
+  "typecheckExitCode": 0,
+  "sources": {
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "b6573774a9ac93f9bd6eff1c9a113faab2e1b392a1e1a2061d604dd1f2337ec1",
+    "tests/replacement/renderer-webgl-vt-runtime.test.ts": "9f4fb61c9ea1fc9328328e180854980d521a5d34b58dd910b850d3234dd2e0ed"
+  },
+  "logs": {
+    "/tmp/royal-vt-capped-upload-failure.log": "df42726060e6dc35440e322afd5ab2d605440574915440d176c254f78cb052cb",
+    "/tmp/royal-vt-capped-upload-early-eviction.log": "ac446e2e6e41a768496c9bf959d97c7ccb1012997dc0597e844cb1bed6c9b433",
+    "/tmp/royal-vt-capped-upload-final.log": "f0140d6b7668a78d7f66578396c032c5c25899af6f5a1cedceb956a4e7ef3c35",
+    "/tmp/royal-vt-capped-upload-types.log": "5ac71a99decf5b92dbfe798066cbe8ea317395f8f764f5a8879fd3511ca99454"
+  },
+  "note": "Mocked synchronous native upload failure. Production source restored byte-for-byte; no production changes or commits."
+}

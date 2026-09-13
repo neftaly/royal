@@ -1,0 +1,5 @@
+{
+  "research/vt-comparison/large-contention.ts": "5b8d30069ad1c1abd2fb29e7aae7b87ca233696c87d5c8d0f040f151374d8759",
+  "packages/renderer-webgl/src/virtual-texture/runtime.ts": "15dfde7dbbb9438c5c581f8a01ceb4e20d25ce31cd807398c594be704c48b3d3",
+  "packages/renderer-webgl/src/texture/browser-decode.ts": "73dae45f1e78a0f5d9446dca2816d53b14d7eb8ddf16e6b4fb89840d5b544365"
+}

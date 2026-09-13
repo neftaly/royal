@@ -1,3 +1,4 @@
+import { fitOrdinaryTextureStorage } from "./storage-fit";
 import {
   canReserveTextureSource,
   replaceTextureReservationInto,
@@ -103,6 +104,8 @@ export type TextureAssetOwnerPlatform = Readonly<{
     retainAlpha?: boolean,
   ): Promise<DecodedTextureSource>;
   onAssetChanged(key: string): void;
+  /** Release optional raster consumers before a larger fitted decode replaces their source. */
+  releaseDecoded?(asset: TextureSourceRef): void;
   onListenerError(error: unknown): void;
   onSnapshotChanged(key: string): void;
   now?(): number;
@@ -117,6 +120,7 @@ type AssetEntry = {
   controller: AbortController | undefined;
   reservation: TextureReservation;
   preparationDeferred: boolean;
+  preparationStorageBytes: number | undefined;
   readonly key: string;
   decoded: DecodedTextureSource | undefined;
   decodedClaims: number;
@@ -267,8 +271,8 @@ export class TextureAssetOwner {
     const encodedSourceReads = this.#platform.readAheadSnapshot?.();
     for (const entry of this.#entries.values()) {
       retainedEncodedSourceBytes += entry.decoded?.kind !== undefined
-        ? entry.decoded.svgPreview?.encoded?.byteLength ?? 0
-        : entry.decoded?.encodedSvg?.byteLength ?? entry.decoded?.svgPreview?.encoded?.byteLength ?? 0;
+        ? entry.decoded.preview?.encoded?.byteLength ?? 0
+        : entry.decoded?.encodedSvg?.byteLength ?? entry.decoded?.preview?.encoded?.byteLength ?? 0;
       for (const storageKey of entry.claimedStorageKeys) {
         if (!entry.residentStorageKeys.has(storageKey)) pendingStorageRepresentations += 1;
       }
@@ -330,6 +334,7 @@ export class TextureAssetOwner {
         continue;
       }
       entry.asset = claim.asset;
+      this.#refreshStorageFit(entry);
       entry.claimedStorageKeys.clear();
       for (const storageKey of claim.storageKeys) entry.claimedStorageKeys.add(storageKey);
       for (const storageKey of entry.residentStorageKeys) {
@@ -478,6 +483,7 @@ export class TextureAssetOwner {
       controller: undefined,
       reservation: undefined,
       preparationDeferred: false,
+      preparationStorageBytes: undefined,
       decoded: undefined,
       decodedClaims: 0,
       decodedReleased: false,
@@ -493,6 +499,23 @@ export class TextureAssetOwner {
     };
     this.#entries.set(key, entry);
     this.#publish(key);
+    this.#queuePreparation(entry);
+  }
+
+  #refreshStorageFit(entry: AssetEntry): void {
+    const source = entry.decoded;
+    if (source === undefined || source.sourceWidth === undefined || source.preview !== undefined
+      || (source.kind === undefined && source.encodedSvg !== undefined && entry.decodedClaims > 0)
+      || entry.snapshot.status === "error"
+      || (this.#maxStorageBytes ?? Infinity) <= (entry.preparationStorageBytes ?? Infinity)) return;
+    const fit = source.kind === undefined
+      ? fitOrdinaryTextureStorage(source.sourceWidth, source.sourceHeight ?? source.height, this.#maxStorageBytes ?? Number.MAX_SAFE_INTEGER)
+      : { width: source.sourceWidth, height: source.sourceHeight ?? source.height };
+    if (fit.width <= source.width && fit.height <= source.height) {
+      entry.preparationStorageBytes = this.#maxStorageBytes;
+      return;
+    }
+    if (entry.decodedClaims > 0) this.#platform.releaseDecoded?.(entry.asset);
     this.#queuePreparation(entry);
   }
 
@@ -567,6 +590,7 @@ export class TextureAssetOwner {
     entry.decoded.close?.();
     entry.decodedReleased = true;
     this.#releaseSourceReservation(entry);
+    this.#refreshStorageFit(entry);
   }
 
   #prepare(entry: AssetEntry): void {
@@ -577,6 +601,7 @@ export class TextureAssetOwner {
     const retainAlpha = entry.retainAlpha;
     const alphaOnly = entry.decodedClaims > 0;
     entry.preparationRetainsAlpha = retainAlpha;
+    entry.preparationStorageBytes = this.#maxStorageBytes;
     const decoding: Promise<DecodedTextureSource> = retainAlpha
       ? this.#platform.decode(asset, controller.signal, this.#maxStorageBytes, true)
       : this.#platform.decode(asset, controller.signal, this.#maxStorageBytes);
@@ -642,6 +667,7 @@ export class TextureAssetOwner {
         decodedSource.close?.();
         throw error;
       }
+      if (entry.decoded !== undefined && (entry.decoded.width !== decodedSource.width || entry.decoded.height !== decodedSource.height)) entry.residentStorageKeys.clear();
       if (!entry.decodedReleased) entry.decoded?.close?.();
       entry.controller = undefined;
       entry.alpha = entry.retainAlpha ? alpha : undefined;

@@ -1,0 +1,18 @@
+{
+  "cases": 18,
+  "source": "packages/renderer-webgl/src/virtual-texture/shader-source.ts",
+  "sha256": "a45321147792c8c506740f3c60ddd03fef3ed624505c33fc703580a22555f74b",
+  "controlFailure": {
+    "vk": 0,
+    "linearMip": 0,
+    "width": 128,
+    "pixel": [
+      55,
+      55,
+      55,
+      255
+    ]
+  },
+  "productionChanged": false,
+  "committed": false
+}

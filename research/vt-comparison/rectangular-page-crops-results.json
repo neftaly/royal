@@ -1,0 +1,294 @@
+{
+  "results": [
+    {
+      "name": "rectangular-crops-wide",
+      "minFilter": "clamp-to-edge/clamp-to-edge",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.0078125,
+      "logical": {
+        "width": 8192,
+        "height": 4096
+      },
+      "fitted": {
+        "width": 5017,
+        "height": 2508
+      }
+    },
+    {
+      "name": "rectangular-crops-wide",
+      "minFilter": "clamp-to-edge/repeat",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.0234375,
+      "logical": {
+        "width": 8192,
+        "height": 4096
+      },
+      "fitted": {
+        "width": 5017,
+        "height": 2508
+      }
+    },
+    {
+      "name": "rectangular-crops-wide",
+      "minFilter": "clamp-to-edge/mirrored-repeat",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.0078125,
+      "logical": {
+        "width": 8192,
+        "height": 4096
+      },
+      "fitted": {
+        "width": 5017,
+        "height": 2508
+      }
+    },
+    {
+      "name": "rectangular-crops-wide",
+      "minFilter": "repeat/clamp-to-edge",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.01171875,
+      "logical": {
+        "width": 8192,
+        "height": 4096
+      },
+      "fitted": {
+        "width": 5017,
+        "height": 2508
+      }
+    },
+    {
+      "name": "rectangular-crops-wide",
+      "minFilter": "repeat/repeat",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.0234375,
+      "logical": {
+        "width": 8192,
+        "height": 4096
+      },
+      "fitted": {
+        "width": 5017,
+        "height": 2508
+      }
+    },
+    {
+      "name": "rectangular-crops-wide",
+      "minFilter": "repeat/mirrored-repeat",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.01171875,
+      "logical": {
+        "width": 8192,
+        "height": 4096
+      },
+      "fitted": {
+        "width": 5017,
+        "height": 2508
+      }
+    },
+    {
+      "name": "rectangular-crops-wide",
+      "minFilter": "mirrored-repeat/clamp-to-edge",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.01171875,
+      "logical": {
+        "width": 8192,
+        "height": 4096
+      },
+      "fitted": {
+        "width": 5017,
+        "height": 2508
+      }
+    },
+    {
+      "name": "rectangular-crops-wide",
+      "minFilter": "mirrored-repeat/repeat",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.0234375,
+      "logical": {
+        "width": 8192,
+        "height": 4096
+      },
+      "fitted": {
+        "width": 5017,
+        "height": 2508
+      }
+    },
+    {
+      "name": "rectangular-crops-wide",
+      "minFilter": "mirrored-repeat/mirrored-repeat",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.01171875,
+      "logical": {
+        "width": 8192,
+        "height": 4096
+      },
+      "fitted": {
+        "width": 5017,
+        "height": 2508
+      }
+    },
+    {
+      "name": "rectangular-crops-tall",
+      "minFilter": "clamp-to-edge/clamp-to-edge",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.0078125,
+      "logical": {
+        "width": 4096,
+        "height": 8192
+      },
+      "fitted": {
+        "width": 2508,
+        "height": 5017
+      }
+    },
+    {
+      "name": "rectangular-crops-tall",
+      "minFilter": "clamp-to-edge/repeat",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.01171875,
+      "logical": {
+        "width": 4096,
+        "height": 8192
+      },
+      "fitted": {
+        "width": 2508,
+        "height": 5017
+      }
+    },
+    {
+      "name": "rectangular-crops-tall",
+      "minFilter": "clamp-to-edge/mirrored-repeat",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.01171875,
+      "logical": {
+        "width": 4096,
+        "height": 8192
+      },
+      "fitted": {
+        "width": 2508,
+        "height": 5017
+      }
+    },
+    {
+      "name": "rectangular-crops-tall",
+      "minFilter": "repeat/clamp-to-edge",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.0234375,
+      "logical": {
+        "width": 4096,
+        "height": 8192
+      },
+      "fitted": {
+        "width": 2508,
+        "height": 5017
+      }
+    },
+    {
+      "name": "rectangular-crops-tall",
+      "minFilter": "repeat/repeat",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.0234375,
+      "logical": {
+        "width": 4096,
+        "height": 8192
+      },
+      "fitted": {
+        "width": 2508,
+        "height": 5017
+      }
+    },
+    {
+      "name": "rectangular-crops-tall",
+      "minFilter": "repeat/mirrored-repeat",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.0234375,
+      "logical": {
+        "width": 4096,
+        "height": 8192
+      },
+      "fitted": {
+        "width": 2508,
+        "height": 5017
+      }
+    },
+    {
+      "name": "rectangular-crops-tall",
+      "minFilter": "mirrored-repeat/clamp-to-edge",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.0078125,
+      "logical": {
+        "width": 4096,
+        "height": 8192
+      },
+      "fitted": {
+        "width": 2508,
+        "height": 5017
+      }
+    },
+    {
+      "name": "rectangular-crops-tall",
+      "minFilter": "mirrored-repeat/repeat",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.01171875,
+      "logical": {
+        "width": 4096,
+        "height": 8192
+      },
+      "fitted": {
+        "width": 2508,
+        "height": 5017
+      }
+    },
+    {
+      "name": "rectangular-crops-tall",
+      "minFilter": "mirrored-repeat/mirrored-repeat",
+      "pages": 7,
+      "samples": 343,
+      "maxError": 1.01171875,
+      "logical": {
+        "width": 4096,
+        "height": 8192
+      },
+      "fitted": {
+        "width": 2508,
+        "height": 5017
+      }
+    }
+  ],
+  "note": "Production raster-page canvas adapter with coordinate-coded fitted artwork. Independent normalized-coordinate checks cover portrait/landscape, all nine wrap pairs, mip levels, edge/interior pages and gutters. Three-level RGBA tolerance allows 8-bit quantization/filtering. Not a renderer shader, screenshot-quality or timing benchmark.",
+  "gc": {
+    "events": 4,
+    "totalMs": 3.96,
+    "maxMs": 1.762,
+    "heapBefore": {
+      "usedSize": 935224,
+      "totalSize": 1835008,
+      "embedderHeapUsedSize": 341064,
+      "backingStorageSize": 317707
+    },
+    "heapAfter": {
+      "usedSize": 1039144,
+      "totalSize": 1835008,
+      "embedderHeapUsedSize": 369928,
+      "backingStorageSize": 340173
+    },
+    "note": "Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

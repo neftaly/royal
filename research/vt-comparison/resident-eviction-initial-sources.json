@@ -1,0 +1,9 @@
+{
+  "research/vt-comparison/resident-eviction.ts": "13077dac4538d06e63b0b659df34a038873f14892402c2ab6455777e578624ac",
+  "research/vt-comparison/resident-eviction.html": "5e9e966fe1bdc3a2b39b3099edeaa1d625c9b5e4da1eec01eaa5aece8e6d3620",
+  "research/vt-comparison/resident-limit-gpu.ts": "605104f1802db00715f585b7c00041cc3e0cadff0be94527c40fd95141eae11c",
+  "research/vt-comparison/build-client.mjs": "fb5a34c10f5c0874c9942ff0c60238d33bc6346aa41e7e22badc7d435f2f6921",
+  "packages/renderer-webgl/src/virtual-texture/runtime.ts": "b6573774a9ac93f9bd6eff1c9a113faab2e1b392a1e1a2061d604dd1f2337ec1",
+  "packages/renderer-webgl/src/virtual-texture/browser-page-source.ts": "4edc82953596b419bed400b8e1a27c850899caa0564285b5f264a1daf7480057",
+  "packages/renderer-webgl/src/virtual-texture/residency.ts": "78b501474b674366564d1223e6386602c714cb2feaa27e7ddf677f04d1a8a49a"
+}

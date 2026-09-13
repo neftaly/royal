@@ -38,3 +38,10 @@ it("keeps integer allocations within the ceiling across uneven pool counts", () 
     }
   }
 });
+
+it("redistributes bytes through successive demand caps without starving the last pool", () => {
+  const requests = [11, 20, 50, 200].map((wantedBytes, index) => ({ key: String(index), minimumBytes: 10, wantedBytes }));
+  expect([...allocateVirtualTexturePoolBytes(requests, 160).values()]).toEqual([11, 20, 50, 79]);
+  expect(Object.fromEntries(allocateVirtualTexturePoolBytes([...requests].reverse(), 160)))
+    .toEqual({ 0: 11, 1: 20, 2: 50, 3: 79 });
+});

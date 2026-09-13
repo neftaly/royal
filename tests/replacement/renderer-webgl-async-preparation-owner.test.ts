@@ -6,6 +6,66 @@ import {
 } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
 
 describe("asynchronous preparation owner", () => {
+  it.each(["detail", "foreground"])("preserves live %s queue work ahead of a cancelled tail", async lane => {
+    const owner = new AsyncPreparationOwner(1);
+    let finish!: () => void;
+    const active = owner.runForeground(new AbortController().signal, () => new Promise<void>(resolve => { finish = resolve; }));
+    const run = lane === "detail" ? owner.run : owner.runForeground;
+    const prepare = vi.fn(async () => 42), cancelled = vi.fn(async () => 0);
+    const live = run(new AbortController().signal, prepare);
+    const controller = new AbortController();
+    const tail = run(controller.signal, cancelled);
+    try {
+      const rejected = expect(tail).rejects.toMatchObject({ name: "AbortError" });
+      controller.abort(); await rejected;
+      expect(owner.snapshot()).toMatchObject({ activeJobs: 1, queuedJobs: 1 });
+      expect(prepare).not.toHaveBeenCalled();
+      finish(); await active;
+      await expect(live).resolves.toBe(42);
+      expect(prepare).toHaveBeenCalledOnce();
+      expect(cancelled).not.toHaveBeenCalled();
+      expect(owner.snapshot()).toMatchObject({ activeJobs: 0, queuedJobs: 0 });
+    } finally { owner.dispose(); finish(); await active; }
+  });
+
+  it.each(["detail", "foreground"])("releases cancelled %s queue entries while capacity stays full", async lane => {
+    const owner = new AsyncPreparationOwner(1);
+    let finish!: () => void;
+    const active = owner.runForeground(new AbortController().signal, () => new Promise<void>(resolve => { finish = resolve; }));
+    const prepare = vi.fn(async () => undefined);
+    try {
+      for (let index = 0; index < 100; index++) {
+        const controller = new AbortController();
+        const queued = (lane === "detail" ? owner.run : owner.runForeground)(controller.signal, prepare);
+        const rejected = expect(queued).rejects.toMatchObject({ name: "AbortError" });
+        controller.abort();
+        await rejected;
+      }
+      expect(owner.snapshot()).toMatchObject({ activeJobs: 1, queuedJobs: 0 });
+      expect(prepare).not.toHaveBeenCalled();
+    } finally { owner.dispose(); finish(); await active; }
+  });
+
+  it.each(["foreground", "detail"])("unlinks arbitrary %s jobs while preserving FIFO order", async lane => {
+    const owner = new AsyncPreparationOwner(1);
+    let finish!: () => void;
+    const active = owner.runForeground(new AbortController().signal, () => new Promise<void>(resolve => { finish = resolve; }));
+    const starts: number[] = [], controllers = Array.from({ length: 100 }, () => new AbortController());
+    const run = lane === "detail" ? owner.run : owner.runForeground;
+    const jobs = controllers.map((controller, index) => run(controller.signal, async () => { starts.push(index); }).catch(error => {
+      expect(error.name).toBe("AbortError");
+    }));
+    try {
+      // Tail, interior and head removals in reverse order; repeated aborts are harmless.
+      for (let index = 99; index >= 0; index -= 3) { controllers[index]!.abort(); controllers[index]!.abort(); }
+      expect(owner.snapshot()).toMatchObject({ queuedJobs: 66, activeJobs: 1 });
+      expect(starts).toEqual([]);
+      finish(); await active; await Promise.all(jobs);
+      expect(starts).toEqual(Array.from({ length: 100 }, (_, index) => index).filter(index => index % 3 !== 0));
+      expect(owner.snapshot()).toMatchObject({ queuedJobs: 0, activeJobs: 0 });
+    } finally { owner.dispose(); finish(); await active; }
+  });
+
   it("starts a bounded FIFO prefix and admits the next job after settlement", async () => {
     const onChanged = vi.fn();
     const owner = new AsyncPreparationOwner(2, onChanged);

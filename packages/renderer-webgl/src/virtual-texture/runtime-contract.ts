@@ -9,19 +9,16 @@ import {
 import type { CanonicalSurfaceScene } from "../surface/scene-lowering";
 import type { TextureUnitBinding } from "../webgl/draw-state-transition";
 
-const versionIdentity = (version: VirtualTextureAssetRef["version"]): readonly unknown[] =>
-  version === undefined
-    ? ["unversioned"]
-    : ["version", typeof version, version];
-
-export const virtualTextureAssetKey = (asset: VirtualTextureAssetRef): string => JSON.stringify([
-  asset.contentKey === undefined
-    ? ["manifest", asset.manifestUri]
-    : ["content", typeof asset.contentKey, asset.contentKey],
-  versionIdentity(asset.version),
-  asset.colorSpace ?? "srgb",
-  canonicalTextureSamplerKey(canonicalTextureSampler(asset)),
-]);
+export const virtualTextureAssetKey = (asset: VirtualTextureAssetRef): string => {
+  const sampler = canonicalTextureSampler(asset);
+  return JSON.stringify([
+    asset.contentKey === undefined ? "manifest" : typeof asset.contentKey,
+    asset.contentKey === undefined ? asset.manifestUri : asset.contentKey,
+    typeof asset.version, asset.version,
+    asset.colorSpace ?? "srgb",
+    sampler.magFilter, sampler.minFilter, sampler.wrapS, sampler.wrapT,
+  ]);
+};
 
 export const automaticVirtualTextureAssetKey = (asset: TextureSourceRef): string => JSON.stringify([
   decodedTextureKey(asset),
@@ -161,6 +158,8 @@ export type VirtualTextureAssetSnapshot = Readonly<{
 
 /** Narrow optional-feature seam; implementation and shader body remain lazy. */
 export interface VirtualTextureRuntime {
+  /** Undefined while a referenced authored manifest is pending; false when none can allocate. */
+  readonly authoredStorageRequired: boolean | undefined;
   readonly bindingRevision: number;
   readonly shaderSource: VirtualTextureShaderSource;
   automaticBinding(asset: TextureSourceRef): VirtualTextureGpuBinding | undefined;
@@ -168,6 +167,7 @@ export interface VirtualTextureRuntime {
   dispose(): void;
   invalidate(): void;
   invalidateSceneGeometry(): void;
+  releaseRasterSource(asset: TextureSourceRef): void;
   runtimeSnapshot(): VirtualTextureRuntimeSnapshot;
   snapshot(asset: VirtualTextureAssetRef): VirtualTextureAssetSnapshot;
   setScene(scene: CanonicalSurfaceScene | null): void;

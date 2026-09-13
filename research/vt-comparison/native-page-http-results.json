@@ -1,0 +1,411 @@
+{
+  "results": [
+    {
+      "name": "ktx2-etc2",
+      "round": 0,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 211
+    },
+    {
+      "name": "ktx2-astc-6x6",
+      "round": 0,
+      "pages": 100,
+      "containerBytes": 9376,
+      "blockBytes": 9216,
+      "elapsedMs": 238.69999998807907
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "round": 0,
+      "pages": 100,
+      "containerBytes": 5344,
+      "blockBytes": 5184,
+      "elapsedMs": 206
+    },
+    {
+      "name": "ktx2-bc1",
+      "round": 0,
+      "pages": 100,
+      "containerBytes": 10512,
+      "blockBytes": 10368,
+      "elapsedMs": 210
+    },
+    {
+      "name": "ktx2-bc3",
+      "round": 0,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 218.4000000357628
+    },
+    {
+      "name": "ktx2-bc7",
+      "round": 0,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 220.69999998807907
+    },
+    {
+      "name": "ktx2-bc7",
+      "round": 1,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 215.89999997615814
+    },
+    {
+      "name": "ktx2-bc3",
+      "round": 1,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 226
+    },
+    {
+      "name": "ktx2-bc1",
+      "round": 1,
+      "pages": 100,
+      "containerBytes": 10512,
+      "blockBytes": 10368,
+      "elapsedMs": 238.60000002384186
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "round": 1,
+      "pages": 100,
+      "containerBytes": 5344,
+      "blockBytes": 5184,
+      "elapsedMs": 224.19999998807907
+    },
+    {
+      "name": "ktx2-astc-6x6",
+      "round": 1,
+      "pages": 100,
+      "containerBytes": 9376,
+      "blockBytes": 9216,
+      "elapsedMs": 211.60000002384186
+    },
+    {
+      "name": "ktx2-etc2",
+      "round": 1,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 206.89999997615814
+    },
+    {
+      "name": "ktx2-etc2",
+      "round": 2,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 212
+    },
+    {
+      "name": "ktx2-astc-6x6",
+      "round": 2,
+      "pages": 100,
+      "containerBytes": 9376,
+      "blockBytes": 9216,
+      "elapsedMs": 213.4000000357628
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "round": 2,
+      "pages": 100,
+      "containerBytes": 5344,
+      "blockBytes": 5184,
+      "elapsedMs": 205.69999998807907
+    },
+    {
+      "name": "ktx2-bc1",
+      "round": 2,
+      "pages": 100,
+      "containerBytes": 10512,
+      "blockBytes": 10368,
+      "elapsedMs": 207.89999997615814
+    },
+    {
+      "name": "ktx2-bc3",
+      "round": 2,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 209.60000002384186
+    },
+    {
+      "name": "ktx2-bc7",
+      "round": 2,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 215
+    },
+    {
+      "name": "ktx2-bc7",
+      "round": 3,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 208.80000001192093
+    },
+    {
+      "name": "ktx2-bc3",
+      "round": 3,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 205.5
+    },
+    {
+      "name": "ktx2-bc1",
+      "round": 3,
+      "pages": 100,
+      "containerBytes": 10512,
+      "blockBytes": 10368,
+      "elapsedMs": 209.39999997615814
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "round": 3,
+      "pages": 100,
+      "containerBytes": 5344,
+      "blockBytes": 5184,
+      "elapsedMs": 216.39999997615814
+    },
+    {
+      "name": "ktx2-astc-6x6",
+      "round": 3,
+      "pages": 100,
+      "containerBytes": 9376,
+      "blockBytes": 9216,
+      "elapsedMs": 213.9000000357628
+    },
+    {
+      "name": "ktx2-etc2",
+      "round": 3,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 211
+    },
+    {
+      "name": "ktx2-etc2",
+      "round": 4,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 213.5
+    },
+    {
+      "name": "ktx2-astc-6x6",
+      "round": 4,
+      "pages": 100,
+      "containerBytes": 9376,
+      "blockBytes": 9216,
+      "elapsedMs": 215.5999999642372
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "round": 4,
+      "pages": 100,
+      "containerBytes": 5344,
+      "blockBytes": 5184,
+      "elapsedMs": 208.80000001192093
+    },
+    {
+      "name": "ktx2-bc1",
+      "round": 4,
+      "pages": 100,
+      "containerBytes": 10512,
+      "blockBytes": 10368,
+      "elapsedMs": 209.5
+    },
+    {
+      "name": "ktx2-bc3",
+      "round": 4,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 221.60000002384186
+    },
+    {
+      "name": "ktx2-bc7",
+      "round": 4,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 220
+    },
+    {
+      "name": "ktx2-bc7",
+      "round": 5,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 206.5
+    },
+    {
+      "name": "ktx2-bc3",
+      "round": 5,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 214.5
+    },
+    {
+      "name": "ktx2-bc1",
+      "round": 5,
+      "pages": 100,
+      "containerBytes": 10512,
+      "blockBytes": 10368,
+      "elapsedMs": 218
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "round": 5,
+      "pages": 100,
+      "containerBytes": 5344,
+      "blockBytes": 5184,
+      "elapsedMs": 216.0999999642372
+    },
+    {
+      "name": "ktx2-astc-6x6",
+      "round": 5,
+      "pages": 100,
+      "containerBytes": 9376,
+      "blockBytes": 9216,
+      "elapsedMs": 224.80000001192093
+    },
+    {
+      "name": "ktx2-etc2",
+      "round": 5,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 212.80000001192093
+    },
+    {
+      "name": "ktx2-etc2",
+      "round": 6,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 221.60000002384186
+    },
+    {
+      "name": "ktx2-astc-6x6",
+      "round": 6,
+      "pages": 100,
+      "containerBytes": 9376,
+      "blockBytes": 9216,
+      "elapsedMs": 220.5
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "round": 6,
+      "pages": 100,
+      "containerBytes": 5344,
+      "blockBytes": 5184,
+      "elapsedMs": 238.5999999642372
+    },
+    {
+      "name": "ktx2-bc1",
+      "round": 6,
+      "pages": 100,
+      "containerBytes": 10512,
+      "blockBytes": 10368,
+      "elapsedMs": 219.10000002384186
+    },
+    {
+      "name": "ktx2-bc3",
+      "round": 6,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 214.5
+    },
+    {
+      "name": "ktx2-bc7",
+      "round": 6,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 213
+    },
+    {
+      "name": "ktx2-bc7",
+      "round": 7,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 203.9000000357628
+    },
+    {
+      "name": "ktx2-bc3",
+      "round": 7,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 200.5
+    },
+    {
+      "name": "ktx2-bc1",
+      "round": 7,
+      "pages": 100,
+      "containerBytes": 10512,
+      "blockBytes": 10368,
+      "elapsedMs": 230.5
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "round": 7,
+      "pages": 100,
+      "containerBytes": 5344,
+      "blockBytes": 5184,
+      "elapsedMs": 237.19999998807907
+    },
+    {
+      "name": "ktx2-astc-6x6",
+      "round": 7,
+      "pages": 100,
+      "containerBytes": 9376,
+      "blockBytes": 9216,
+      "elapsedMs": 205.5
+    },
+    {
+      "name": "ktx2-etc2",
+      "round": 7,
+      "pages": 100,
+      "containerBytes": 20880,
+      "blockBytes": 20736,
+      "elapsedMs": 205.10000002384186
+    }
+  ],
+  "reads": 4800,
+  "parserOnly": false,
+  "http": true,
+  "note": "Sequential localhost HTTP reads with cache no-store, including body handling and native source validation. Eight alternating format-order rounds. Warm JS and server filesystem cache; no GPU uploads or runtime queue. Not remote-network latency or concurrent VT throughput.",
+  "gc": {
+    "events": 25,
+    "totalMs": 30.787999999999997,
+    "maxMs": 2.017,
+    "heapBefore": {
+      "usedSize": 841096,
+      "totalSize": 1572864,
+      "embedderHeapUsedSize": 530552,
+      "backingStorageSize": 109252
+    },
+    "heapAfter": {
+      "usedSize": 877748,
+      "totalSize": 1835008,
+      "embedderHeapUsedSize": 453360,
+      "backingStorageSize": 109252
+    },
+    "note": "Warm-up and final diagnostics are excluded from the trace. Forced-GC heaps retain the live scene before/after measurement."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

@@ -1,0 +1,10 @@
+--- a/packages/renderer-webgl/src/virtual-texture/pool-budget.ts
++++ b/packages/renderer-webgl/src/virtual-texture/pool-budget.ts
+@@ -18,6 +18,7 @@
+   const scale = minimum > budgetBytes ? budgetBytes / minimum : 1;
+   for (const request of requests) result.set(request.key, Math.floor(request.minimumBytes * scale));
+   let remaining = Math.max(0, budgetBytes - minimum);
++  if (remaining === 0 || pending === 0) return result;
+   while (remaining > 0 && pending > 0) {
+     const previousCount = pending;
+     pending = 0;

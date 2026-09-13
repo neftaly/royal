@@ -1,4 +1,4 @@
-import type { DecodedImageTextureSource, DecodedTextureSource, SvgPreviewSource, EncodedSvgTextureSource } from "../texture/source";
+import type { DecodedImageTextureSource, DecodedTextureSource, TexturePreviewSource, EncodedSvgTextureSource } from "../texture/source";
 
 export const DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS = 24;
 export const AUTOMATIC_VT_MIN_LONG_EDGE = 257;
@@ -20,5 +20,8 @@ export const automaticVirtualTextureIsSvg = (
 
 export const automaticVirtualTextureHasPreview = (
   source: DecodedTextureSource,
-): source is DecodedTextureSource & Readonly<{ svgPreview: SvgPreviewSource }> =>
-  source.svgPreview !== undefined;
+): source is DecodedTextureSource & Readonly<{ preview: TexturePreviewSource }> =>
+  source.preview !== undefined;
+
+export const texturePreviewReady = (preview: TexturePreviewSource): boolean =>
+  preview.encoded !== undefined || preview.raster !== undefined;

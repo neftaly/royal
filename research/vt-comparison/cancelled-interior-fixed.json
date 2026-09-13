@@ -1,0 +1,100 @@
+{
+  "windows": 12,
+  "interior": true,
+  "stalled": true,
+  "cancelledJobs": 12000,
+  "elapsedMs": 21.299999952316284,
+  "snapshot": {
+    "activeJobs": 1,
+    "jobLimit": 1,
+    "queuedDetailJobs": 1,
+    "queuedForegroundJobs": 1,
+    "queuedJobs": 2
+  },
+  "note": "One held active job; 1000 alternating foreground/detail cancellations per window. Interior mode queues one live head per lane, then lets both complete before window four and holds a new active job. Forced-GC heaps retain the owner. No texture decode, upload or frame-time measurement.",
+  "retention": {
+    "windows": 12,
+    "heaps": [
+      {
+        "usedSize": 679572,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 315816,
+        "backingStorageSize": 5242
+      },
+      {
+        "usedSize": 724084,
+        "totalSize": 1835008,
+        "embedderHeapUsedSize": 351912,
+        "backingStorageSize": 5275
+      },
+      {
+        "usedSize": 728272,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 351592,
+        "backingStorageSize": 5275
+      },
+      {
+        "usedSize": 728440,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 351592,
+        "backingStorageSize": 5275
+      },
+      {
+        "usedSize": 728440,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 351592,
+        "backingStorageSize": 5275
+      },
+      {
+        "usedSize": 728548,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 351592,
+        "backingStorageSize": 5275
+      },
+      {
+        "usedSize": 728548,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 351592,
+        "backingStorageSize": 5275
+      },
+      {
+        "usedSize": 728584,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 351592,
+        "backingStorageSize": 5275
+      },
+      {
+        "usedSize": 728584,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 351592,
+        "backingStorageSize": 5275
+      },
+      {
+        "usedSize": 728052,
+        "totalSize": 1835008,
+        "embedderHeapUsedSize": 351592,
+        "backingStorageSize": 5275
+      },
+      {
+        "usedSize": 728148,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 351592,
+        "backingStorageSize": 5275
+      },
+      {
+        "usedSize": 728628,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 351592,
+        "backingStorageSize": 5275
+      },
+      {
+        "usedSize": 728628,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 351592,
+        "backingStorageSize": 5275
+      }
+    ],
+    "note": "One preparation across all windows; per-window behavior belongs to the fixture. Forced GC between windows, without tracing or sampling. Finish-hook diagnostics run after the last heap sample."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

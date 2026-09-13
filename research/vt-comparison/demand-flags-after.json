@@ -1,0 +1,1086 @@
+{
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+  "results": [
+    {
+      "name": "zoom",
+      "minFilter": "linear-mipmap-nearest",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 86.39999997615814,
+      "readyMs": 184.39999997615814,
+      "submissionMs": {
+        "median": 0.5,
+        "p95": 2.199999988079071,
+        "max": 2.5
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17.100000023841858,
+        "max": 19
+      },
+      "movedPageRequests": 56,
+      "peakAtlasBytes": 11151360,
+      "peakDecodedBytes": 0,
+      "maxMissing": 36,
+      "transport": {
+        "requests": 78,
+        "transferredBytes": 80541,
+        "bodyBytes": 57141
+      },
+      "heapBefore": 1456639,
+      "heapLive": 3129174,
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/zoom-linear-mipmap-nearest.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 8921088,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 77,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 73,
+        "uploadedPages": 73,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "zoom",
+      "minFilter": "linear-mipmap-linear",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 39.59999996423721,
+      "readyMs": 120,
+      "submissionMs": {
+        "median": 0.3999999761581421,
+        "p95": 1.800000011920929,
+        "max": 2.300000011920929
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17,
+        "max": 18.80000001192093
+      },
+      "movedPageRequests": 56,
+      "peakAtlasBytes": 11151360,
+      "peakDecodedBytes": 0,
+      "maxMissing": 36,
+      "transport": {
+        "requests": 78,
+        "transferredBytes": 0,
+        "bodyBytes": 57141
+      },
+      "heapBefore": 3556323,
+      "heapLive": 3716845,
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/zoom-linear-mipmap-linear.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 8921088,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 77,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 73,
+        "uploadedPages": 73,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "oblique",
+      "minFilter": "linear-mipmap-nearest",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 44.89999997615814,
+      "readyMs": 58,
+      "submissionMs": {
+        "median": 0.30000001192092896,
+        "p95": 0.6000000238418579,
+        "max": 0.8999999761581421
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17,
+        "max": 17.19999998807907
+      },
+      "movedPageRequests": 2,
+      "peakAtlasBytes": 836352,
+      "peakDecodedBytes": 0,
+      "maxMissing": 2,
+      "transport": {
+        "requests": 6,
+        "transferredBytes": 0,
+        "bodyBytes": 7801
+      },
+      "heapBefore": 3975143,
+      "heapLive": 4678401,
+      "pixel": [
+        144,
+        98,
+        183,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/oblique-linear-mipmap-nearest.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 3,
+        "admittedPages": 3,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "oblique",
+      "minFilter": "linear-mipmap-linear",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 47.69999998807907,
+      "readyMs": 62.19999998807907,
+      "submissionMs": {
+        "median": 0.3999999761581421,
+        "p95": 0.5999999642372131,
+        "max": 0.699999988079071
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17,
+        "max": 17.100000023841858
+      },
+      "movedPageRequests": 2,
+      "peakAtlasBytes": 836352,
+      "peakDecodedBytes": 0,
+      "maxMissing": 2,
+      "transport": {
+        "requests": 6,
+        "transferredBytes": 0,
+        "bodyBytes": 7801
+      },
+      "heapBefore": 4875791,
+      "heapLive": 3419374,
+      "pixel": [
+        154,
+        96,
+        175,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/oblique-linear-mipmap-linear.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 3,
+        "admittedPages": 3,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "hidden",
+      "minFilter": "linear-mipmap-nearest",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 77.80000001192093,
+      "readyMs": 167,
+      "submissionMs": {
+        "median": 5.699999988079071,
+        "p95": 9.899999976158142,
+        "max": 10.600000023841858
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17,
+        "max": 17.200000047683716
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 2230272,
+      "peakDecodedBytes": 0,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 22,
+        "transferredBytes": 0,
+        "bodyBytes": 21515
+      },
+      "heapBefore": 5678112,
+      "heapLive": 6913269,
+      "pixel": [
+        124,
+        149,
+        170,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/hidden-linear-mipmap-nearest.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 2230272,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "hidden",
+      "minFilter": "linear-mipmap-linear",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 48.19999998807907,
+      "readyMs": 141.60000002384186,
+      "submissionMs": {
+        "median": 5,
+        "p95": 5.600000023841858,
+        "max": 7.200000047683716
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 16.900000035762787,
+        "max": 17
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 2230272,
+      "peakDecodedBytes": 0,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 22,
+        "transferredBytes": 0,
+        "bodyBytes": 21515
+      },
+      "heapBefore": 8014871,
+      "heapLive": 5615712,
+      "pixel": [
+        124,
+        149,
+        170,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/hidden-linear-mipmap-linear.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 2230272,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "dense",
+      "minFilter": "linear-mipmap-nearest",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 59.10000002384186,
+      "readyMs": 152,
+      "submissionMs": {
+        "median": 4.900000035762787,
+        "p95": 5.800000011920929,
+        "max": 6.5
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17.100000023841858,
+        "max": 17.19999998807907
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 2230272,
+      "peakDecodedBytes": 0,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 22,
+        "transferredBytes": 6600,
+        "bodyBytes": 21515
+      },
+      "heapBefore": 7423376,
+      "heapLive": 8953954,
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/dense-linear-mipmap-nearest.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 2230272,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "dense",
+      "minFilter": "linear-mipmap-linear",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 44.5,
+      "readyMs": 138.19999998807907,
+      "submissionMs": {
+        "median": 6.5,
+        "p95": 10.600000023841858,
+        "max": 11.899999976158142
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17.69999998807907,
+        "max": 19.19999998807907
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 2230272,
+      "peakDecodedBytes": 0,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 22,
+        "transferredBytes": 0,
+        "bodyBytes": 21515
+      },
+      "heapBefore": 9202536,
+      "heapLive": 5780190,
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/dense-linear-mipmap-linear.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 2230272,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "overdraw",
+      "minFilter": "linear-mipmap-nearest",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 261.0999999642372,
+      "readyMs": 592.5,
+      "submissionMs": {
+        "median": 10.399999976158142,
+        "p95": 17.600000023841858,
+        "max": 27.399999976158142
+      },
+      "frameIntervalMs": {
+        "median": 45.39999997615814,
+        "p95": 59.5,
+        "max": 68.39999997615814
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 2230272,
+      "peakDecodedBytes": 0,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 22,
+        "transferredBytes": 0,
+        "bodyBytes": 21515
+      },
+      "heapBefore": 6925884,
+      "heapLive": 8206503,
+      "pixel": [
+        124,
+        149,
+        170,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/overdraw-linear-mipmap-nearest.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 2230272,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "overdraw",
+      "minFilter": "linear-mipmap-linear",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 143.10000002384186,
+      "readyMs": 400.10000002384186,
+      "submissionMs": {
+        "median": 8.199999988079071,
+        "p95": 10.300000011920929,
+        "max": 13.600000023841858
+      },
+      "frameIntervalMs": {
+        "median": 39.39999997615814,
+        "p95": 44.69999998807907,
+        "max": 49.60000002384186
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 2230272,
+      "peakDecodedBytes": 0,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 22,
+        "transferredBytes": 0,
+        "bodyBytes": 21515
+      },
+      "heapBefore": 8768019,
+      "heapLive": 6352457,
+      "pixel": [
+        124,
+        149,
+        170,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/overdraw-linear-mipmap-linear.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 2230272,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "raster",
+      "minFilter": "linear-mipmap-nearest",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 96.39999997615814,
+      "readyMs": 161.10000002384186,
+      "submissionMs": {
+        "median": 0.30000001192092896,
+        "p95": 0.40000003576278687,
+        "max": 0.5
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17,
+        "max": 17.19999998807907
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 2230272,
+      "peakDecodedBytes": 4194304,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 1,
+        "transferredBytes": 19804,
+        "bodyBytes": 19504
+      },
+      "heapBefore": 6401073,
+      "heapLive": 5771653,
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/raster-linear-mipmap-nearest.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 2230272,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 17,
+        "admittedPages": 17,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4194304,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 17,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 17,
+        "uploadedPages": 17,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "raster",
+      "minFilter": "linear-mipmap-linear",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 78.69999998807907,
+      "readyMs": 160,
+      "submissionMs": {
+        "median": 0.2999999523162842,
+        "p95": 0.40000003576278687,
+        "max": 0.5
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17,
+        "max": 17.30000001192093
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 2230272,
+      "peakDecodedBytes": 4194304,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 1,
+        "transferredBytes": 0,
+        "bodyBytes": 19504
+      },
+      "heapBefore": 5907803,
+      "heapLive": 6005045,
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/raster-linear-mipmap-linear.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 2230272,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4194304,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "svg",
+      "minFilter": "linear-mipmap-nearest",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 146.60000002384186,
+      "readyMs": 211.19999998807907,
+      "submissionMs": {
+        "median": 0.3999999761581421,
+        "p95": 1.2000000476837158,
+        "max": 1.399999976158142
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17.80000001192093,
+        "max": 18.600000023841858
+      },
+      "movedPageRequests": 110,
+      "peakAtlasBytes": 11151360,
+      "peakDecodedBytes": 3756480,
+      "maxMissing": 72,
+      "transport": {
+        "requests": 1,
+        "transferredBytes": 746,
+        "bodyBytes": 446
+      },
+      "heapBefore": 6248719,
+      "heapLive": 6105490,
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/svg-linear-mipmap-nearest.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 8921088,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 17,
+        "admittedPages": 17,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 127,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 115,
+        "uploadedPages": 115,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "svg",
+      "minFilter": "linear-mipmap-linear",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 163.39999997615814,
+      "readyMs": 244.69999998807907,
+      "submissionMs": {
+        "median": 0.3999999761581421,
+        "p95": 1.399999976158142,
+        "max": 1.5999999642372131
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17.100000023841858,
+        "max": 22.599999964237213
+      },
+      "movedPageRequests": 104,
+      "peakAtlasBytes": 11151360,
+      "peakDecodedBytes": 3750240,
+      "maxMissing": 87,
+      "transport": {
+        "requests": 1,
+        "transferredBytes": 0,
+        "bodyBytes": 446
+      },
+      "heapBefore": 6253196,
+      "heapLive": 6350255,
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/svg-linear-mipmap-linear.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 8921088,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 125,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 118,
+        "uploadedPages": 118,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "astc-6x6",
+      "minFilter": "linear-mipmap-nearest",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 53.30000001192093,
+      "readyMs": 140.60000002384186,
+      "submissionMs": {
+        "median": 0.19999998807907104,
+        "p95": 0.3999999761581421,
+        "max": 0.40000003576278687
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17.099999964237213,
+        "max": 17.19999998807907
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 33547008,
+      "peakDecodedBytes": 0,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 22,
+        "transferredBytes": 172828,
+        "bodyBytes": 166228
+      },
+      "heapBefore": 6614502,
+      "heapLive": 6529574,
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/astc-6x6-linear-mipmap-nearest.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33547008,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "astc-6x6",
+      "minFilter": "linear-mipmap-linear",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 57.90000003576279,
+      "readyMs": 145.20000004768372,
+      "submissionMs": {
+        "median": 0.19999998807907104,
+        "p95": 0.3999999761581421,
+        "max": 0.40000003576278687
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17,
+        "max": 17.19999998807907
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 33547008,
+      "peakDecodedBytes": 0,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 22,
+        "transferredBytes": 0,
+        "bodyBytes": 166228
+      },
+      "heapBefore": 6668920,
+      "heapLive": 7201642,
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/astc-6x6-linear-mipmap-linear.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33547008,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "astc-8x8",
+      "minFilter": "linear-mipmap-nearest",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 54.700000047683716,
+      "readyMs": 140.9000000357628,
+      "submissionMs": {
+        "median": 0.19999998807907104,
+        "p95": 0.3999999761581421,
+        "max": 0.5
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17,
+        "max": 17.400000035762787
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 33542496,
+      "peakDecodedBytes": 0,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 22,
+        "transferredBytes": 107308,
+        "bodyBytes": 100708
+      },
+      "heapBefore": 7447336,
+      "heapLive": 7294196,
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/astc-8x8-linear-mipmap-nearest.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33542496,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "astc-8x8",
+      "minFilter": "linear-mipmap-linear",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)",
+      "supported": true,
+      "firstPresentedMs": 55.10000002384186,
+      "readyMs": 142.5,
+      "submissionMs": {
+        "median": 0.19999998807907104,
+        "p95": 0.3999999761581421,
+        "max": 0.5
+      },
+      "frameIntervalMs": {
+        "median": 16.69999998807907,
+        "p95": 17.099999964237213,
+        "max": 17.299999952316284
+      },
+      "movedPageRequests": 0,
+      "peakAtlasBytes": 33542496,
+      "peakDecodedBytes": 0,
+      "maxMissing": 0,
+      "transport": {
+        "requests": 22,
+        "transferredBytes": 0,
+        "bodyBytes": 100708
+      },
+      "heapBefore": 7433990,
+      "heapLive": 7122653,
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/demand-flags-after-images/astc-8x8-linear-mipmap-linear.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33542496,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 21,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 21,
+        "uploadBudgetBytes": 33554432
+      }
+    }
+  ],
+  "note": "512x512 real renderer scenes; rAF intervals include host scheduling and cold diagnostics. Local HTTP transport; no mobile claims.",
+  "gc": {
+    "events": 41,
+    "totalMs": 41.315000000000005,
+    "maxMs": 2.848,
+    "heapBefore": {
+      "usedSize": 931328,
+      "totalSize": 1835008,
+      "embedderHeapUsedSize": 345008,
+      "backingStorageSize": 310557
+    },
+    "heapAfter": {
+      "usedSize": 3474324,
+      "totalSize": 4456448,
+      "embedderHeapUsedSize": 430312,
+      "backingStorageSize": 403708
+    },
+    "note": "Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "module": "packages/renderer-webgl/src/virtual-texture/automatic-page-source.ts",
+  "before": "f434d576404b7bfcb864edaec3f9947c5e47be0ee167d23d390b9a50cfd0eb89",
+  "after": "6a6f75ce92f59b9b34237898a4954cc7d184c97c7e9849be05e84c6ee2fae323",
+  "note": "The saved patch reconstructs the uncommitted baseline module. Both browser builds use matching entrypoints."
+}

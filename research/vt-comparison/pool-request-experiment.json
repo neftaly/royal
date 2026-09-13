@@ -1,0 +1,496 @@
+{
+  "sourceHash": "15dfde7dbbb9438c5c581f8a01ceb4e20d25ce31cd807398c594be704c48b3d3",
+  "before": "poolRequests.set(key, { key,\n          minimumBytes: Math.max(1, minimumSlots.get(key)) * bytesPerPage,\n          wantedBytes: 2 ** Math.ceil(Math.log2(Math.max(1, demand.get(key)))) * bytesPerPage,\n        });",
+  "after": "const request = poolRequests.get(key) ?? { key, minimumBytes: 0, wantedBytes: 0 };\nrequest.minimumBytes = Math.max(1, minimumSlots.get(key)) * bytesPerPage;\nrequest.wantedBytes = 2 ** Math.ceil(Math.log2(Math.max(1, demand.get(key)))) * bytesPerPage;\npoolRequests.set(key, request);",
+  "comparisons": 10000,
+  "results": [
+    {
+      "count": 1,
+      "pools": 1,
+      "round": 0,
+      "version": "before",
+      "iterations": 200000,
+      "cpuMs": 108.586,
+      "elapsedMs": 80.77969500000006,
+      "gcEvents": 5
+    },
+    {
+      "count": 1,
+      "pools": 1,
+      "round": 0,
+      "version": "after",
+      "iterations": 200000,
+      "cpuMs": 99.377,
+      "elapsedMs": 66.96993599999996,
+      "gcEvents": 6
+    },
+    {
+      "count": 1,
+      "pools": 1,
+      "round": 1,
+      "version": "after",
+      "iterations": 200000,
+      "cpuMs": 108.879,
+      "elapsedMs": 69.2140629999999,
+      "gcEvents": 6
+    },
+    {
+      "count": 1,
+      "pools": 1,
+      "round": 1,
+      "version": "before",
+      "iterations": 200000,
+      "cpuMs": 104.153,
+      "elapsedMs": 67.1139730000001,
+      "gcEvents": 6
+    },
+    {
+      "count": 1,
+      "pools": 1,
+      "round": 2,
+      "version": "before",
+      "iterations": 200000,
+      "cpuMs": 100.695,
+      "elapsedMs": 65.26804200000004,
+      "gcEvents": 6
+    },
+    {
+      "count": 1,
+      "pools": 1,
+      "round": 2,
+      "version": "after",
+      "iterations": 200000,
+      "cpuMs": 106.844,
+      "elapsedMs": 69.410798,
+      "gcEvents": 6
+    },
+    {
+      "count": 1,
+      "pools": 1,
+      "round": 3,
+      "version": "after",
+      "iterations": 200000,
+      "cpuMs": 121.841,
+      "elapsedMs": 77.15369800000008,
+      "gcEvents": 6
+    },
+    {
+      "count": 1,
+      "pools": 1,
+      "round": 3,
+      "version": "before",
+      "iterations": 200000,
+      "cpuMs": 115.759,
+      "elapsedMs": 71.9815880000001,
+      "gcEvents": 6
+    },
+    {
+      "count": 8,
+      "pools": 1,
+      "round": 0,
+      "version": "before",
+      "iterations": 70710,
+      "cpuMs": 110.495,
+      "elapsedMs": 81.38647399999991,
+      "gcEvents": 5
+    },
+    {
+      "count": 8,
+      "pools": 1,
+      "round": 0,
+      "version": "after",
+      "iterations": 70710,
+      "cpuMs": 111.22,
+      "elapsedMs": 81.65726700000005,
+      "gcEvents": 3
+    },
+    {
+      "count": 8,
+      "pools": 1,
+      "round": 1,
+      "version": "after",
+      "iterations": 70710,
+      "cpuMs": 108.178,
+      "elapsedMs": 79.2341530000001,
+      "gcEvents": 3
+    },
+    {
+      "count": 8,
+      "pools": 1,
+      "round": 1,
+      "version": "before",
+      "iterations": 70710,
+      "cpuMs": 113.224,
+      "elapsedMs": 81.29977099999996,
+      "gcEvents": 5
+    },
+    {
+      "count": 8,
+      "pools": 1,
+      "round": 2,
+      "version": "before",
+      "iterations": 70710,
+      "cpuMs": 111.402,
+      "elapsedMs": 80.16869999999994,
+      "gcEvents": 5
+    },
+    {
+      "count": 8,
+      "pools": 1,
+      "round": 2,
+      "version": "after",
+      "iterations": 70710,
+      "cpuMs": 110.025,
+      "elapsedMs": 82.00855300000012,
+      "gcEvents": 3
+    },
+    {
+      "count": 8,
+      "pools": 1,
+      "round": 3,
+      "version": "after",
+      "iterations": 70710,
+      "cpuMs": 114.93,
+      "elapsedMs": 80.48015599999985,
+      "gcEvents": 3
+    },
+    {
+      "count": 8,
+      "pools": 1,
+      "round": 3,
+      "version": "before",
+      "iterations": 70710,
+      "cpuMs": 111.563,
+      "elapsedMs": 81.68752100000006,
+      "gcEvents": 5
+    },
+    {
+      "count": 64,
+      "pools": 1,
+      "round": 0,
+      "version": "before",
+      "iterations": 25000,
+      "cpuMs": 170.448,
+      "elapsedMs": 167.58847400000013,
+      "gcEvents": 7
+    },
+    {
+      "count": 64,
+      "pools": 1,
+      "round": 0,
+      "version": "after",
+      "iterations": 25000,
+      "cpuMs": 171.296,
+      "elapsedMs": 167.10665900000004,
+      "gcEvents": 0
+    },
+    {
+      "count": 64,
+      "pools": 1,
+      "round": 1,
+      "version": "after",
+      "iterations": 25000,
+      "cpuMs": 178.647,
+      "elapsedMs": 176.370316,
+      "gcEvents": 0
+    },
+    {
+      "count": 64,
+      "pools": 1,
+      "round": 1,
+      "version": "before",
+      "iterations": 25000,
+      "cpuMs": 172.403,
+      "elapsedMs": 170.58518699999968,
+      "gcEvents": 7
+    },
+    {
+      "count": 64,
+      "pools": 1,
+      "round": 2,
+      "version": "before",
+      "iterations": 25000,
+      "cpuMs": 174.337,
+      "elapsedMs": 172.4804680000002,
+      "gcEvents": 7
+    },
+    {
+      "count": 64,
+      "pools": 1,
+      "round": 2,
+      "version": "after",
+      "iterations": 25000,
+      "cpuMs": 167.868,
+      "elapsedMs": 165.96559100000013,
+      "gcEvents": 0
+    },
+    {
+      "count": 64,
+      "pools": 1,
+      "round": 3,
+      "version": "after",
+      "iterations": 25000,
+      "cpuMs": 169.8,
+      "elapsedMs": 167.57644800000025,
+      "gcEvents": 0
+    },
+    {
+      "count": 64,
+      "pools": 1,
+      "round": 3,
+      "version": "before",
+      "iterations": 25000,
+      "cpuMs": 171.84,
+      "elapsedMs": 170.05396100000007,
+      "gcEvents": 7
+    },
+    {
+      "count": 256,
+      "pools": 1,
+      "round": 0,
+      "version": "before",
+      "iterations": 12500,
+      "cpuMs": 335.258,
+      "elapsedMs": 333.4884280000001,
+      "gcEvents": 15
+    },
+    {
+      "count": 256,
+      "pools": 1,
+      "round": 0,
+      "version": "after",
+      "iterations": 12500,
+      "cpuMs": 328.378,
+      "elapsedMs": 326.6429670000007,
+      "gcEvents": 0
+    },
+    {
+      "count": 256,
+      "pools": 1,
+      "round": 1,
+      "version": "after",
+      "iterations": 12500,
+      "cpuMs": 335.137,
+      "elapsedMs": 333.600152,
+      "gcEvents": 0
+    },
+    {
+      "count": 256,
+      "pools": 1,
+      "round": 1,
+      "version": "before",
+      "iterations": 12500,
+      "cpuMs": 328.672,
+      "elapsedMs": 327.05201000000034,
+      "gcEvents": 15
+    },
+    {
+      "count": 256,
+      "pools": 1,
+      "round": 2,
+      "version": "before",
+      "iterations": 12500,
+      "cpuMs": 328.878,
+      "elapsedMs": 327.30044499999985,
+      "gcEvents": 15
+    },
+    {
+      "count": 256,
+      "pools": 1,
+      "round": 2,
+      "version": "after",
+      "iterations": 12500,
+      "cpuMs": 326.254,
+      "elapsedMs": 324.71729700000014,
+      "gcEvents": 0
+    },
+    {
+      "count": 256,
+      "pools": 1,
+      "round": 3,
+      "version": "after",
+      "iterations": 12500,
+      "cpuMs": 340.166,
+      "elapsedMs": 338.62545500000033,
+      "gcEvents": 0
+    },
+    {
+      "count": 256,
+      "pools": 1,
+      "round": 3,
+      "version": "before",
+      "iterations": 12500,
+      "cpuMs": 347.682,
+      "elapsedMs": 346.1048810000002,
+      "gcEvents": 15
+    },
+    {
+      "count": 64,
+      "pools": 4,
+      "round": 0,
+      "version": "before",
+      "iterations": 25000,
+      "cpuMs": 206.914,
+      "elapsedMs": 205.22021500000028,
+      "gcEvents": 7
+    },
+    {
+      "count": 64,
+      "pools": 4,
+      "round": 0,
+      "version": "after",
+      "iterations": 25000,
+      "cpuMs": 189.07,
+      "elapsedMs": 188.9725269999999,
+      "gcEvents": 0
+    },
+    {
+      "count": 64,
+      "pools": 4,
+      "round": 1,
+      "version": "after",
+      "iterations": 25000,
+      "cpuMs": 216.302,
+      "elapsedMs": 192.12406400000054,
+      "gcEvents": 0
+    },
+    {
+      "count": 64,
+      "pools": 4,
+      "round": 1,
+      "version": "before",
+      "iterations": 25000,
+      "cpuMs": 190.715,
+      "elapsedMs": 189.0138109999998,
+      "gcEvents": 7
+    },
+    {
+      "count": 64,
+      "pools": 4,
+      "round": 2,
+      "version": "before",
+      "iterations": 25000,
+      "cpuMs": 201.591,
+      "elapsedMs": 198.3242999999993,
+      "gcEvents": 7
+    },
+    {
+      "count": 64,
+      "pools": 4,
+      "round": 2,
+      "version": "after",
+      "iterations": 25000,
+      "cpuMs": 202.829,
+      "elapsedMs": 198.06855900000028,
+      "gcEvents": 0
+    },
+    {
+      "count": 64,
+      "pools": 4,
+      "round": 3,
+      "version": "after",
+      "iterations": 25000,
+      "cpuMs": 194.734,
+      "elapsedMs": 192.83303399999932,
+      "gcEvents": 0
+    },
+    {
+      "count": 64,
+      "pools": 4,
+      "round": 3,
+      "version": "before",
+      "iterations": 25000,
+      "cpuMs": 207.094,
+      "elapsedMs": 205.3044030000001,
+      "gcEvents": 7
+    },
+    {
+      "count": 64,
+      "pools": 8,
+      "round": 0,
+      "version": "before",
+      "iterations": 25000,
+      "cpuMs": 217.172,
+      "elapsedMs": 215.23549000000094,
+      "gcEvents": 8
+    },
+    {
+      "count": 64,
+      "pools": 8,
+      "round": 0,
+      "version": "after",
+      "iterations": 25000,
+      "cpuMs": 217.991,
+      "elapsedMs": 217.83250099999896,
+      "gcEvents": 1
+    },
+    {
+      "count": 64,
+      "pools": 8,
+      "round": 1,
+      "version": "after",
+      "iterations": 25000,
+      "cpuMs": 210.724,
+      "elapsedMs": 209.16996699999982,
+      "gcEvents": 1
+    },
+    {
+      "count": 64,
+      "pools": 8,
+      "round": 1,
+      "version": "before",
+      "iterations": 25000,
+      "cpuMs": 214.64,
+      "elapsedMs": 212.92803400000048,
+      "gcEvents": 8
+    },
+    {
+      "count": 64,
+      "pools": 8,
+      "round": 2,
+      "version": "before",
+      "iterations": 25000,
+      "cpuMs": 212.091,
+      "elapsedMs": 210.3492040000001,
+      "gcEvents": 8
+    },
+    {
+      "count": 64,
+      "pools": 8,
+      "round": 2,
+      "version": "after",
+      "iterations": 25000,
+      "cpuMs": 219.439,
+      "elapsedMs": 217.43310699999893,
+      "gcEvents": 1
+    },
+    {
+      "count": 64,
+      "pools": 8,
+      "round": 3,
+      "version": "after",
+      "iterations": 25000,
+      "cpuMs": 214.727,
+      "elapsedMs": 213.08290800000032,
+      "gcEvents": 1
+    },
+    {
+      "count": 64,
+      "pools": 8,
+      "round": 3,
+      "version": "before",
+      "iterations": 25000,
+      "cpuMs": 213.256,
+      "elapsedMs": 211.26945499999965,
+      "gcEvents": 8
+    }
+  ],
+  "checksum": 93629851729920,
+  "node": "v24.12.0",
+  "nodeOptions": [
+    "--expose-gc",
+    "--min-semi-space-size=16",
+    "--max-semi-space-size=16"
+  ],
+  "note": "Isolated request construction with shared demand maps cleared each call, as in runtime. Native-format branches and other frame work excluded. Synthetic counts represent eligible image resources sharing 1, 4 or 8 pools."
+}

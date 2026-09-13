@@ -1,0 +1,350 @@
+{
+  "summaries": [
+    {
+      "file": "research/vt-comparison/diagnostic-redraw-svg.json",
+      "sampledBytes": 3870312,
+      "frames": 600,
+      "allocations": [
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:749",
+          "bytes": 655820
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/pool-budget.ts:8",
+          "bytes": 524628
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-visibility.ts:93",
+          "bytes": 458820
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:197",
+          "bytes": 395020
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:227",
+          "bytes": 229428
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1368",
+          "bytes": 196680
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:53",
+          "bytes": 196644
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:376",
+          "bytes": 196644
+        },
+        {
+          "source": "packages/renderer-webgl/src/frame/frame-clock-owner.ts:118",
+          "bytes": 131160
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:140",
+          "bytes": 131088
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:176",
+          "bytes": 98760
+        },
+        {
+          "source": "packages/renderer-webgl/src/runtime/overlay-owner.ts:113",
+          "bytes": 65560
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-depth-order.ts:15",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:321",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:408",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:100",
+          "bytes": 32820
+        },
+        {
+          "source": "packages/renderer-webgl/src/texture/gpu-owner.ts:123",
+          "bytes": 32820
+        },
+        {
+          "source": "packages/renderer-webgl/src/runtime/retained-presentation-owner.ts:130",
+          "bytes": 32800
+        },
+        {
+          "source": "packages/renderer-core/src/camera-resource.ts:101",
+          "bytes": 32784
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:197",
+          "bytes": 32784
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-program-owner.ts:565",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1352",
+          "bytes": 32780
+        },
+        {
+          "source": "research/vt-comparison/steady.ts:18",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-gpu-owner.ts:1386",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:436",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1036",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-visibility.ts:77",
+          "bytes": 32772
+        }
+      ]
+    },
+    {
+      "file": "research/vt-comparison/diagnostic-redraw-raster.json",
+      "sampledBytes": 3935632,
+      "frames": 600,
+      "allocations": [
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:749",
+          "bytes": 918272
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-visibility.ts:93",
+          "bytes": 491604
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/pool-budget.ts:8",
+          "bytes": 360696
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:197",
+          "bytes": 329320
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:53",
+          "bytes": 262200
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:227",
+          "bytes": 229416
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:693",
+          "bytes": 131124
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:376",
+          "bytes": 131100
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:140",
+          "bytes": 131088
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/lod-selection.ts:285",
+          "bytes": 98344
+        },
+        {
+          "source": "packages/renderer-webgl/src/frame/frame-clock-owner.ts:118",
+          "bytes": 98340
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:436",
+          "bytes": 98328
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-visibility.ts:77",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:321",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:408",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-depth-order.ts:15",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:176",
+          "bytes": 32980
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:100",
+          "bytes": 32820
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:197",
+          "bytes": 32800
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1068",
+          "bytes": 32796
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1496",
+          "bytes": 32784
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:806",
+          "bytes": 32784
+        },
+        {
+          "source": "packages/renderer-core/src/camera-resource.ts:101",
+          "bytes": 32784
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-program-owner.ts:565",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-webgl/src/runtime/overlay-owner.ts:113",
+          "bytes": 32780
+        },
+        {
+          "source": "research/vt-comparison/steady.ts:51",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-gpu-owner.ts:1386",
+          "bytes": 32772
+        },
+        {
+          "source": "research/vt-comparison/steady.ts:18",
+          "bytes": 32772
+        }
+      ]
+    },
+    {
+      "file": "research/vt-comparison/diagnostic-redraw-astc.json",
+      "sampledBytes": 3869944,
+      "frames": 600,
+      "allocations": [
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:749",
+          "bytes": 983716
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/pool-budget.ts:8",
+          "bytes": 295160
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:197",
+          "bytes": 263280
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-visibility.ts:93",
+          "bytes": 262188
+        },
+        {
+          "source": "packages/renderer-core/src/camera-resource.ts:101",
+          "bytes": 196680
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:53",
+          "bytes": 196644
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:321",
+          "bytes": 196644
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:227",
+          "bytes": 196644
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:176",
+          "bytes": 131700
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:376",
+          "bytes": 131100
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:140",
+          "bytes": 131088
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:436",
+          "bytes": 98328
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:408",
+          "bytes": 98316
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:100",
+          "bytes": 65640
+        },
+        {
+          "source": "packages/renderer-webgl/src/runtime/canvas-root.ts:1809",
+          "bytes": 65592
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:197",
+          "bytes": 65580
+        },
+        {
+          "source": "packages/renderer-webgl/src/frame/frame-clock-owner.ts:118",
+          "bytes": 65560
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-program-owner.ts:565",
+          "bytes": 65560
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1368",
+          "bytes": 65560
+        },
+        {
+          "source": "research/vt-comparison/steady.ts:18",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-depth-order.ts:15",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:693",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/lod-selection.ts:285",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-core/src/camera-resource.ts:197",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-core/src/camera-resource.ts:114",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-gpu-owner.ts:1386",
+          "bytes": 32772
+        }
+      ]
+    }
+  ],
+  "note": "Sampling estimates, not exact allocation counts. Native allocation frames inherit the nearest source-mapped JavaScript ancestor. Source maps must match the captured build."
+}

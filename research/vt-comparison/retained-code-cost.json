@@ -1,0 +1,140 @@
+{
+  "head": "56130d3438cc30860dd87b4df26500117f35e9f3",
+  "rendererSources": [
+    {
+      "path": "packages/renderer-webgl/src/gltf/static-material.ts",
+      "added": 4,
+      "removed": 2,
+      "net": 2
+    },
+    {
+      "path": "packages/renderer-webgl/src/gltf/static-texture-image-plan.ts",
+      "added": 20,
+      "removed": 1,
+      "net": 19
+    },
+    {
+      "path": "packages/renderer-webgl/src/surface/automatic-surface-instancing.ts",
+      "added": 4,
+      "removed": 0,
+      "net": 4
+    },
+    {
+      "path": "packages/renderer-webgl/src/texture/asset-owner.ts",
+      "added": 2,
+      "removed": 2,
+      "net": 0
+    },
+    {
+      "path": "packages/renderer-webgl/src/texture/browser-decode.ts",
+      "added": 58,
+      "removed": 14,
+      "net": 44
+    },
+    {
+      "path": "packages/renderer-webgl/src/texture/gpu-owner.ts",
+      "added": 1,
+      "removed": 1,
+      "net": 0
+    },
+    {
+      "path": "packages/renderer-webgl/src/texture/source.ts",
+      "added": 24,
+      "removed": 6,
+      "net": 18
+    },
+    {
+      "path": "packages/renderer-webgl/src/virtual-texture/automatic-page-source.ts",
+      "added": 34,
+      "removed": 26,
+      "net": 8
+    },
+    {
+      "path": "packages/renderer-webgl/src/virtual-texture/automatic-policy.ts",
+      "added": 6,
+      "removed": 3,
+      "net": 3
+    },
+    {
+      "path": "packages/renderer-webgl/src/virtual-texture/demand.ts",
+      "added": 68,
+      "removed": 124,
+      "net": -56
+    },
+    {
+      "path": "packages/renderer-webgl/src/virtual-texture/pool-budget.ts",
+      "added": 13,
+      "removed": 8,
+      "net": 5
+    },
+    {
+      "path": "packages/renderer-webgl/src/virtual-texture/runtime.ts",
+      "added": 125,
+      "removed": 71,
+      "net": 54
+    }
+  ],
+  "netSourceLines": 101,
+  "budgetCeilings": {
+    "scripts/package-size-budget.json": {
+      "@royal/react": {
+        "headCeiling": 131072,
+        "currentCeiling": 131072,
+        "ceilingDelta": 0
+      },
+      "@royal/renderer-core": {
+        "headCeiling": 524288,
+        "currentCeiling": 524288,
+        "ceilingDelta": 0
+      },
+      "@royal/renderer-webgl": {
+        "headCeiling": 744960,
+        "currentCeiling": 749904,
+        "ceilingDelta": 4944
+      }
+    },
+    "scripts/bundle-size-budget.json": {
+      "royalInitialGzipBytes": {
+        "headCeiling": 143482,
+        "currentCeiling": 143674,
+        "ceilingDelta": 192
+      },
+      "royalIncrementalGzipBytes": {
+        "headCeiling": 84182,
+        "currentCeiling": 84374,
+        "ceilingDelta": 192
+      },
+      "royalGltfInitialGzipBytes": {
+        "headCeiling": 144482,
+        "currentCeiling": 144674,
+        "ceilingDelta": 192
+      },
+      "royalGltfIncrementalGzipBytes": {
+        "headCeiling": 1050,
+        "currentCeiling": 1050,
+        "ceilingDelta": 0
+      },
+      "royalLazyGzipBytes": {
+        "headCeiling": 129232,
+        "currentCeiling": 130488,
+        "ceilingDelta": 1256
+      },
+      "royalTotalIncrementalGzipBytes": {
+        "headCeiling": 213350,
+        "currentCeiling": 214822,
+        "ceilingDelta": 1472
+      },
+      "royalTotalGzipBytes": {
+        "headCeiling": 272600,
+        "currentCeiling": 274112,
+        "ceilingDelta": 1512
+      },
+      "royalWorkerGzipBytes": {
+        "headCeiling": 23534,
+        "currentCeiling": 23790,
+        "ceilingDelta": 256
+      }
+    }
+  },
+  "note": "Git textual line count versus HEAD, including formatting and comments. No untracked renderer source files were present. Ceiling differences are allowed sizes, not measured binary growth. Previously committed native format support is already in HEAD."
+}

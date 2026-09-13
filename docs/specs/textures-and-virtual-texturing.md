@@ -336,6 +336,10 @@ preview. Required SVG with ASTC validates and retains the SVG authority before p
 the native preview. Other required SVG and non-base-color uses preserve
 direct-source semantics.
 
+Explicit low-resolution ASTC previews for full raster sources use the
+[private raster-preview contract](raster-texture-previews.md). Unmarked ASTC
+alternatives remain final textures.
+
 When automatic VT has a drawable ordinary preview and parallel shader
 compilation is available, its non-transmission detail variant may link while
 that preview remains visible. Until completion, the renderer MUST retain
@@ -410,15 +414,63 @@ Compatible logical textures share one root-owned physical atlas pool. Pool
 compatibility is exact stored-page extent, compression class, and color space;
 samplers and page tables remain per logical texture. Manifest `physicalSlots`
 and `physicalByteBudget` cap that texture's resident working set rather than
-causing another atlas allocation. RGBA pools start from visible demand rounded
+causing another atlas allocation. At its ceiling, a texture replaces its own
+unprotected cached pages as the view changes, even if the shared pool has free
+slots. RGBA pools start from visible demand rounded
 toward a power-of-two slot count, bounded by legal rectangular atlas dimensions.
 They grow as demand increases, within the remaining root GPU budget and a
 combined atlas allowance of 75% of that budget. The default root budget remains
 256 MiB. Both the old and replacement atlas count against it during migration;
-growth can therefore stop below the final allowance when temporary storage will
-not fit. Compressed native pools retain the bounded 32 MiB allocation policy.
+when growth is blocked by that overlap, a pool can first compact to resident
+coarse roots, then grow. This requires a resident root for every visible resource
+and proof that the final allocation fits beside the intermediate atlas. Missing
+roots or insufficient space can still prevent growth. Temporary compaction
+reduces detail and may require reloading discarded pages. Compressed native pools remain fixed after allocation, with an upper
+limit of 32 MiB. New native pools share the initial allowance with known visible
+pools. Automatic sources still waiting for decode reserve one generated RGBA
+page each in that allowance, so a fast native source can render while leaving
+room for their later coarse coverage. This is conservative: pending sources
+can later prove ineligible for VT. Terminal decode failures release their
+pending reservation and count as ineligible; they do not wait indefinitely.
+It does not guarantee room for new source
+classes introduced after a fixed native atlas has already been allocated.
 Unspecified per-texture limits allow use of the shared pool; they do not impose
 an additional 24-page ceiling.
+
+Ordinary texture planning reserves the shared VT allowance only for referenced
+authored sources that are supported or still awaiting manifest validation.
+Unused declarations and settled unsupported sources reserve nothing. Preparation
+continues while manifests load. When the allowance increases, fitted ordinary
+sources can be decoded again at higher resolution; native sources reread their
+offline mip levels without transcoding. Fitted raster VT leases are released
+only when a larger representation can be prepared. The previous ordinary GPU
+texture remains usable until replacement storage is admitted. Vector-backed VT
+and explicit native previews retain their full-source refinement paths.
+Native format validation happens when manifests arrive and again when GPU
+storage is created, so restored contexts re-enable their native extensions.
+Validation is deferred if a manifest arrives during context loss.
+
+Preparation queues unlink cancelled jobs in constant time, including jobs
+behind live queued work. Their intrusive links reuse the existing job record;
+no cancellation scan or additional queue-node allocation is required.
+
+Decoded native pages copy their blocks into exact-size buffers before entering
+the ready queue, so retained block storage matches page-byte reservations.
+Container metadata and trailing data are not retained with the queued page.
+This does not cap the temporary response-body allocation during transport.
+
+Native pages whose encoded color space disagrees with the effective binding
+(asset override, otherwise manifest color space) fail during read completion,
+before upload admission. They follow the same bounded failure policy as malformed
+page containers and do not interrupt healthy page rendering.
+
+When a resource has no resident pages and every page in its current demand is
+known to have failed, the runtime clears that demand and releases its empty GPU
+resource. A shared atlas remains alive for healthy neighbors. Failure records
+remain, preventing repeated allocation and transport for unchanged failed
+demand. A changed view can request previously untested pages and allocate again;
+a new source version also permits retry. Failed-page counts remain observable
+even when fully failed demand is suppressed.
 
 RGBA growth copies resident GPU pages without decoding them again. Copies and
 page uploads share the four-page frame limit and upload-byte/time admission.
@@ -438,8 +490,8 @@ batches followed by empty slots. Error validation occurs only after completion,
 before publication. This separation matters on
 WebKit, where creating a fence immediately after work can itself block. A
 failed fence or 120 unsuccessful frame polls abandons that replacement.
-Failed migration preserves the old atlas and retries only when demand or
-available capacity changes.
+Failed migration preserves the old atlas and retries when demand, available
+capacity, or uploaded coverage changes.
 
 RGBA pools also shrink when the rounded demand fits at most half their slots.
 A two-second low-demand delay avoids reallocating for brief camera changes;

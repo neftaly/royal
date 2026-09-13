@@ -26,6 +26,60 @@ const manifestFor = (encoding: string, borderTexels = 2) => parseVirtualTextureM
 afterEach(() => vi.unstubAllGlobals());
 
 describe.each(formats)("native $format", ({ vk, format, block, bytes, linear, srgb, encoding }) => {
+  it("keeps mip views inside a nonzero-offset KTX2 container", () => {
+    const source = createKtx2Fixture(vk, 16, 16, 3, [["KTXorientation", "rd"], ["KTXswizzle", "rgba"]]);
+    const backing = new Uint8Array(source.length + 23).fill(0xa5);
+    backing.set(source, 7);
+    const container = backing.subarray(7, 7 + source.length);
+    const parsed = parseKtx2Native(container);
+    expect(parsed.levels).toHaveLength(3);
+    const index = new DataView(container.buffer, container.byteOffset, container.byteLength);
+    for (let mip = 0; mip < parsed.levels.length; mip++) {
+      const blocks = parsed.levels[mip]!.blocks;
+      const offset = Number(index.getBigUint64(80 + mip * 24, true));
+      const length = Number(index.getBigUint64(88 + mip * 24, true));
+      expect(blocks.buffer).toBe(backing.buffer);
+      expect(blocks.byteOffset).toBe(container.byteOffset + offset);
+      expect(blocks.byteLength).toBe(length);
+      expect(blocks).toEqual(source.subarray(offset, offset + length));
+    }
+    // Bytes elsewhere in the backing allocation cannot satisfy a truncated view.
+    expect(() => parseKtx2Native(container.subarray(0, container.length - 16))).toThrow("block storage");
+  });
+
+  it("rejects repeated orientation and swizzle declarations", () => {
+    for (const [key, value] of [["KTXorientation", "rd"], ["KTXswizzle", "rgba"]] as const) {
+      expect(() => parseKtx2Native(createKtx2Fixture(vk, 16, 16, 1, [[key, value], [key, value]])))
+        .toThrow(`repeats ${key}`);
+    }
+  });
+
+  it.each(["linear", "srgb"] as const)("rolls back an incompatible binding without evicting valid %s storage", (colorSpace) => {
+    const parsed = parseKtx2Native(createKtx2Fixture(vk + (colorSpace === "srgb" ? 1 : 0), 16, 16));
+    if (parsed.format === "etc2-rgba") throw new Error("Expected native format");
+    const gl = fakeGl();
+    Object.assign(gl, { getExtension: vi.fn(() => ({ getSupportedProfiles: () => ["ldr"] })) });
+    const budget = new PersistentGpuBudgetOwner(4096);
+    const owner = new TextureGpuOwner(gl, budget);
+    const valid: CanonicalTextureBinding = {
+      decoded: { ...parsed, format: parsed.format, kind: "ktx2-native" },
+      colorSpace, sampler, storageKey: "valid", samplerKey: "linear",
+    };
+    const invalid: CanonicalTextureBinding = { ...valid,
+      colorSpace: colorSpace === "srgb" ? "linear" : "srgb", storageKey: "invalid" };
+    try {
+      const texture = owner.reconcileComplete([valid])[0]!.texture;
+      expect(texture).not.toBeNull();
+      const retained = budget.snapshot().retainedBytes;
+      expect(() => owner.reconcileComplete([valid, invalid])).toThrow("storage color space");
+      expect(budget.snapshot().retainedBytes).toBe(retained);
+      expect(vi.mocked(gl.deleteTexture).mock.calls.every(([deleted]) => deleted !== texture)).toBe(true);
+      expect(owner.reconcileComplete([valid])[0]!.texture).toBe(texture);
+      expect(gl.compressedTexImage2D).toHaveBeenCalledOnce();
+    } finally { owner.dispose(); }
+    expect(budget.snapshot().retainedBytes).toBe(0);
+  });
+
   it.each(["linear", "srgb"] as const)("parses and uploads %s authored mip levels without copying blocks", async (colorSpace) => {
     const payload = createKtx2Fixture(vk + (colorSpace === "srgb" ? 1 : 0), 16, 16, 5);
     const parsed = parseKtx2Native(payload);

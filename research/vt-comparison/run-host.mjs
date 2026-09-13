@@ -1,9 +1,15 @@
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
+const retentionWindows = Number(process.env.VT_RETENTION_WINDOWS ?? 0);
+if (!Number.isInteger(retentionWindows) || retentionWindows < 0 || retentionWindows > 12
+  || (retentionWindows && process.env.VT_PROFILE)) throw new Error('VT_RETENTION_WINDOWS must be 1..12 and cannot be combined with VT_PROFILE');
+const snapshotPrefix = process.env.VT_HEAP_SNAPSHOTS;
+if (snapshotPrefix && !retentionWindows) throw new Error('VT_HEAP_SNAPSHOTS requires retention mode');
 const profile = await mkdtemp(join(tmpdir(), 'royal-vt-host-'));
 const angle = process.env.VT_ANGLE ?? 'vulkan';
 const browser = spawn(process.env.CHROMIUM_BIN ?? '/usr/bin/chromium', [
@@ -26,9 +32,10 @@ try {
   socket = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
   let id = 0; const pending = new Map();
-  const gcEvents = []; let traceDone;
+  const gcEvents = []; let traceDone, heapChunks;
   socket.onmessage = ({ data }) => {
     const message = JSON.parse(data);
+    if (message.method === 'HeapProfiler.addHeapSnapshotChunk') heapChunks?.push(message.params.chunk);
     if (message.method === 'Runtime.consoleAPICalled') {
       const text = message.params.args.map(a => a.value ?? '').join(' ');
       if (text.startsWith('VT scene complete:')) console.log(text);
@@ -44,6 +51,16 @@ try {
   const timer = setTimeout(() => { pending.delete(request); reject(new Error(`CDP timeout: ${method}`)); }, 300000);
     pending.set(request, { resolve, reject, timer }); socket.send(JSON.stringify({ id: request, method, params }));
   });
+  const snapshotPaths = {};
+  const takeHeapSnapshot = async label => {
+    if (!snapshotPrefix) return;
+    heapChunks = [];
+    await call('HeapProfiler.takeHeapSnapshot', { reportProgress: false });
+    const path = `${snapshotPrefix}-${label}.heapsnapshot`;
+    await writeFile(path, heapChunks.join(''));
+    heapChunks = undefined;
+    snapshotPaths[label] = path;
+  };
   for (let i = 0; i < 100; i++) {
     const status = await call('Runtime.evaluate', { expression: "typeof window.runVTComparison === 'function'", returnByValue: true });
     if (status.result.value) break;
@@ -54,34 +71,76 @@ try {
   console.log('Renderer:', probe.result.value);
   if (/swiftshader|llvmpipe|software|unavailable|unknown/i.test(probe.result.value)) throw new Error(`Hardware renderer not available: ${diagnostics}`);
   await call('Runtime.enable', {});
+  const prepared = await call('Runtime.evaluate', { expression: '(async () => { if (!window.prepareVTComparison) return false; await window.prepareVTComparison(); return true; })()', awaitPromise: true, returnByValue: true });
+  if (prepared.exceptionDetails) throw new Error(JSON.stringify(prepared.exceptionDetails));
+  if (retentionWindows && !prepared.result.value) throw new Error('Retention measurement requires a prepareVTComparison hook');
   await call('HeapProfiler.collectGarbage', {});
   const heapBefore = await call('Runtime.getHeapUsage', {});
-  await call('Tracing.start', { categories: 'v8,devtools.timeline', transferMode: 'ReportEvents' });
+  await takeHeapSnapshot('before');
+  if (!retentionWindows) await call('Tracing.start', { categories: 'v8,devtools.timeline', transferMode: 'ReportEvents' });
   if (process.env.VT_PROFILE) {
     await call('Profiler.enable', {}); await call('Profiler.start', {});
     await call('HeapProfiler.startSampling', { samplingInterval: 32768, includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true });
   }
-  const result = await call('Runtime.evaluate', { expression: 'window.runVTComparison()', awaitPromise: true, returnByValue: true });
-  if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
-  if (process.env.VT_PROFILE) {
-    const { profile } = await call('Profiler.stop', {});
-    const allocations = await call('HeapProfiler.stopSampling', {});
-    const rows = []; const visit = node => {
-      if (node.selfSize) rows.push({ name: node.callFrame.functionName, url: node.callFrame.url, bytes: node.selfSize });
-      for (const child of node.children) visit(child);
-    }; visit(allocations.profile.head);
-    result.result.value.profile = {
-      cpu: profile.nodes.filter(n => n.hitCount).sort((a,b) => b.hitCount - a.hitCount).slice(0, 25).map(n => ({ name: n.callFrame.functionName, url: n.callFrame.url, hits: n.hitCount })),
-      allocations: rows.sort((a,b) => b.bytes - a.bytes).slice(0, 25),
-      note: 'Sampling profiles add overhead; use these for attribution, not frame-rate comparisons.' };
+  let result;
+  const heaps = [heapBefore];
+  for (let window = 0; window < (retentionWindows || 1); window++) {
+    result = await call('Runtime.evaluate', { expression: 'window.runVTComparison()', awaitPromise: true, returnByValue: true });
+    if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
+    if (retentionWindows) {
+      await call('HeapProfiler.collectGarbage', {});
+      heaps.push(await call('Runtime.getHeapUsage', {}));
+      console.log(`Retention window ${window + 1}: ${heaps.at(-1).usedSize} live JS bytes`);
+    }
   }
-  const traceComplete = new Promise(resolve => { traceDone = resolve; });
-  await call('Tracing.end', {}); await traceComplete;
-  await call('HeapProfiler.collectGarbage', {});
-  const heapAfter = await call('Runtime.getHeapUsage', {});
-  result.result.value.gc = { events: gcEvents.length, totalMs: gcEvents.reduce((sum, e) => sum + e.dur / 1000, 0),
+  let cpuProfile, heapProfile;
+  if (process.env.VT_PROFILE) {
+    cpuProfile = (await call('Profiler.stop', {})).profile;
+    heapProfile = (await call('HeapProfiler.stopSampling', {})).profile;
+  }
+  if (!retentionWindows) {
+    const traceComplete = new Promise(resolve => { traceDone = resolve; });
+    await call('Tracing.end', {}); await traceComplete;
+    await call('HeapProfiler.collectGarbage', {});
+  }
+  const heapAfter = retentionWindows ? heaps.at(-1) : await call('Runtime.getHeapUsage', {});
+  await takeHeapSnapshot('after');
+  const finished = await call('Runtime.evaluate', { expression: 'window.finishVTComparison?.()', awaitPromise: true, returnByValue: true });
+  if (finished.exceptionDetails) throw new Error(JSON.stringify(finished.exceptionDetails));
+  if (finished.result.value) Object.assign(result.result.value, finished.result.value);
+  if (retentionWindows) result.result.value.retention = { windows: retentionWindows, heaps,
+    note: 'One preparation across all windows; per-window behavior belongs to the fixture. Forced GC between windows, without tracing or sampling. Finish-hook diagnostics run after the last heap sample.' };
+  else result.result.value.gc = { events: gcEvents.length, totalMs: gcEvents.reduce((sum, e) => sum + e.dur / 1000, 0),
     maxMs: Math.max(0, ...gcEvents.map(e => e.dur / 1000)), heapBefore, heapAfter,
-    note: 'Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run.' };
+    note: prepared.result.value ? 'Warm-up and final diagnostics are excluded from the trace. Forced-GC heaps retain the live scene before/after measurement.'
+      : 'Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run.' };
+  const cleanup = await call('Runtime.evaluate', { expression: 'window.cleanupVTComparison?.()', awaitPromise: true, returnByValue: true });
+  if (cleanup.exceptionDetails) throw new Error(JSON.stringify(cleanup.exceptionDetails));
+  await takeHeapSnapshot('disposed');
+  if (snapshotPrefix) result.result.value.heapSnapshots = { paths: snapshotPaths,
+    note: 'Snapshots perturb the benchmark and may trigger additional GC. Before/after captures bracket replacement windows; disposed capture follows cleanup. Use separate runs without snapshots for uninstrumented heap trends.' };
+  if (cpuProfile) {
+    const { TraceMap, originalPositionFor } = createRequire(import.meta.resolve('vite'))('@jridgewell/trace-mapping');
+    const maps = new Map();
+    const locate = async frame => {
+      if (!/^https?:/.test(frame.url) || frame.lineNumber < 0 || frame.columnNumber < 0) return {};
+      if (!maps.has(frame.url)) maps.set(frame.url, (async () => {
+        try { const response = await fetch(frame.url + '.map'); return response.ok ? new TraceMap(await response.json(), frame.url + '.map') : undefined; } catch { return undefined; }
+      })());
+      const map = await maps.get(frame.url);
+      return map ? originalPositionFor(map, { line: frame.lineNumber + 1, column: frame.columnNumber }) : {};
+    };
+    const rows = [];
+    const visit = node => { if (node.selfSize) rows.push(node); node.children.forEach(visit); }; visit(heapProfile.head);
+    const output = process.env.VT_BENCH_OUTPUT ?? 'research/vt-comparison/host-results.json';
+    const cpuPath = output.replace(/\.json$/, '.cpuprofile'), heapPath = output.replace(/\.json$/, '.heapprofile');
+    await writeFile(cpuPath, JSON.stringify(cpuProfile)); await writeFile(heapPath, JSON.stringify(heapProfile));
+    result.result.value.profile = {
+      cpu: await Promise.all(cpuProfile.nodes.filter(n => n.hitCount).sort((a, b) => b.hitCount - a.hitCount).slice(0, 30).map(async n => ({ name: n.callFrame.functionName, url: n.callFrame.url, hits: n.hitCount, original: await locate(n.callFrame) }))),
+      allocations: await Promise.all(rows.sort((a, b) => b.selfSize - a.selfSize).slice(0, 30).map(async n => ({ name: n.callFrame.functionName, url: n.callFrame.url, bytes: n.selfSize, original: await locate(n.callFrame) }))),
+      cpuPath, heapPath, note: 'Sampling adds overhead; use profiles for attribution, not frame-rate comparisons. Source locations require VT_SOURCEMAP=1 during the client build.' };
+  }
+  result.result.value.renderer = probe.result.value;
   const imageDirectory = (process.env.VT_BENCH_OUTPUT ?? 'research/vt-comparison/host-results.json').replace(/\.json$/, '-images');
   for (const row of result.result.value.results ?? []) if (row.screenshot) {
     await mkdir(imageDirectory, { recursive: true });

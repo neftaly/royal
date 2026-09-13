@@ -1,0 +1,535 @@
+{
+  "sourceHashes": {
+    "before": "2877512c1bd214a3d925b1312f9fbebe5d406a2cb90338bad6943f8619d27895",
+    "after": "64a72192ad60199cfe2fb3f6bfb52ec7116f9d57e55333a1ab545c30f8dfcce5"
+  },
+  "node": "v24.12.0",
+  "nodeOptions": [
+    "--expose-gc"
+  ],
+  "profile": true,
+  "baseline": "/tmp/royal-vt-before-derivative-overflow.ts",
+  "results": [
+    {
+      "allocations": [
+        {
+          "name": "runDemandBenchmark",
+          "line": 734,
+          "bytes": 3344784
+        },
+        {
+          "name": "add",
+          "line": -1,
+          "bytes": 1056640
+        },
+        {
+          "name": "collectVirtualTextureDemand",
+          "line": 718,
+          "bytes": 196744
+        },
+        {
+          "name": "now",
+          "line": 136,
+          "bytes": 163928
+        },
+        {
+          "name": "next",
+          "line": -1,
+          "bytes": 65560
+        }
+      ],
+      "cpuMs": 2199.546,
+      "elapsedMs": 2195.1127959999994,
+      "hostLoad": [
+        3.17,
+        2.72,
+        2.14
+      ],
+      "round": 0,
+      "grid": false,
+      "version": "before",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.0047660000000178115,
+            "p95Ms": 0.007901999999830878
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.004523999999946682,
+            "p95Ms": 0.005932000000029802
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.07713199999989229,
+            "p95Ms": 0.09185200000001714
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.08374299999968571,
+            "p95Ms": 0.09583199999997305
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.655713000000105,
+            "p95Ms": 8.09719000000041
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.728499999999258,
+            "p95Ms": 8.449471999999332
+          }
+        ]
+      },
+      "heapDelta": 4509240,
+      "gcEvents": 0,
+      "gcMs": 0
+    },
+    {
+      "allocations": [
+        {
+          "name": "addClippedTriangleDemand",
+          "line": 561,
+          "bytes": 15143800
+        },
+        {
+          "name": "runDemandBenchmark",
+          "line": 734,
+          "bytes": 3246432
+        },
+        {
+          "name": "addWrappedRange",
+          "line": 517,
+          "bytes": 2556528
+        },
+        {
+          "name": "addPageWithAncestors",
+          "line": 399,
+          "bytes": 917728
+        },
+        {
+          "name": "add",
+          "line": -1,
+          "bytes": 626880
+        },
+        {
+          "name": "max",
+          "line": -1,
+          "bytes": 458864
+        },
+        {
+          "name": "add",
+          "line": -1,
+          "bytes": 263560
+        },
+        {
+          "name": "collectVirtualTextureDemand",
+          "line": 718,
+          "bytes": 163984
+        },
+        {
+          "name": "next",
+          "line": -1,
+          "bytes": 98360
+        },
+        {
+          "name": "now",
+          "line": 136,
+          "bytes": 98352
+        },
+        {
+          "name": "add",
+          "line": -1,
+          "bytes": 65960
+        },
+        {
+          "name": "resetVirtualTextureDemand",
+          "line": 377,
+          "bytes": 65640
+        },
+        {
+          "name": "max",
+          "line": -1,
+          "bytes": 33600
+        },
+        {
+          "name": "Uint16Array",
+          "line": -1,
+          "bytes": 32832
+        }
+      ],
+      "cpuMs": 2315.184,
+      "elapsedMs": 2287.2692420000003,
+      "hostLoad": [
+        3.08,
+        2.71,
+        2.14
+      ],
+      "round": 0,
+      "grid": false,
+      "version": "after",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.018310000000383297,
+            "p95Ms": 0.026812000000063563
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.01729200000045239,
+            "p95Ms": 0.03268099999968399
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.09320899999966059,
+            "p95Ms": 0.583690999999817
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.08414600000014616,
+            "p95Ms": 0.10504300000047806
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.887369000000035,
+            "p95Ms": 9.9504450000004
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.732942000000548,
+            "p95Ms": 9.160587999999734
+          }
+        ]
+      },
+      "heapDelta": 7989232,
+      "gcEvents": 2,
+      "gcMs": 0.5148959755897522
+    },
+    {
+      "allocations": [
+        {
+          "name": "addClippedTriangleDemand",
+          "line": 561,
+          "bytes": 17305728
+        },
+        {
+          "name": "addWrappedRange",
+          "line": 517,
+          "bytes": 6424096
+        },
+        {
+          "name": "runDemandBenchmark",
+          "line": 734,
+          "bytes": 4295152
+        },
+        {
+          "name": "add",
+          "line": -1,
+          "bytes": 2182320
+        },
+        {
+          "name": "max",
+          "line": -1,
+          "bytes": 1016064
+        },
+        {
+          "name": "min",
+          "line": -1,
+          "bytes": 791992
+        },
+        {
+          "name": "addPageWithAncestors",
+          "line": 399,
+          "bytes": 655520
+        },
+        {
+          "name": "add",
+          "line": -1,
+          "bytes": 429480
+        },
+        {
+          "name": "add",
+          "line": -1,
+          "bytes": 367240
+        },
+        {
+          "name": "collectVirtualTextureDemand",
+          "line": 718,
+          "bytes": 196768
+        },
+        {
+          "name": "max",
+          "line": -1,
+          "bytes": 196656
+        },
+        {
+          "name": "abs",
+          "line": -1,
+          "bytes": 98336
+        },
+        {
+          "name": "log2",
+          "line": -1,
+          "bytes": 98336
+        },
+        {
+          "name": "next",
+          "line": -1,
+          "bytes": 65560
+        },
+        {
+          "name": "matchAll",
+          "line": -1,
+          "bytes": 34232
+        },
+        {
+          "name": "Float64Array",
+          "line": -1,
+          "bytes": 32864
+        }
+      ],
+      "cpuMs": 1413.427,
+      "elapsedMs": 1386.4293559999996,
+      "hostLoad": [
+        3.08,
+        2.71,
+        2.14
+      ],
+      "round": 0,
+      "grid": true,
+      "version": "before",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.017507000000478,
+            "p95Ms": 0.025227000000086264
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.02071200000045792,
+            "p95Ms": 0.041289999999207794
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.13432900000043446,
+            "p95Ms": 0.8578310000002602
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.06216099999983271,
+            "p95Ms": 0.07089799999994284
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.737145999999484,
+            "p95Ms": 5.219368000000031
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.713019000000713,
+            "p95Ms": 5.102619999999661
+          }
+        ]
+      },
+      "heapDelta": 7781920,
+      "gcEvents": 3,
+      "gcMs": 0.6574029922485352
+    },
+    {
+      "allocations": [
+        {
+          "name": "addWrappedRange",
+          "line": 517,
+          "bytes": 5932464
+        },
+        {
+          "name": "runDemandBenchmark",
+          "line": 734,
+          "bytes": 4557552
+        },
+        {
+          "name": "add",
+          "line": -1,
+          "bytes": 1946680
+        },
+        {
+          "name": "max",
+          "line": -1,
+          "bytes": 1377880
+        },
+        {
+          "name": "addClippedTriangleDemand",
+          "line": 561,
+          "bytes": 1376592
+        },
+        {
+          "name": "min",
+          "line": -1,
+          "bytes": 786624
+        },
+        {
+          "name": "add",
+          "line": -1,
+          "bytes": 331600
+        },
+        {
+          "name": "addPageWithAncestors",
+          "line": 399,
+          "bytes": 294992
+        },
+        {
+          "name": "collectVirtualTextureDemand",
+          "line": 718,
+          "bytes": 131200
+        },
+        {
+          "name": "next",
+          "line": -1,
+          "bytes": 131160
+        },
+        {
+          "name": "add",
+          "line": -1,
+          "bytes": 66440
+        },
+        {
+          "name": "matchAll",
+          "line": -1,
+          "bytes": 34232
+        },
+        {
+          "name": "multiplyMat4Into",
+          "line": 19,
+          "bytes": 32832
+        }
+      ],
+      "cpuMs": 1424.616,
+      "elapsedMs": 1408.4888690000007,
+      "hostLoad": [
+        3.08,
+        2.71,
+        2.14
+      ],
+      "round": 0,
+      "grid": true,
+      "version": "after",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.018298999999387888,
+            "p95Ms": 0.027721999998902902
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.011763999998947838,
+            "p95Ms": 0.019095999999990454
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.12432200000148441,
+            "p95Ms": 0.174829999999929
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.06561499999952503,
+            "p95Ms": 0.09124599999995553
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.734155000000101,
+            "p95Ms": 5.147866000001159
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.79625599999963,
+            "p95Ms": 5.880885999999009
+          }
+        ]
+      },
+      "heapDelta": 8332192,
+      "gcEvents": 1,
+      "gcMs": 0.24578702449798584
+    }
+  ],
+  "note": "Alternating order, four rounds (one when profiling), warmed bundles in one process. Sampling adds overhead; GC counts depend on heap sizing. Each report includes fixture construction; excludes rendering/network/decode/upload. Compare matched geometry and ancestors, not aggregate GC across unlike workloads."
+}

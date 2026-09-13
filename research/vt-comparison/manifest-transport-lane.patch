@@ -1,0 +1,36 @@
+--- a/packages/renderer-webgl/src/virtual-texture/runtime.ts
++++ b/packages/renderer-webgl/src/virtual-texture/runtime.ts
+@@ -60,7 +60,7 @@
+ import { SvgRasterCache } from "./svg-raster-cache";
+ import { copyVirtualTextureAtlasSlots } from "./atlas-copy";
+ import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
+-import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
++import { AsyncPreparationOwner, type AsyncPreparationScheduler } from "../resource/async-preparation-owner";
+ import type {
+   DecodedTextureSource,
+   DecodedTextureLease,
+@@ -409,6 +409,7 @@
+   readonly #automatic: AutomaticVirtualTextureRuntimeOptions;
+   readonly #onChanged: (asset: VirtualTextureAssetRef, presentationChanged: boolean) => void;
+   readonly #schedule: AsyncPreparationScheduler;
++  readonly #manifestReads = new AsyncPreparationOwner(8);
+   readonly #scheduleDetail: AsyncPreparationScheduler;
+   readonly #uploadBudget: FrameUploadBudgetOwner;
+   readonly #resources = new Map<string, RuntimeResource>();
+@@ -465,6 +466,7 @@
+     if (this.#disposed) return;
+     this.#disposed = true;
+     clearTimeout(this.#shrinkTimer);
++    this.#manifestReads.dispose();
+     for (const resource of this.#resources.values()) this.#destroyResource(resource, true);
+     this.#resources.clear();
+     this.#scheduleResources.length = 0;
+@@ -1570,7 +1572,7 @@
+ 
+   async #openSource(resource: RuntimeResource): Promise<void> {
+     try {
+-      const source = await this.#schedule(
++      const source = await this.#manifestReads.runForeground(
+         resource.abort.signal,
+         () => openAuthoredVirtualTexturePageSource(
+           (resource.asset as VirtualTextureAssetRef).manifestUri,

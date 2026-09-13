@@ -1,0 +1,12 @@
+{
+  "packages/renderer-webgl/src/virtual-texture/runtime.ts": {
+    "before": "ec1a6950040f4c5db4704ddd7d090f2b65f9d3bc7511889ac48688f87f06a90f",
+    "after": "2352bae9904868aaa2108fdb5ae7bafc3324fde8f2a1312d0da708664608e888",
+    "netLines": 2
+  },
+  "packages/renderer-webgl/src/runtime/canvas-root.ts": {
+    "before": "12768e8b6baff924132cfe3e6e68726a49c0735060222e7fd5176efbbcbb80d8",
+    "after": "0e59ce930b29cb11fa61758d09139e0d761420a17955a74ed36c76776eb96c44",
+    "netLines": 1
+  }
+}

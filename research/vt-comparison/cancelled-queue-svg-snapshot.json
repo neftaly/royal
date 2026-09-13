@@ -1,0 +1,131 @@
+{
+  "results": [
+    {
+      "name": "lifecycle-svg",
+      "minFilter": "linear-mipmap-linear",
+      "completed": 72,
+      "earlyReplacements": 24,
+      "abortedReads": 24,
+      "activeReads": 0,
+      "delayed": true,
+      "reuse": true,
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    }
+  ],
+  "note": "One live root repeatedly loads source URLs (unique by default, fixed with reuse=1) and removes its scene. Six resident loads and two early replacements per window; forced-GC samples occur with an empty scene. Early replacement is not a guaranteed transport abort. Fetch counts end at response headers, not body consumption. Snapshot/GL checks are intentional lifecycle harness overhead, not frame timing measurements.",
+  "retention": {
+    "windows": 12,
+    "heaps": [
+      {
+        "usedSize": 2561332,
+        "totalSize": 2883584,
+        "embedderHeapUsedSize": 435504,
+        "backingStorageSize": 405536
+      },
+      {
+        "usedSize": 2970860,
+        "totalSize": 3407872,
+        "embedderHeapUsedSize": 458376,
+        "backingStorageSize": 405536
+      },
+      {
+        "usedSize": 3134056,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 465048,
+        "backingStorageSize": 405536
+      },
+      {
+        "usedSize": 3155056,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 471712,
+        "backingStorageSize": 405536
+      },
+      {
+        "usedSize": 3296732,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 477528,
+        "backingStorageSize": 405536
+      },
+      {
+        "usedSize": 3349860,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 483968,
+        "backingStorageSize": 405536
+      },
+      {
+        "usedSize": 3362360,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 490584,
+        "backingStorageSize": 405536
+      },
+      {
+        "usedSize": 3364140,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 497264,
+        "backingStorageSize": 405536
+      },
+      {
+        "usedSize": 3374524,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 503936,
+        "backingStorageSize": 405536
+      },
+      {
+        "usedSize": 3377840,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 510592,
+        "backingStorageSize": 405536
+      },
+      {
+        "usedSize": 3395544,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 517296,
+        "backingStorageSize": 405536
+      },
+      {
+        "usedSize": 3433356,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 523872,
+        "backingStorageSize": 405536
+      },
+      {
+        "usedSize": 3443768,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 530448,
+        "backingStorageSize": 405536
+      }
+    ],
+    "note": "One preparation across all windows; per-window behavior belongs to the fixture. Forced GC between windows, without tracing or sampling. Finish-hook diagnostics run after the last heap sample."
+  },
+  "heapSnapshots": {
+    "paths": {
+      "before": "/home/neftaly/dev/royal/node_modules/.cache/royal-vt-cancelled-queue-svg-snapshot-before.heapsnapshot",
+      "after": "/home/neftaly/dev/royal/node_modules/.cache/royal-vt-cancelled-queue-svg-snapshot-after.heapsnapshot",
+      "disposed": "/home/neftaly/dev/royal/node_modules/.cache/royal-vt-cancelled-queue-svg-snapshot-disposed.heapsnapshot"
+    },
+    "note": "Snapshots perturb the benchmark and may trigger additional GC. Before/after captures bracket replacement windows; disposed capture follows cleanup. Use separate runs without snapshots for uninstrumented heap trends."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

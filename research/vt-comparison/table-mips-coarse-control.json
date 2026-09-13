@@ -1,0 +1,1624 @@
+{
+  "results": [
+    {
+      "name": "ktx2-astc-6x6",
+      "minFilter": "bytes-false",
+      "phases": [
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 3
+        },
+        {
+          "restored": false,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 4
+        },
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 5
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 8
+        },
+        {
+          "restored": true,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 9
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 10
+        }
+      ],
+      "reads": [
+        "/resident-limit-fixture/limited/index.json",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/index.json",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2"
+      ],
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33546240,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 3,
+        "admittedPages": 3,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 10,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 3,
+        "uploadedPages": 10,
+        "uploadBudgetBytes": 33554432
+      },
+      "screenshot": "research/vt-comparison/table-mips-coarse-control-images/ktx2-astc-6x6-bytes-false.png"
+    },
+    {
+      "name": "ktx2-astc-6x6",
+      "minFilter": "bytes-true",
+      "phases": [
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 3
+        },
+        {
+          "restored": false,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 4
+        },
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 5
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 8
+        },
+        {
+          "restored": true,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 9
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 10
+        }
+      ],
+      "reads": [
+        "/resident-limit-fixture/limited/index.json",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/index.json",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2"
+      ],
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33546240,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 3,
+        "admittedPages": 3,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 10,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 3,
+        "uploadedPages": 10,
+        "uploadBudgetBytes": 33554432
+      },
+      "screenshot": "research/vt-comparison/table-mips-coarse-control-images/ktx2-astc-6x6-bytes-true.png"
+    },
+    {
+      "name": "ktx2-astc-6x6",
+      "minFilter": "slots-false",
+      "phases": [
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 3
+        },
+        {
+          "restored": false,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 4
+        },
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 5
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 8
+        },
+        {
+          "restored": true,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 9
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 10
+        }
+      ],
+      "reads": [
+        "/resident-limit-fixture/limited/index.json",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/index.json",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2"
+      ],
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33546240,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 3,
+        "admittedPages": 3,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 10,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 3,
+        "uploadedPages": 10,
+        "uploadBudgetBytes": 33554432
+      },
+      "screenshot": "research/vt-comparison/table-mips-coarse-control-images/ktx2-astc-6x6-slots-false.png"
+    },
+    {
+      "name": "ktx2-astc-6x6",
+      "minFilter": "slots-true",
+      "phases": [
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 3
+        },
+        {
+          "restored": false,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 4
+        },
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 5
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 8
+        },
+        {
+          "restored": true,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 9
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 10
+        }
+      ],
+      "reads": [
+        "/resident-limit-fixture/limited/index.json",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/index.json",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2"
+      ],
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33546240,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 3,
+        "admittedPages": 3,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 10,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 3,
+        "uploadedPages": 10,
+        "uploadBudgetBytes": 33554432
+      },
+      "screenshot": "research/vt-comparison/table-mips-coarse-control-images/ktx2-astc-6x6-slots-true.png"
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "minFilter": "bytes-false",
+      "phases": [
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 3
+        },
+        {
+          "restored": false,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 4
+        },
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 5
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 8
+        },
+        {
+          "restored": true,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 9
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 10
+        }
+      ],
+      "reads": [
+        "/resident-limit-fixture/limited/index.json",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/index.json",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2"
+      ],
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33530112,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 3,
+        "admittedPages": 3,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 10,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 3,
+        "uploadedPages": 10,
+        "uploadBudgetBytes": 33554432
+      },
+      "screenshot": "research/vt-comparison/table-mips-coarse-control-images/ktx2-astc-8x8-bytes-false.png"
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "minFilter": "bytes-true",
+      "phases": [
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 3
+        },
+        {
+          "restored": false,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 4
+        },
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 5
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 8
+        },
+        {
+          "restored": true,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 9
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 10
+        }
+      ],
+      "reads": [
+        "/resident-limit-fixture/limited/index.json",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/index.json",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2"
+      ],
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33530112,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 3,
+        "admittedPages": 3,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 10,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 3,
+        "uploadedPages": 10,
+        "uploadBudgetBytes": 33554432
+      },
+      "screenshot": "research/vt-comparison/table-mips-coarse-control-images/ktx2-astc-8x8-bytes-true.png"
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "minFilter": "slots-false",
+      "phases": [
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 3
+        },
+        {
+          "restored": false,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 4
+        },
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 5
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 8
+        },
+        {
+          "restored": true,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 9
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 10
+        }
+      ],
+      "reads": [
+        "/resident-limit-fixture/limited/index.json",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/index.json",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2"
+      ],
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33530112,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 3,
+        "admittedPages": 3,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 10,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 3,
+        "uploadedPages": 10,
+        "uploadBudgetBytes": 33554432
+      },
+      "screenshot": "research/vt-comparison/table-mips-coarse-control-images/ktx2-astc-8x8-slots-false.png"
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "minFilter": "slots-true",
+      "phases": [
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 3
+        },
+        {
+          "restored": false,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 4
+        },
+        {
+          "restored": false,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 5
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 8
+        },
+        {
+          "restored": true,
+          "x": -2,
+          "pixels": [
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 9
+        },
+        {
+          "restored": true,
+          "x": 2,
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 10
+        }
+      ],
+      "reads": [
+        "/resident-limit-fixture/limited/index.json",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/index.json",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-0-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2",
+        "/resident-limit-fixture/neighbor/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-1-0.ktx2",
+        "/resident-limit-fixture/limited/1-0-0.ktx2"
+      ],
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33530112,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 3,
+        "admittedPages": 3,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 10,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 3,
+        "uploadedPages": 10,
+        "uploadBudgetBytes": 33554432
+      },
+      "screenshot": "research/vt-comparison/table-mips-coarse-control-images/ktx2-astc-8x8-slots-true.png"
+    }
+  ],
+  "note": "Headless host-GPU correctness matrix, not a timing benchmark. Valid constant-color ASTC blocks, real shared atlas uploads, colored neighboring pages, capped replacement and context restoration. Each case disposes its root.",
+  "gc": {
+    "events": 11,
+    "totalMs": 7.766,
+    "maxMs": 1.612,
+    "heapBefore": {
+      "usedSize": 933876,
+      "totalSize": 1572864,
+      "embedderHeapUsedSize": 358488,
+      "backingStorageSize": 309667
+    },
+    "heapAfter": {
+      "usedSize": 2734624,
+      "totalSize": 3670016,
+      "embedderHeapUsedSize": 421656,
+      "backingStorageSize": 383203
+    },
+    "note": "Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

@@ -1,0 +1,37 @@
+{
+  "runtime": {
+    "admittedUploadBytes": 0,
+    "atlasBytes": 9216,
+    "atlasPools": 1,
+    "atlasGrowthFailures": 0,
+    "desiredPages": 3,
+    "admittedPages": 2,
+    "unresidentPages": 1,
+    "automaticCandidates": 0,
+    "automaticDecodedBytes": 0,
+    "automaticIneligible": 0,
+    "automaticResources": 0,
+    "automaticWaiting": 0,
+    "deferredUploads": 0,
+    "failedPages": 0,
+    "pageRequests": 1,
+    "pendingPages": 0,
+    "pendingPageBytes": 0,
+    "pendingPageByteLimit": 16777216,
+    "residentPages": 1,
+    "uploadedPages": 1,
+    "uploadBudgetBytes": 33554432
+  },
+  "limited": {
+    "failedPages": 0,
+    "pendingPages": 0,
+    "residentPages": 1,
+    "status": "ready"
+  },
+  "neighbor": {
+    "failedPages": 0,
+    "pendingPages": 0,
+    "residentPages": 0,
+    "status": "ready"
+  }
+}

@@ -1,0 +1,54 @@
+--- a/packages/renderer-webgl/src/virtual-texture/runtime.ts
++++ b/packages/renderer-webgl/src/virtual-texture/runtime.ts
+@@ -194,10 +194,7 @@
+   return sampler;
+ };
+ 
+-const virtualTextureAtlasKey = (
+-  asset: Pick<TextureSourceRef | VirtualTextureAssetRef, "colorSpace">,
+-  manifest: VirtualTextureManifest,
+-): string => JSON.stringify([
++const virtualTextureAtlasKey = ({ asset, gpu }: RuntimeResource, manifest: VirtualTextureManifest): string => gpu?.atlas.key ?? JSON.stringify([
+   manifest.pageSize + manifest.borderTexels * 2,
+   manifest.pageEncoding,
+   asset.colorSpace ?? manifest.colorSpace,
+@@ -765,7 +762,7 @@
+       this.#refreshFrameDemand(resource, views);
+       const manifest = resource.manifest;
+       if (manifest === undefined || resource.manifestFailure !== undefined) continue;
+-      const key = virtualTextureAtlasKey(resource.asset, manifest);
++      const key = virtualTextureAtlasKey(resource, manifest);
+       const bytesPerPage = virtualTexturePageBytes(manifest);
+       const count = Math.min(resource.desiredPageCount ?? 0, manifest.physicalSlots ?? Infinity,
+         manifest.physicalByteBudget === undefined ? Infinity : Math.floor(manifest.physicalByteBudget / bytesPerPage));
+@@ -798,7 +795,7 @@
+       let needsFit = false;
+       for (const resource of this.#resources.values()) {
+         if (resource.manifest === undefined || resource.manifestFailure !== undefined
+-          || virtualTextureAtlasKey(resource.asset, resource.manifest) !== atlas.key) continue;
++          || virtualTextureAtlasKey(resource, resource.manifest) !== atlas.key) continue;
+         resources.push(resource);
+         needsFit ||= resource.demandNeedsFit || resource.admittedPageLimit === undefined || resource.demandRevision !== this.#viewRevision;
+       }
+@@ -950,10 +947,10 @@
+     if (this.#nativePreviewSufficient(resource)) return false;
+     let gpuCreated = false;
+     if (resource.gpu === undefined) {
+-      const atlas = this.#atlases.get(virtualTextureAtlasKey(resource.asset, manifest));
++      const atlas = this.#atlases.get(virtualTextureAtlasKey(resource, manifest));
+       const pageBytes = virtualTexturePageBytes(manifest);
+       resource.allocationBudgetBlocked = this.#budget.availableBytes < manifest.tableByteLength + (atlas === undefined ? pageBytes : 0)
+-        || (atlas === undefined && manifest.pageEncoding === "image" && this.#atlasAllowance(undefined, virtualTextureAtlasKey(resource.asset, manifest)) < pageBytes);
++        || (atlas === undefined && manifest.pageEncoding === "image" && this.#atlasAllowance(undefined, virtualTextureAtlasKey(resource, manifest)) < pageBytes);
+       if (resource.allocationBudgetBlocked) return false;
+       if (!this.#uploadBudget.tryAdmitAllocation()) {
+         resource.demandRevision = -1;
+@@ -1289,7 +1286,7 @@
+     if (manifest.pageEncoding === "ktx2-etc2" && !this.#etc2Available) {
+       throw new Error("Royal ETC2 KTX2 VT pages require WEBGL_compressed_texture_etc");
+     }
+-    const atlasKey = virtualTextureAtlasKey(resource.asset, manifest);
++    const atlasKey = virtualTextureAtlasKey(resource, manifest);
+     const maxTextureSize = this.#textureSizeLimit();
+     let atlas = this.#atlases.get(atlasKey);
+     const created = atlas === undefined;

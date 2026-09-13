@@ -1,0 +1,6 @@
+{
+  "packages/renderer-webgl/src/virtual-texture/runtime.ts": "6faa84b0b6bbb11f1c38b251162a7472e2c5f984ba1d94023b3b7ba1ec06778a",
+  "packages/renderer-webgl/src/texture/browser-decode.ts": "73dae45f1e78a0f5d9446dca2816d53b14d7eb8ddf16e6b4fb89840d5b544365",
+  "research/vt-comparison/source-combinations.ts": "f8c2dca76fe87ecf2485820c6849c0067c53901da742ec006f15c3c3fea9a006",
+  "research/vt-comparison/run-host.mjs": "a0a8ca3106e2d565a47ca11e482e8d6a8552c62cb86f21460babcddfc1bf79b0"
+}

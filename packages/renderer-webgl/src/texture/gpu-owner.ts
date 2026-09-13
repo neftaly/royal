@@ -178,7 +178,7 @@ export class TextureGpuOwner {
           continue;
         }
         let texture = createdTextures.get(binding.storageKey)
-          ?? this.#textures.get(binding.storageKey);
+          ?? this.#textureForBinding(binding);
         if (texture === undefined) {
           texture = this.#createTexture(binding);
           if (texture === undefined) {
@@ -256,10 +256,26 @@ export class TextureGpuOwner {
     }
   }
 
+  #textureForBinding(binding: CanonicalTextureBinding): GpuTexture | undefined {
+    const previous = this.#textures.get(binding.storageKey);
+    if (previous === undefined || (previous.width === binding.decoded.width && previous.height === binding.decoded.height)) return previous;
+    const replacement = this.#createTexture(binding);
+    if (replacement === undefined) {
+      this.#uploadedStorageKeys.delete(binding.storageKey);
+      this.#deniedStorageKeys.delete(binding.storageKey);
+      return previous;
+    }
+    this.#gl.deleteTexture(previous.texture);
+    this.#budget.release(previous.budgetIdentity);
+    this.#textures.set(binding.storageKey, replacement);
+    this.#uploadedStorageKeys.add(binding.storageKey);
+    return replacement;
+  }
+
   /** Retains one newly published binding without releasing unrelated scene claims. */
   retain(binding: CanonicalTextureBinding | undefined): GpuTextureBinding {
     if (binding === undefined) return EMPTY_BINDING;
-    let texture = this.#textures.get(binding.storageKey);
+    let texture = this.#textureForBinding(binding);
     let sampler = this.#samplers.get(binding.samplerKey);
     const createdTexture = texture === undefined;
     const createdSampler = sampler === undefined;
@@ -420,7 +436,7 @@ export class TextureGpuOwner {
       gl.bindTexture(gl.TEXTURE_2D, texture);
       if (compressed) {
         if (decoded.colorSpace !== binding.colorSpace) {
-          throw new TypeError("Royal ETC2 KTX2 storage color space does not match its binding");
+          throw new TypeError("Royal KTX2 storage color space does not match its binding");
         }
         const format = nativeWebGlFormat(decoded.kind === "ktx2-native" ? decoded.format : "etc2-rgba", binding.colorSpace);
         for (let levelIndex = 0; levelIndex < decoded.levels.length; levelIndex += 1) {

@@ -44,19 +44,32 @@ export const addVirtualTexturePageTablePage = (
   }
 };
 
-/** Pure allocation-free shared-atlas slot choice keyed by logical texture and page. */
+/** Pure shared-atlas slot choice; capped textures reuse their resident-slot index. */
 export const selectVirtualTexturePoolSlot = (
   resourceKey: string,
   pageKey: VirtualTexturePageKey,
   slots: readonly (VirtualTexturePoolSlot | undefined)[],
   lastUsedFrames: ArrayLike<number>,
   protectedPages: ProtectedVirtualTexturePoolPages,
+  ownedSlots?: ReadonlyMap<VirtualTexturePageKey, number>,
 ): number => {
   if (slots.length === 0 || slots.length !== lastUsedFrames.length) {
     throw new Error("Royal VT pool slots and recency storage must have equal non-zero length");
   }
   let candidate = -1;
   let oldestFrame = Infinity;
+  if (ownedSlots !== undefined) {
+    for (const slot of ownedSlots.values()) {
+      const resident = slots[slot]!;
+      if (resident.pageKey === pageKey) return slot;
+      if (protectedPages.has(resourceKey, resident.pageKey)) continue;
+      if (lastUsedFrames[slot]! < oldestFrame) {
+        candidate = slot;
+        oldestFrame = lastUsedFrames[slot]!;
+      }
+    }
+    return candidate;
+  }
   for (let slot = 0; slot < slots.length; slot += 1) {
     const resident = slots[slot];
     if (resident?.resourceKey === resourceKey && resident.pageKey === pageKey) {

@@ -1,0 +1,1215 @@
+{
+  "newPlainObjectCount": 93,
+  "viaAllocationSite": 73,
+  "other": [
+    {
+      "id": 114267,
+      "properties": [
+        "sampler",
+        "target",
+        "texture"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#$",
+          "node": "object:Xs"
+        },
+        {
+          "edge": "#r",
+          "node": "object:Object"
+        },
+        {
+          "edge": "textureBindings",
+          "node": "object:Array"
+        },
+        {
+          "edge": "7",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 129793,
+      "properties": [
+        "camera",
+        "resource"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "1",
+          "node": "synthetic:(GC roots)"
+        },
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#n",
+          "node": "object:An"
+        },
+        {
+          "edge": "#e",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 129797,
+      "properties": [
+        "candidateCount",
+        "facingCoverage",
+        "max",
+        "min"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "1",
+          "node": "synthetic:(GC roots)"
+        },
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#te",
+          "node": "object:za"
+        },
+        {
+          "edge": "#m",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 129807,
+      "properties": [
+        "alphaMaskTextureAssets",
+        "camera",
+        "directionalLights",
+        "instanceLightSources",
+        "exposure",
+        "gltfNodes",
+        "lodGroups",
+        "pickSurfaces",
+        "punctualLights",
+        "renderObjects",
+        "surfaces",
+        "textureAssets",
+        "textureSurfaceIndices",
+        "virtualTextureAssets",
+        "toneMapping",
+        "volumes"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "1",
+          "node": "synthetic:(GC roots)"
+        },
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#me",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 129827,
+      "properties": [],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#te",
+          "node": "object:za"
+        },
+        {
+          "edge": "#w",
+          "node": "object:ga"
+        },
+        {
+          "edge": "#o",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 129831,
+      "properties": [
+        "plans",
+        "resourceKeys",
+        "retainedBytes",
+        "uploads"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#te",
+          "node": "object:za"
+        },
+        {
+          "edge": "#w",
+          "node": "object:ga"
+        },
+        {
+          "edge": "#c",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 129839,
+      "properties": [
+        "sampler",
+        "target",
+        "texture"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#te",
+          "node": "object:za"
+        },
+        {
+          "edge": "#q",
+          "node": "object:Array"
+        },
+        {
+          "edge": "0",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 129853,
+      "properties": [
+        "sampler",
+        "target",
+        "texture"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#H",
+          "node": "object:tc"
+        },
+        {
+          "edge": "#i",
+          "node": "object:Array"
+        },
+        {
+          "edge": "0",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 135387,
+      "properties": [
+        "budgetBytes",
+        "deniedClaims",
+        "retainedBytes"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#Z",
+          "node": "object:Object"
+        },
+        {
+          "edge": "resources",
+          "node": "object:Object"
+        },
+        {
+          "edge": "persistentGpu",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 135441,
+      "properties": [
+        "context",
+        "frame",
+        "resources",
+        "size"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "1",
+          "node": "synthetic:(GC roots)"
+        },
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#Z",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 135447,
+      "properties": [
+        "kind",
+        "camera",
+        "nodes",
+        "clearColor"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "1",
+          "node": "synthetic:(GC roots)"
+        },
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#he",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 135449,
+      "properties": [
+        "generation",
+        "phase"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "1",
+          "node": "synthetic:(GC roots)"
+        },
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#ge",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 136905,
+      "properties": [
+        "asyncPreparation",
+        "geometryUploads",
+        "gltfSharedGeometry",
+        "gltfSourceReads",
+        "imageTexturePreparation",
+        "imageTextureUploads",
+        "imageTextures",
+        "persistentGpu",
+        "virtualTextures"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "1",
+          "node": "synthetic:(GC roots)"
+        },
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#Z",
+          "node": "object:Object"
+        },
+        {
+          "edge": "resources",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 136907,
+      "properties": [
+        "activeJobs",
+        "jobLimit",
+        "queuedDetailJobs",
+        "queuedForegroundJobs",
+        "queuedJobs"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#Z",
+          "node": "object:Object"
+        },
+        {
+          "edge": "resources",
+          "node": "object:Object"
+        },
+        {
+          "edge": "asyncPreparation",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 136909,
+      "properties": [
+        "admittedBytes",
+        "budgetBytes",
+        "deferredUploads",
+        "pendingSurfaces"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#Z",
+          "node": "object:Object"
+        },
+        {
+          "edge": "resources",
+          "node": "object:Object"
+        },
+        {
+          "edge": "geometryUploads",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 136911,
+      "properties": [
+        "activeReads",
+        "queuedReads",
+        "sourceReservationLimit",
+        "sourceReservations",
+        "stagedBytes",
+        "stagedByteThreshold"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#Z",
+          "node": "object:Object"
+        },
+        {
+          "edge": "resources",
+          "node": "object:Object"
+        },
+        {
+          "edge": "gltfSourceReads",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 136913,
+      "properties": [
+        "activePreparations",
+        "decodedHandoffBytes",
+        "decodedHandoffThresholdBytes",
+        "encodedSourceReads",
+        "pendingStorageRepresentations",
+        "retainedEncodedSourceBytes",
+        "sourceReservationLimit",
+        "sourceReservations"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#Z",
+          "node": "object:Object"
+        },
+        {
+          "edge": "resources",
+          "node": "object:Object"
+        },
+        {
+          "edge": "imageTexturePreparation",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 136915,
+      "properties": [
+        "admittedBytes",
+        "budgetBytes",
+        "deferredUploads"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#Z",
+          "node": "object:Object"
+        },
+        {
+          "edge": "resources",
+          "node": "object:Object"
+        },
+        {
+          "edge": "imageTextureUploads",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 136917,
+      "properties": [
+        "compressedBytes",
+        "compressedTextures",
+        "fittedTextures",
+        "residentBytes",
+        "residentTextures"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#Z",
+          "node": "object:Object"
+        },
+        {
+          "edge": "resources",
+          "node": "object:Object"
+        },
+        {
+          "edge": "imageTextures",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 136921,
+      "properties": [
+        "activeReads",
+        "queuedReads",
+        "sourceReservationLimit",
+        "sourceReservations",
+        "stagedBytes",
+        "stagedByteThreshold"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:k"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#Z",
+          "node": "object:Object"
+        },
+        {
+          "edge": "resources",
+          "node": "object:Object"
+        },
+        {
+          "edge": "imageTexturePreparation",
+          "node": "object:Object"
+        },
+        {
+          "edge": "encodedSourceReads",
+          "node": "object:Object"
+        }
+      ]
+    }
+  ],
+  "templateExamples": [
+    {
+      "id": 118447,
+      "properties": [
+        "alpha",
+        "asset",
+        "claimedStorageKeys",
+        "controller",
+        "reservation",
+        "preparationDeferred",
+        "decoded",
+        "decodedClaims",
+        "decodedReleased",
+        "preparationRetainsAlpha",
+        "preparationQueuedAt",
+        "preparationStartedAt",
+        "key",
+        "queued",
+        "residentStorageKeys",
+        "retainAlpha",
+        "snapshot",
+        "startedAt"
+      ],
+      "allocationSite": true,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "f",
+          "node": "object:Ac"
+        },
+        {
+          "edge": "#ae",
+          "node": "object:Hs"
+        },
+        {
+          "edge": "anonymous",
+          "node": "object:system / Context / scope @64169"
+        },
+        {
+          "edge": "11",
+          "node": "closure:#d"
+        },
+        {
+          "edge": "feedback_cell",
+          "node": "code:system / FeedbackCell"
+        },
+        {
+          "edge": "value",
+          "node": "code:system / FeedbackVector"
+        },
+        {
+          "edge": "6",
+          "node": "code:system / AllocationSite"
+        },
+        {
+          "edge": "transition_info",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 118521,
+      "properties": [
+        "colorSpace",
+        "sampler",
+        "src"
+      ],
+      "allocationSite": true,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @47721"
+        },
+        {
+          "edge": "extension",
+          "node": "native:system / SourceTextModule"
+        },
+        {
+          "edge": "7",
+          "node": "array:"
+        },
+        {
+          "edge": "0",
+          "node": "native:system / Cell"
+        },
+        {
+          "edge": "value",
+          "node": "closure:F"
+        },
+        {
+          "edge": "feedback_cell",
+          "node": "code:system / FeedbackCell"
+        },
+        {
+          "edge": "value",
+          "node": "code:system / FeedbackVector"
+        },
+        {
+          "edge": "8",
+          "node": "code:system / AllocationSite"
+        },
+        {
+          "edge": "transition_info",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 128385,
+      "properties": [
+        "abort",
+        "asset",
+        "authored",
+        "demandRevision",
+        "failedPages",
+        "gpu",
+        "key"
+      ],
+      "allocationSite": true,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "1",
+          "node": "native:system / SourceTextModule"
+        },
+        {
+          "edge": "5",
+          "node": "object:Generator"
+        },
+        {
+          "edge": "function",
+          "node": "closure:"
+        },
+        {
+          "edge": "feedback_cell",
+          "node": "code:system / FeedbackCell"
+        },
+        {
+          "edge": "value",
+          "node": "code:system / ClosureFeedbackCellArray"
+        },
+        {
+          "edge": "51",
+          "node": "code:system / FeedbackCell"
+        },
+        {
+          "edge": "value",
+          "node": "code:system / FeedbackVector"
+        },
+        {
+          "edge": "264",
+          "node": "code:system / AllocationSite"
+        },
+        {
+          "edge": "transition_info",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 134853,
+      "properties": [
+        "ancestors",
+        "coarsestTarget",
+        "minimumMip",
+        "mipLinear",
+        "clipA",
+        "clipB",
+        "count",
+        "frustumPlanes",
+        "instanceBounds",
+        "keys",
+        "mips",
+        "model",
+        "modelViewProjection",
+        "overflow",
+        "screen",
+        "subdivision",
+        "vertexCache",
+        "vertexKeys",
+        "vertexFlags",
+        "xs",
+        "ys"
+      ],
+      "allocationSite": true,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "1",
+          "node": "native:blink::BoxedV8Module"
+        },
+        {
+          "edge": "1",
+          "node": "native:system / SourceTextModule"
+        },
+        {
+          "edge": "7",
+          "node": "array:"
+        },
+        {
+          "edge": "4",
+          "node": "native:system / Cell"
+        },
+        {
+          "edge": "value",
+          "node": "closure:p"
+        },
+        {
+          "edge": "feedback_cell",
+          "node": "code:system / FeedbackCell"
+        },
+        {
+          "edge": "value",
+          "node": "code:system / FeedbackVector"
+        },
+        {
+          "edge": "14",
+          "node": "code:system / AllocationSite"
+        },
+        {
+          "edge": "transition_info",
+          "node": "object:Object"
+        }
+      ]
+    }
+  ],
+  "note": "BFS paths from snapshot root, excluding weak edges. Allocation-site paths identify engine-held literal templates; path tails are truncated for readability. These are shortest reference paths, not dominator/retained-size calculations. Node IDs compare snapshots from one browser session."
+}

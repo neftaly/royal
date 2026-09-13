@@ -1,0 +1,28 @@
+{
+  "cases": [
+    {
+      "kind": "svg",
+      "artifact": "cancelled-queue-svg-lifecycle.json",
+      "liveJsBytes": [
+        2561276,
+        2971076,
+        3136096,
+        3156020
+      ]
+    },
+    {
+      "kind": "raster",
+      "artifact": "cancelled-queue-raster-lifecycle.json",
+      "liveJsBytes": [
+        2315792,
+        2700172,
+        2847628,
+        2887452
+      ]
+    }
+  ],
+  "source": "packages/renderer-webgl/src/resource/async-preparation-owner.ts",
+  "sha256": "c3f583e24e925bbae9ce61be79d7937e5f15dd8e876c0e898ce37ee12c115bb0",
+  "scope": "Resource release and progress; no heap plateau or comparative gain claim",
+  "committed": false
+}

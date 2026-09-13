@@ -18,6 +18,78 @@ const decoded = (close = vi.fn()): DecodedTextureSource => ({
 });
 
 describe("ordinary texture asset lifecycle owner", () => {
+  it.each([false, true])("restores fitted raster detail after budget growth, early increase %s", async early => {
+    const first = { ...decoded(), width: 8, height: 8, sourceWidth: 64, sourceHeight: 64 };
+    const full = { ...decoded(), width: 64, height: 64 };
+    let finish!: (source: DecodedTextureSource) => void;
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>()
+      .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValue(full);
+    const owner = new TextureAssetOwner({ decode, onAssetChanged: vi.fn(), onListenerError: vi.fn(), onSnapshotChanged: vi.fn() });
+    const asset = imageTexture("/fitted.png");
+    try {
+      owner.reconcile([asset], [], 512);
+      if (early) owner.reconcile([asset], [], 32768);
+      finish(first);
+      await waitFor(() => expect(owner.decoded(asset)?.width).toBe(8));
+      owner.releaseUploaded([textureStorageKey(asset)]);
+      if (!early) owner.reconcile([asset], [], 32768);
+      await waitFor(() => expect(owner.decoded(asset)?.width).toBe(64));
+      expect(first.close).toHaveBeenCalledTimes(1);
+      expect(full.close).not.toHaveBeenCalled();
+      owner.releaseUploaded([textureStorageKey(asset)]);
+      for (let index = 0; index < 100; index++) owner.reconcile([asset], [], 32768);
+      expect(decode).toHaveBeenCalledTimes(2);
+      expect(full.close).toHaveBeenCalledTimes(1);
+    } finally { owner.dispose(); }
+  });
+
+  it("releases a fitted raster lease only when additional budget can restore detail", async () => {
+    const first = { ...decoded(), width: 8, height: 8, sourceWidth: 64, sourceHeight: 64 };
+    const full = { ...decoded(), width: 64, height: 64 };
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>().mockResolvedValueOnce(first).mockResolvedValue(full);
+    let release!: () => void;
+    const releaseDecoded = vi.fn(() => release());
+    const owner = new TextureAssetOwner({ decode, releaseDecoded, onAssetChanged: vi.fn(), onListenerError: vi.fn(), onSnapshotChanged: vi.fn() });
+    const asset = imageTexture("/leased.png");
+    try {
+      owner.reconcile([asset], [], 512);
+      await waitFor(() => expect(owner.decoded(asset)).toBe(first));
+      release = owner.acquireDecoded(asset)!.release;
+      owner.releaseUploaded([textureStorageKey(asset)]);
+      owner.reconcile([asset], [], 512);
+      expect(first.close).not.toHaveBeenCalled();
+      expect(releaseDecoded).not.toHaveBeenCalled();
+      owner.reconcile([asset], [], 32768);
+      await waitFor(() => expect(owner.decoded(asset)).toBe(full));
+      expect(releaseDecoded).toHaveBeenCalledOnce();
+      expect(first.close).toHaveBeenCalledOnce();
+      expect(decode).toHaveBeenCalledTimes(2);
+      owner.releaseUploaded([textureStorageKey(asset)]);
+    } finally { owner.dispose(); }
+  });
+
+  it("restores discarded native mip levels by decoding the source again once", async () => {
+    const make = (size: number): DecodedTextureSource => ({ kind: "ktx2-etc2", colorSpace: "srgb", width: size, height: size,
+      sourceWidth: 64, sourceHeight: 64, close: vi.fn(), levels: [{ width: size, height: size, blocks: new Uint8Array(size * size) }] });
+    const first = make(8), full = make(64);
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>().mockResolvedValueOnce(first).mockResolvedValue(full);
+    const owner = new TextureAssetOwner({ decode, onAssetChanged: vi.fn(), onListenerError: vi.fn(), onSnapshotChanged: vi.fn() });
+    const asset = imageTexture("/native.ktx2");
+    try {
+      owner.reconcile([asset], [], 128);
+      await waitFor(() => expect(owner.decoded(asset)).toBe(first));
+      owner.releaseUploaded([textureStorageKey(asset)]);
+      owner.reconcile([asset], [], 8192);
+      await waitFor(() => expect(owner.decoded(asset)).toBe(full));
+      owner.releaseUploaded([textureStorageKey(asset)]);
+      for (let index = 0; index < 100; index++) owner.reconcile([asset], [], 8192);
+      expect(decode).toHaveBeenCalledTimes(2);
+      expect(first.close).toHaveBeenCalledOnce();
+      expect(full.close).toHaveBeenCalledOnce();
+    } finally { owner.dispose(); }
+  });
+
   it("preloads every claimed source independently of complete preparation admission", () => {
     const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(
       () => new Promise<DecodedTextureSource>(() => undefined),

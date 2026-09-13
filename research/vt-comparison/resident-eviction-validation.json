@@ -1,0 +1,28 @@
+{
+  "gpuRuns": 8,
+  "measuredEvictions": 3200,
+  "researchTypecheckExitCode": 0,
+  "buildExitCode": 0,
+  "sources": {
+    "research/vt-comparison/resident-eviction.ts": "3225992b4dbad5c800b42267b1c50a5cfdb0f90d62285da5a11762bb24925f39",
+    "research/vt-comparison/resident-eviction.html": "5e9e966fe1bdc3a2b39b3099edeaa1d625c9b5e4da1eec01eaa5aece8e6d3620",
+    "research/vt-comparison/resident-limit-gpu.ts": "605104f1802db00715f585b7c00041cc3e0cadff0be94527c40fd95141eae11c",
+    "research/vt-comparison/build-client.mjs": "fb5a34c10f5c0874c9942ff0c60238d33bc6346aa41e7e22badc7d435f2f6921",
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "b6573774a9ac93f9bd6eff1c9a113faab2e1b392a1e1a2061d604dd1f2337ec1",
+    "packages/renderer-webgl/src/virtual-texture/residency.ts": "78b501474b674366564d1223e6386602c714cb2feaa27e7ddf677f04d1a8a49a",
+    "packages/renderer-webgl/src/virtual-texture/browser-page-source.ts": "4edc82953596b419bed400b8e1a27c850899caa0564285b5f264a1daf7480057"
+  },
+  "logs": {
+    "/tmp/royal-vt-resident-eviction-6x6.log": "0b7e692bce38e9d24b6c55a3b3cd329fe1398d4a3a6bbc5fcd6c9687e0830598",
+    "/tmp/royal-vt-resident-eviction-8x8.log": "ac31df5a48cf1b4a8ab7b02128088410402e714af3796a0afa90a676478d8c95",
+    "/tmp/royal-vt-resident-eviction-6x6-padded.log": "b279cb960f08f365ddd734814589387b6b42303ab3095783fe96e65fb1d54d03",
+    "/tmp/royal-vt-resident-eviction-8x8-padded.log": "04c8d8b7c1d431203322e8005bfc95b54c9bee066f66b1d249455472c286e52c",
+    "/tmp/royal-vt-resident-eviction-6x6-long.log": "5363e3621523079a15c865ccf72900c6c69a1f591805eaecb15b1bc5a6be3f0a",
+    "/tmp/royal-vt-resident-eviction-8x8-snapshots.log": "ec2c86c94298ca1b7e99a04fd8faeb8476afc038f65513a55c9e33f8e61a8e11",
+    "/tmp/royal-vt-resident-eviction-8x8-1536.log": "8ef8aa1432b51bffed268b2cd4689a421a11eb75d73b18e89fb211e2d4407ef3",
+    "/tmp/royal-vt-resident-eviction-8x8-profile.log": "a6951a1a8e2177063c54f4338ad2093fda423b0a70b24a062a699b44b6112d93",
+    "/tmp/royal-vt-resident-eviction-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/tmp/royal-vt-resident-eviction-build.log": "91bb20d1dd63ebb7f112301e5e0a2f18d58a57d722cfe7503dad7de5b0ea9d85"
+  },
+  "note": "Initial source checkpoint applies to the first six runs; current source adds long-window selection used for 1536 and profile runs. Production sources are unchanged. No commits."
+}

@@ -1,0 +1,27 @@
+{
+  "tests": 1504,
+  "testFiles": 152,
+  "gltfCases": 65,
+  "checks": [
+    "root types",
+    "research types",
+    "lint",
+    "packed consumer and codecs",
+    "bundle sizes",
+    "diff whitespace"
+  ],
+  "artifacts": {
+    "cancelled-interior-fixed": "7e3b67334733ef6a1104357fe8383fedc8691e6c4e23e5685bd1655308dad4d5",
+    "ordinary-vt-budget-recovery": "52692f777ac4ba1398566fa68d6ec11bedef7fa8be8835700ef58ccb1ee86954",
+    "three-fixes-staggered-6x6": "37ad6b91e09924964b1927b0f6c9aae81a03dc6cdca3dda86501c101a91aa94d",
+    "three-fixes-staggered-8x8": "5ca64ab2536094af26a93ec0755fc610b181168dacbe38813ff92c616105896a"
+  },
+  "finalProductionSha256": {
+    "packages/renderer-webgl/src/resource/async-preparation-owner.ts": "4810ab3c8ab6655274b57ce755a490adae220cb7e38545bd2c8a99c63e14aca9",
+    "packages/renderer-webgl/src/texture/asset-owner.ts": "a3b4af522a35cdb7e73a8085879a38603e980ec5fca13dec949f8e5f91d3ee1d",
+    "packages/renderer-webgl/src/texture/gpu-owner.ts": "4e58ac5c902a15a8b47014e236e9e6ae9be4cc4de19fe0a17b89008dcbd7c646",
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "dacf3df6b451ff4eef2f0b85d149995f683a3248e1fc8f0bbe06babc198dc068"
+  },
+  "negativeControl": "Removing page-upload progress from the blocked-growth cache causes the late-root regression to fail; source restored before full validation.",
+  "committed": false
+}

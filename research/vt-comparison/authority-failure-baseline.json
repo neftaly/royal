@@ -1,0 +1,29 @@
+{
+  "sourceSha256": "46770634ff54b8f2ae9dc8a351fdcec13e00360a2e65aa0cb43b20d90ab95b62",
+  "expectedExitCode": 1,
+  "exception": "Uncaught (in promise) Error: Authority failure lost preview, retried or retained budget: png-preview astc,raster pixel=255,0,0,255 previewBudget=0 {\"admittedUploadBytes\":0,\"atlasBytes\":627264,\"atlasPools\":1,\"atlasGrowthFailures\":0,\"desiredPages\":5,\"admittedPages\":1,\"unresidentPages\":1,\"automaticCandidates\":1,\"automaticDecodedBytes\":832,\"automaticIneligible\":0,\"automaticResources\":1,\"automaticWaiting\":0,\"deferredUploads\":0,\"failedPages\":1,\"pageRequests\":0,\"pendingPages\":0,\"pendingPageBytes\":0,\"pendingPageByteLimit\":16777216,\"residentPages\":0,\"uploadedPages\":0,\"uploadBudgetBytes\":33554432}",
+  "snapshot": {
+    "admittedUploadBytes": 0,
+    "atlasBytes": 627264,
+    "atlasPools": 1,
+    "atlasGrowthFailures": 0,
+    "desiredPages": 5,
+    "admittedPages": 1,
+    "unresidentPages": 1,
+    "automaticCandidates": 1,
+    "automaticDecodedBytes": 832,
+    "automaticIneligible": 0,
+    "automaticResources": 1,
+    "automaticWaiting": 0,
+    "deferredUploads": 0,
+    "failedPages": 1,
+    "pageRequests": 0,
+    "pendingPages": 0,
+    "pendingPageBytes": 0,
+    "pendingPageByteLimit": 16777216,
+    "residentPages": 0,
+    "uploadedPages": 0,
+    "uploadBudgetBytes": 33554432
+  },
+  "note": "Saved pre-fix runtime; same failure fixture. Expected strict atlas-zero assertion failure, while native preview remained red and source reads were bounded. Empty atlas/migration size can vary with frame timing."
+}

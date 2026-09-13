@@ -1,0 +1,132 @@
+{
+  "summaries": [
+    {
+      "file": "research/vt-comparison/empty-failed-atlas-host-after.json",
+      "sampledBytes": 13801888,
+      "frames": 600,
+      "allocations": [
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:387",
+          "bytes": 5756800
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:748",
+          "bytes": 1606604
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-visibility.ts:93",
+          "bytes": 1278180
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/pool-budget.ts:8",
+          "bytes": 1115056
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:807",
+          "bytes": 721192
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:197",
+          "bytes": 526860
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:698",
+          "bytes": 360580
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:896",
+          "bytes": 262380
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:100",
+          "bytes": 229560
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1383",
+          "bytes": 229460
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1367",
+          "bytes": 229460
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:376",
+          "bytes": 196644
+        },
+        {
+          "source": "packages/renderer-core/src/camera-resource.ts:101",
+          "bytes": 163896
+        },
+        {
+          "source": "packages/renderer-webgl/src/frame/frame-clock-owner.ts:129",
+          "bytes": 140372
+        },
+        {
+          "source": "packages/renderer-webgl/src/frame/frame-clock-owner.ts:118",
+          "bytes": 131168
+        },
+        {
+          "source": "(unattributed)",
+          "bytes": 99776
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:941",
+          "bytes": 98340
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1021",
+          "bytes": 98340
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:441",
+          "bytes": 98328
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/lod-selection.ts:285",
+          "bytes": 65564
+        },
+        {
+          "source": "research/vt-comparison/steady.ts:103",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-depth-order.ts:15",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/texture/gpu-owner.ts:123",
+          "bytes": 32820
+        },
+        {
+          "source": "packages/renderer-webgl/src/runtime/overlay-owner.ts:113",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-program-owner.ts:565",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-core/src/camera-resource.ts:197",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-core/src/camera-resource.ts:114",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:140",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/frame/progressive-presentation-owner.ts:39",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-gpu-owner.ts:1386",
+          "bytes": 32772
+        }
+      ]
+    }
+  ],
+  "note": "Sampling estimates, not exact allocation counts. Native allocation frames inherit the nearest source-mapped JavaScript ancestor. Source maps must match the captured build."
+}

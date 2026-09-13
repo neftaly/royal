@@ -1,0 +1,269 @@
+{
+  "diagnostic": {
+    "resources": {
+      "asyncPreparation": {
+        "activeJobs": 8,
+        "jobLimit": 8,
+        "queuedDetailJobs": 0,
+        "queuedForegroundJobs": 4,
+        "queuedJobs": 4
+      },
+      "geometryUploads": {
+        "admittedBytes": 0,
+        "budgetBytes": 4194304,
+        "deferredUploads": 0,
+        "pendingSurfaces": 0
+      },
+      "gltfSharedGeometry": {
+        "pendingPreparationTasks": 0,
+        "preparedTaskBytes": 0,
+        "preparedTasks": 0,
+        "preparationTaskClaims": 0,
+        "primitiveClaims": 0,
+        "retainedBytes": 0,
+        "reusedClaims": 0,
+        "reusedPreparationClaims": 0,
+        "taskProducerPreparationDurationMs": 0,
+        "uniqueGeometries": 0
+      },
+      "gltfSourceReads": {
+        "activeReads": 0,
+        "queuedReads": 0,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0,
+        "stagedBytes": 0,
+        "stagedByteThreshold": 33554432
+      },
+      "imageTexturePreparation": {
+        "activePreparations": 0,
+        "browserStageTimings": {
+          "sourceCount": 8,
+          "totals": {
+            "decodeDurationMs": 548.1999998092651,
+            "decodeQueueDurationMs": 0.39999985694885254,
+            "transportDurationMs": 133.5000001192093,
+            "transportQueueDurationMs": 0.39999985694885254
+          }
+        },
+        "decodedHandoffBytes": 0,
+        "decodedHandoffThresholdBytes": 67108864,
+        "encodedSourceReads": {
+          "activeReads": 0,
+          "queuedReads": 0,
+          "sourceReservationLimit": 128,
+          "sourceReservations": 0,
+          "stagedBytes": 0,
+          "stagedByteThreshold": 33554432
+        },
+        "pendingStorageRepresentations": 0,
+        "retainedEncodedSourceBytes": 3568,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0
+      },
+      "imageTextureUploads": {
+        "admittedBytes": 0,
+        "budgetBytes": 33554432,
+        "deferredUploads": 0
+      },
+      "imageTextures": {
+        "compressedBytes": 0,
+        "compressedTextures": 0,
+        "fittedTextures": 8,
+        "residentBytes": 16752064,
+        "residentTextures": 8
+      },
+      "persistentGpu": {
+        "budgetBytes": 67108864,
+        "deniedClaims": 0,
+        "retainedBytes": 35293366
+      },
+      "virtualTextures": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 17842176,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 168,
+        "admittedPages": 168,
+        "unresidentPages": 168,
+        "automaticCandidates": 8,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 8,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 4,
+        "pendingPages": 4,
+        "pendingPageBytes": 278784,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    "assets": [
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 31.100000023841858,
+          "decodeQueueDurationMs": 0.19999992847442627,
+          "firstReadyAfterMs": 128.39999997615814,
+          "preparationDurationMs": 127.5,
+          "preparationQueueDurationMs": 0.19999992847442627,
+          "transportDurationMs": 15.5,
+          "transportQueueDurationMs": 0.2999999523162842
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 0,
+        "status": "loading"
+      },
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 69.39999997615814,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 168.29999995231628,
+          "preparationDurationMs": 168.29999995231628,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 15.100000023841858,
+          "transportQueueDurationMs": 0
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 0,
+        "status": "loading"
+      },
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 75.5,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 174.79999995231628,
+          "preparationDurationMs": 174.70000004768372,
+          "preparationQueueDurationMs": 0.09999990463256836,
+          "transportDurationMs": 14.299999952316284,
+          "transportQueueDurationMs": 0
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 0,
+        "status": "loading"
+      },
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 64.79999995231628,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 163.10000002384186,
+          "preparationDurationMs": 163.10000002384186,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 14.5,
+          "transportQueueDurationMs": 0
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 0,
+        "status": "loading"
+      },
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 41.699999928474426,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 139.5,
+          "preparationDurationMs": 138.89999997615814,
+          "preparationQueueDurationMs": 0.6000000238418579,
+          "transportDurationMs": 14,
+          "transportQueueDurationMs": 0.09999990463256836
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 0,
+        "status": "loading"
+      },
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 37.89999997615814,
+          "decodeQueueDurationMs": 0.10000002384185791,
+          "firstReadyAfterMs": 134.70000004768372,
+          "preparationDurationMs": 134.60000002384186,
+          "preparationQueueDurationMs": 0.10000002384185791,
+          "transportDurationMs": 14,
+          "transportQueueDurationMs": 0
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 0,
+        "status": "loading"
+      },
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 113.10000002384186,
+          "decodeQueueDurationMs": 0.09999990463256836,
+          "firstReadyAfterMs": 218.89999997615814,
+          "preparationDurationMs": 218.89999997615814,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 24.40000009536743,
+          "transportQueueDurationMs": 0
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 0,
+        "status": "loading"
+      },
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 114.69999992847443,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 213.89999997615814,
+          "preparationDurationMs": 213.89999997615814,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 21.700000047683716,
+          "transportQueueDurationMs": 0
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 0,
+        "status": "loading"
+      }
+    ]
+  },
+  "scope": "Gate eight native manifest reads until SVG pages become resident. All 8 preparation slots remain held by manifest transport; four automatic page jobs wait. Artificial dependency reveals starvation, not an unconditional real-network deadlock.",
+  "renderer": "Renderer: ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

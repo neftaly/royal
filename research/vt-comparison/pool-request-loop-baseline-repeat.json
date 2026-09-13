@@ -1,0 +1,662 @@
+{
+  "results": [
+    {
+      "name": "steady-mixed",
+      "minFilter": "moving",
+      "copies": 16,
+      "budgetMiB": 64,
+      "nativeFirst": false,
+      "frames": 600,
+      "submissionMs": {
+        "median": 0.6999999284744263,
+        "p95": 1.100000023841858,
+        "max": 2.5
+      },
+      "frameIntervalMs": {
+        "median": 16.69999999999891,
+        "p95": 16.799999999999272,
+        "max": 16.80000000000291
+      },
+      "before": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 50307280,
+        "atlasPools": 2,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 336,
+        "admittedPages": 336,
+        "unresidentPages": 0,
+        "automaticCandidates": 8,
+        "automaticDecodedBytes": 3932160,
+        "automaticIneligible": 0,
+        "automaticResources": 8,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 672,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 336,
+        "uploadedPages": 672,
+        "uploadBudgetBytes": 33554432
+      },
+      "beforeContextLoss": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 45948384,
+        "atlasPools": 2,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 336,
+        "admittedPages": 336,
+        "unresidentPages": 0,
+        "automaticCandidates": 8,
+        "automaticDecodedBytes": 4194304,
+        "automaticIneligible": 0,
+        "automaticResources": 8,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 336,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 336,
+        "uploadedPages": 336,
+        "uploadBudgetBytes": 33554432
+      },
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 50307280,
+        "atlasPools": 2,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 336,
+        "admittedPages": 336,
+        "unresidentPages": 0,
+        "automaticCandidates": 8,
+        "automaticDecodedBytes": 3932160,
+        "automaticIneligible": 0,
+        "automaticResources": 8,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 672,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 336,
+        "uploadedPages": 672,
+        "uploadBudgetBytes": 33554432
+      },
+      "pixel": [
+        254,
+        254,
+        254,
+        255
+      ],
+      "screenshot": "research/vt-comparison/pool-request-loop-baseline-repeat-images/steady-mixed-moving.png"
+    }
+  ],
+  "note": "Warm-up, snapshots, pixel readback and screenshots are outside the measurement window. Measured frames use camera resource commits or explicit invalidation; One reusable rAF callback and timing calls remain harness overhead. CPU/GPU source owners remain alive through heap measurement.",
+  "gc": {
+    "events": 7,
+    "totalMs": 9.904,
+    "maxMs": 5.3,
+    "heapBefore": {
+      "usedSize": 3518484,
+      "totalSize": 4194304,
+      "embedderHeapUsedSize": 1026096,
+      "backingStorageSize": 1490140
+    },
+    "heapAfter": {
+      "usedSize": 3821676,
+      "totalSize": 4456448,
+      "embedderHeapUsedSize": 1011248,
+      "backingStorageSize": 1490140
+    },
+    "note": "Warm-up and final diagnostics are excluded from the trace. Forced-GC heaps retain the live scene before/after measurement."
+  },
+  "profile": {
+    "cpu": [
+      {
+        "name": "(program)",
+        "url": "",
+        "hits": 5365,
+        "original": {}
+      },
+      {
+        "name": "(idle)",
+        "url": "",
+        "hits": 3378,
+        "original": {}
+      },
+      {
+        "name": "update",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "hits": 32,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 750,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "g",
+        "url": "http://127.0.0.1:5185/assets/demand-CLLAMuyx.js",
+        "hits": 30,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 176,
+          "column": 6,
+          "name": null
+        }
+      },
+      {
+        "name": "_",
+        "url": "http://127.0.0.1:5185/assets/demand-CLLAMuyx.js",
+        "hits": 25,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 197,
+          "column": 6,
+          "name": null
+        }
+      },
+      {
+        "name": "#V",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "hits": 16,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 943,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "O",
+        "url": "http://127.0.0.1:5185/assets/demand-CLLAMuyx.js",
+        "hits": 15,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 441,
+          "column": 6,
+          "name": null
+        }
+      },
+      {
+        "name": "clear",
+        "url": "",
+        "hits": 15,
+        "original": {}
+      },
+      {
+        "name": "#se",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "hits": 14,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 1510,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "uniform4fv",
+        "url": "",
+        "hits": 14,
+        "original": {}
+      },
+      {
+        "name": "i",
+        "url": "http://127.0.0.1:5185/assets/steady-H5stP7ZV.js",
+        "hits": 12,
+        "original": {
+          "source": "http://127.0.0.1:5185/research/vt-comparison/steady.ts",
+          "line": 164,
+          "column": 18,
+          "name": null
+        }
+      },
+      {
+        "name": "A",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "hits": 12,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/pool-budget.ts",
+          "line": 8,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "#Ie",
+        "url": "http://127.0.0.1:5185/assets/canvas-root-2KlVJNnw.js",
+        "hits": 12,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+          "line": 1387,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "",
+        "url": "http://127.0.0.1:5185/assets/canvas-root-2KlVJNnw.js",
+        "hits": 9,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+          "line": 129,
+          "column": 22,
+          "name": null
+        }
+      },
+      {
+        "name": "drawViews",
+        "url": "http://127.0.0.1:5185/assets/canvas-root-2KlVJNnw.js",
+        "hits": 8,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+          "line": 901,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "requestAnimationFrame",
+        "url": "",
+        "hits": 8,
+        "original": {}
+      },
+      {
+        "name": "(garbage collector)",
+        "url": "",
+        "hits": 8,
+        "original": {}
+      },
+      {
+        "name": "k",
+        "url": "http://127.0.0.1:5185/assets/demand-CLLAMuyx.js",
+        "hits": 7,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 596,
+          "column": 6,
+          "name": null
+        }
+      },
+      {
+        "name": "uniform4fv",
+        "url": "",
+        "hits": 7,
+        "original": {}
+      },
+      {
+        "name": "drawElements",
+        "url": "",
+        "hits": 7,
+        "original": {}
+      },
+      {
+        "name": "#H",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "hits": 6,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 1023,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "U",
+        "url": "http://127.0.0.1:5185/assets/steady-H5stP7ZV.js",
+        "hits": 6,
+        "original": {
+          "source": "http://127.0.0.1:5185/research/vt-comparison/steady.ts",
+          "line": 106,
+          "column": 14,
+          "name": null
+        }
+      },
+      {
+        "name": "requestAnimationFrame",
+        "url": "",
+        "hits": 6,
+        "original": {}
+      },
+      {
+        "name": "#ne",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "hits": 5,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 1440,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "bindTexture",
+        "url": "",
+        "hits": 5,
+        "original": {}
+      },
+      {
+        "name": "#q",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "hits": 4,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 1085,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "#B",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "hits": 4,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 898,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "D",
+        "url": "http://127.0.0.1:5185/assets/demand-CLLAMuyx.js",
+        "hits": 4,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 387,
+          "column": 6,
+          "name": null
+        }
+      },
+      {
+        "name": "r",
+        "url": "http://127.0.0.1:5185/assets/surface-visibility-Bi5ZwulI.js",
+        "hits": 4,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/math/mat4.ts",
+          "line": 53,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "T",
+        "url": "http://127.0.0.1:5185/assets/demand-CLLAMuyx.js",
+        "hits": 4,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 335,
+          "column": 6,
+          "name": null
+        }
+      }
+    ],
+    "allocations": [
+      {
+        "name": "add",
+        "url": "",
+        "bytes": 4012440,
+        "original": {}
+      },
+      {
+        "name": "A",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "bytes": 1180028,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/pool-budget.ts",
+          "line": 8,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "next",
+        "url": "",
+        "bytes": 753900,
+        "original": {}
+      },
+      {
+        "name": "add",
+        "url": "",
+        "bytes": 592300,
+        "original": {}
+      },
+      {
+        "name": "S",
+        "url": "http://127.0.0.1:5185/assets/surface-visibility-Bi5ZwulI.js",
+        "bytes": 524388,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/surface/surface-visibility.ts",
+          "line": 93,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "hypot",
+        "url": "",
+        "bytes": 524388,
+        "original": {}
+      },
+      {
+        "name": "#B",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "bytes": 426360,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 898,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "update",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "bytes": 393524,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 750,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "add",
+        "url": "",
+        "bytes": 328660,
+        "original": {}
+      },
+      {
+        "name": "j",
+        "url": "http://127.0.0.1:5185/assets/demand-CLLAMuyx.js",
+        "bytes": 327788,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 698,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "bytes": 295048,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 809,
+          "column": 97,
+          "name": null
+        }
+      },
+      {
+        "name": "#se",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "bytes": 262248,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 1510,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "next",
+        "url": "",
+        "bytes": 262220,
+        "original": {}
+      },
+      {
+        "name": "next",
+        "url": "",
+        "bytes": 229440,
+        "original": {}
+      },
+      {
+        "name": "add",
+        "url": "",
+        "bytes": 197540,
+        "original": {}
+      },
+      {
+        "name": "A",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "bytes": 196684,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/pool-budget.ts",
+          "line": 8,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "next",
+        "url": "",
+        "bytes": 196660,
+        "original": {}
+      },
+      {
+        "name": "values",
+        "url": "",
+        "bytes": 196660,
+        "original": {}
+      },
+      {
+        "name": "s",
+        "url": "http://127.0.0.1:5185/assets/camera-resource-BcRz2yx1.js",
+        "bytes": 196656,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-core/src/camera-resource.ts",
+          "line": 101,
+          "column": 6,
+          "name": null
+        }
+      },
+      {
+        "name": "O",
+        "url": "http://127.0.0.1:5185/assets/demand-CLLAMuyx.js",
+        "bytes": 196644,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 441,
+          "column": 6,
+          "name": null
+        }
+      },
+      {
+        "name": "",
+        "url": "http://127.0.0.1:5185/assets/canvas-root-2KlVJNnw.js",
+        "bytes": 170380,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+          "line": 129,
+          "column": 22,
+          "name": null
+        }
+      },
+      {
+        "name": "set",
+        "url": "",
+        "bytes": 164208,
+        "original": {}
+      },
+      {
+        "name": "Map",
+        "url": "",
+        "bytes": 164036,
+        "original": {}
+      },
+      {
+        "name": "entries",
+        "url": "",
+        "bytes": 163900,
+        "original": {}
+      },
+      {
+        "name": "update",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "bytes": 131132,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 750,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "#H",
+        "url": "http://127.0.0.1:5185/assets/runtime-DaehbsuG.js",
+        "bytes": 131120,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 1023,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "m",
+        "url": "http://127.0.0.1:5185/assets/demand-CLLAMuyx.js",
+        "bytes": 98400,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 100,
+          "column": 42,
+          "name": null
+        }
+      },
+      {
+        "name": "Map",
+        "url": "",
+        "bytes": 98384,
+        "original": {}
+      },
+      {
+        "name": "#i",
+        "url": "http://127.0.0.1:5185/assets/canvas-root-2KlVJNnw.js",
+        "bytes": 98348,
+        "original": {
+          "source": "http://127.0.0.1:5185/packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+          "line": 118,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "map",
+        "url": "",
+        "bytes": 98344,
+        "original": {}
+      }
+    ],
+    "cpuPath": "research/vt-comparison/pool-request-loop-baseline-repeat.cpuprofile",
+    "heapPath": "research/vt-comparison/pool-request-loop-baseline-repeat.heapprofile",
+    "note": "Sampling adds overhead; use profiles for attribution, not frame-rate comparisons. Source locations require VT_SOURCEMAP=1 during the client build."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

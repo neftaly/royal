@@ -1,0 +1,6 @@
+{
+  "module": "packages/renderer-webgl/src/virtual-texture/runtime.ts",
+  "before": "4135d5a61099ef0bd7a4aadfd66d8d0c1adb2152ad95ac3d4bd7a6c41f8bfd64",
+  "after": "06a38392fc9ecbe4a3314b5f697677c63ddc5ccd8e827f175c9f18e146077eff",
+  "note": "After measurement, only a comment and a redundant private return annotation were removed. Profiles retain their original build source locations."
+}

@@ -1,0 +1,149 @@
+{
+  "results": [
+    {
+      "name": "zoom",
+      "minFilter": "linear-mipmap-nearest",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "zoom",
+      "minFilter": "linear-mipmap-linear",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "oblique",
+      "minFilter": "linear-mipmap-nearest",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "oblique",
+      "minFilter": "linear-mipmap-linear",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "hidden",
+      "minFilter": "linear-mipmap-nearest",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "hidden",
+      "minFilter": "linear-mipmap-linear",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "dense",
+      "minFilter": "linear-mipmap-nearest",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "dense",
+      "minFilter": "linear-mipmap-linear",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "overdraw",
+      "minFilter": "linear-mipmap-nearest",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "overdraw",
+      "minFilter": "linear-mipmap-linear",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "raster",
+      "minFilter": "linear-mipmap-nearest",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "raster",
+      "minFilter": "linear-mipmap-linear",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "svg",
+      "minFilter": "linear-mipmap-nearest",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "svg",
+      "minFilter": "linear-mipmap-linear",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "astc-6x6",
+      "minFilter": "linear-mipmap-nearest",
+      "changedPixels": 1371,
+      "pixelCount": 262144,
+      "maxChannelDelta": 4,
+      "meanChannelDelta": 0.0031331380208333335
+    },
+    {
+      "name": "astc-6x6",
+      "minFilter": "linear-mipmap-linear",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    },
+    {
+      "name": "astc-8x8",
+      "minFilter": "linear-mipmap-nearest",
+      "changedPixels": 1255,
+      "pixelCount": 262144,
+      "maxChannelDelta": 4,
+      "meanChannelDelta": 0.0029703776041666665
+    },
+    {
+      "name": "astc-8x8",
+      "minFilter": "linear-mipmap-linear",
+      "changedPixels": 0,
+      "pixelCount": 262144,
+      "maxChannelDelta": 0,
+      "meanChannelDelta": 0.0
+    }
+  ],
+  "note": "RGBA canvas screenshots compared at matching final benchmark poses; RGB absolute differences, no image normalization."
+}

@@ -92,8 +92,8 @@ describe("glTF ASTC alternatives", () => {
       document.extensionsRequired = required;
       const { decoder, fetch, bitmap } = setup(true);
       const source = await decoder.decode(read(document), new AbortController().signal);
-      expect(source).toMatchObject({ kind: "ktx2-native", svgPreview: { encoded: { parsed: { viewBox: [0, 0, 512, 512] } } } });
-      await source.svgPreview!.load();
+      expect(source).toMatchObject({ kind: "ktx2-native", preview: { encoded: { parsed: { viewBox: [0, 0, 512, 512] } } } });
+      await source.preview!.load();
       expect(fetch.mock.calls.map(([uri]) => uri)).toEqual(["https://example.test/native", "https://example.test/detail.svg"]);
       expect(bitmap).not.toHaveBeenCalled();
       source.close?.();
@@ -139,11 +139,11 @@ describe("glTF ASTC alternatives", () => {
     const signal = new AbortController().signal;
     decoder.preload(asset, signal);
     const source = await decoder.decode(asset, signal);
-    expect(source).toMatchObject({ kind: "ktx2-native", svgPreview: { load: expect.any(Function) } });
+    expect(source).toMatchObject({ kind: "ktx2-native", preview: { load: expect.any(Function) } });
     expect(fetch.mock.calls.map(([uri]) => uri)).toEqual(["https://example.test/native"]);
     expect(bitmap).not.toHaveBeenCalled();
     source.close?.();
-    await expect(source.svgPreview!.load()).rejects.toThrow();
+    await expect(source.preview!.load()).rejects.toThrow();
     expect(fetch).toHaveBeenCalledOnce();
   });
 
@@ -156,7 +156,7 @@ describe("glTF ASTC alternatives", () => {
     expect(source.kind).toBeUndefined();
     expect(fetch.mock.calls.map(([uri]) => uri)).toEqual(["https://example.test/preview.png"]);
     expect(bitmap).toHaveBeenCalledTimes(svg ? 2 : 1);
-    expect(source.svgPreview !== undefined).toBe(svg);
+    expect(source.preview !== undefined).toBe(svg);
     source.close?.();
   });
 
@@ -180,7 +180,7 @@ describe("glTF ASTC alternatives", () => {
     }
     const source = await decoder.decode(read(documentFor(false)), new AbortController().signal);
     expect(source.kind).toBe("ktx2-native");
-    expect(source.svgPreview).toBeUndefined();
+    expect(source.preview).toBeUndefined();
     expect(fetch).toHaveBeenCalledOnce();
     source.close?.();
   });

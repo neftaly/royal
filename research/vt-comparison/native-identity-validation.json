@@ -1,0 +1,19 @@
+{
+  "checks": {
+    "researchTypes": "pass",
+    "researchBuild": "pass; final source differs from built fixture only by an erased TypeScript phases annotation",
+    "hostGpu": "4 cases, 5 phases each, 100 pixel checks, all pass",
+    "mutation": "expected failure: 3 resident identities / 6 reads instead of 4 / 8",
+    "productionChangesThisPass": false,
+    "committed": false
+  },
+  "sha256": {
+    "packages/renderer-webgl/src/virtual-texture/runtime-contract.ts": "516f9ec2a715fafd16c05ae264c18b3a1d19a1d0382c523d84ce673c17560cc5",
+    "research/vt-comparison/native-identity-gpu.ts": "0095f5f1c45d5c07f91294f7dd69d034389af474d40f760829c2b8e3373aa879",
+    "research/vt-comparison/native-identity-gpu.html": "b476f3978402b55c2612496c7aee83a0f4c9d5098c07c750627ba0218f02241d",
+    "research/vt-comparison/build-client.mjs": "6375bf0bfa1ccf19d7af15cd71832494b933a695bb7ad03d479881d51239db08",
+    "research/vt-comparison/native-identity-gpu.json": "82b15b4b1df4c39ef05eb20b569c46f790dd91d538e4ae7b8b71ce801f746825",
+    "research/vt-comparison/native-identity-control.json": "936a695ec23a335590c5a04d8c3f8515ec7e83f9090301db2392d8265ce3d516"
+  },
+  "mutationSourceSha256": "e8cfc55ee7a701379baaa4edbe7982247d5b2edb56705a69c2baedce3797aa8f"
+}

@@ -54,6 +54,28 @@ const compressedBinding = (
 });
 
 describe("ordinary texture GPU owner", () => {
+  it("replaces fitted storage and preserves the old texture while an upgrade is deferred", () => {
+    const gl = fakeGl(), budget = new PersistentGpuBudgetOwner(4096);
+    const owner = new TextureGpuOwner(gl, budget);
+    const small = binding("linear", "linear"), large = { ...small, decoded: { ...small.decoded, width: 16, height: 16 } };
+    const competing = {};
+    try {
+      const previous = owner.reconcileComplete([small])[0]!.texture;
+      owner.takeUploadedStorageKeys();
+      expect(budget.tryClaim(competing, budget.availableBytes - 512)).toBe(true);
+      expect(owner.reconcileComplete([large])[0]!.texture).toBe(previous);
+      expect(owner.takeDeniedStorageKeys()).toEqual([]);
+      expect(owner.takeUploadedStorageKeys()).toEqual([]);
+      budget.release(competing);
+      const replacement = owner.reconcileComplete([large])[0]!.texture;
+      expect(replacement).not.toBe(previous);
+      expect(owner.snapshot()).toMatchObject({ residentTextures: 1, residentBytes: 1024 });
+      expect(owner.takeUploadedStorageKeys()).toEqual([small.storageKey]);
+      expect(gl.deleteTexture).toHaveBeenCalledWith(previous);
+    } finally { budget.release(competing); owner.dispose(); }
+    expect(budget.snapshot().retainedBytes).toBe(0);
+  });
+
   it("computes exact RGBA storage and coherently denies a mip expansion over budget", () => {
     expect(ordinaryTextureStorageBytes(8, 8, false)).toBe(256);
     expect(ordinaryTextureStorageBytes(8, 8, true)).toBe(340);

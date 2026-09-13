@@ -1,0 +1,34 @@
+{
+  "integrationTests": 1463,
+  "integrationFiles": 149,
+  "gltfManifestCases": 65,
+  "publicIdentityCombinations": 81,
+  "oracleInputs": 6000,
+  "oracleIdentityClasses": 780,
+  "mutationFailedTests": 2,
+  "gpuRegressionCases": 8,
+  "profileRuns": 4,
+  "typecheckExitCode": 0,
+  "lintExitCode": 0,
+  "packageExitCode": 0,
+  "bundleExitCode": 0,
+  "sources": {
+    "packages/renderer-webgl/src/virtual-texture/runtime-contract.ts": "516f9ec2a715fafd16c05ae264c18b3a1d19a1d0382c523d84ce673c17560cc5",
+    "packages/renderer-webgl/src/texture/sampler.ts": "b6bbd7e3f1140cb873ab1985ea3a11fc75ee66e36bd88598bf19c257ed4e1658",
+    "tests/replacement/renderer-webgl-vt-runtime.test.ts": "c325b806f0bad8d952fa99835b77028f054b989a03b1fc707a410272306a796f",
+    "scripts/bundle-size-budget.json": "0b7f1f95b6023c27511e278f4995a9ba44227a8aea590b1154890feaa577bc7d",
+    "research/vt-comparison/compare-flat-asset-key.mjs": "db11251b7c212f7cc9f9ab3e74c5515b704cee0b5da4f0360ece95e5c69e2bec",
+    "research/vt-comparison/resident-eviction.ts": "545de729c756a61246c15ad7a9fd831eb3cdbf80d44f9934d7f53f595bfb0d35"
+  },
+  "logs": {
+    "/tmp/royal-vt-flat-asset-key-tests-final.log": "7c8cb4aa8d4ce5a4a3867b6cca765aa9d1c23beabe53080bb24d2dbd52a8c003",
+    "/tmp/royal-vt-flat-asset-key-types.log": "5ac71a99decf5b92dbfe798066cbe8ea317395f8f764f5a8879fd3511ca99454",
+    "/tmp/royal-vt-flat-asset-key-lint.log": "376ca9de1f8e26ecd64fd86c2273f9d623325fc0ba64edbb31155195702aa149",
+    "/tmp/royal-vt-flat-asset-key-package.log": "b3c9ae404df66bed49e4087626f40be1a97e15d784278b4138286646b9a039ab",
+    "/tmp/royal-vt-flat-asset-key-bundle-final.log": "79e9e4f3bdf6523ccb7e41682bb01004bf37bc76f479a399033a6eadff05efe0",
+    "/tmp/royal-vt-flat-asset-key-tag-mutation.log": "6f6e828a393afd6502b44b4fd4a4aad440f21b5ea24bb9be0e5c9ea32454b7f6",
+    "/tmp/royal-vt-flat-asset-key-restored.log": "660033018b0020cb638f1a64b68ec3ff5ff6b0638cf9accef390258b50450ad3",
+    "/tmp/royal-vt-flat-asset-key-gpu-regression.log": "ad932f33fb7fc13090ec0dc7d0fde430ca3fd4e8df1795329262b0d90b6972c6"
+  },
+  "note": "Retained three-line production reduction in authored-key construction. Raw internal strings change; sampled equality classes preserved. Key-only CPU gain does not establish browser speedup. No commits."
+}

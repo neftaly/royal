@@ -1,0 +1,22 @@
+{
+  "observedBlockedPlan": {
+    "demand": 168,
+    "targetSlots": 240,
+    "currentSlots": 135,
+    "currentBytes": 9408960,
+    "plannedSlots": 126,
+    "plannedBytes": 8781696,
+    "availableBytes": 8797506,
+    "allowanceBytes": 16789152,
+    "shrinking": false,
+    "pageBytes": 69696,
+    "minimumLargerAtlasBytes": 9478656,
+    "availableSlotUpperBound": 126,
+    "desiredPageBytes": 11708928
+  },
+  "inference": "Any replacement larger than the current atlas exceeds free memory, even if growth rounding is removed. The nominal per-pool allowance is sufficient for desired pages, but does not supply simultaneous old/new storage.",
+  "productionSha256": "e4e94e2ab212d037b057549142493b17e45135fe2b1be92f4c95fbdd271742fa",
+  "instrumentedSha256": "a0dbc920a72e8a5fcac1962b0a8a9d5a8133efa71a7fd4b1af8d18c3a6e8b2ac",
+  "productionChanged": false,
+  "committed": false
+}

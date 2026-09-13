@@ -1,0 +1,55 @@
+const addWrappedRange = (
+  workspace: VirtualTextureDemandWorkspace,
+  manifest: VirtualTextureManifest,
+  mip: number,
+  sampler: CanonicalTextureSampler,
+): void => {
+  const screen = workspace.screen;
+  const u0 = screen[2]! / screen[4]!, u1 = screen[7]! / screen[9]!, u2 = screen[12]! / screen[14]!;
+  const v0 = screen[3]! / screen[4]!, v1 = screen[8]! / screen[9]!, v2 = screen[13]! / screen[14]!;
+  const minimumU = Math.min(u0, u1, u2);
+  const maximumU = Math.max(u0, u1, u2);
+  const minimumV = Math.min(v0, v1, v2);
+  const maximumV = Math.max(v0, v1, v2);
+  const repeatsU = sampler.wrapS !== "clamp-to-edge";
+  const repeatsV = sampler.wrapT !== "clamp-to-edge";
+  // Saturate each repeating axis independently. The other axis still needs
+  // its own clamp, seam splitting and mirrored-tile orientation.
+  const fullU = repeatsU && maximumU - minimumU >= 1;
+  const fullV = repeatsV && maximumV - minimumV >= 1;
+  const uStart = repeatsU && !fullU ? Math.floor(minimumU) : 0;
+  const uEnd = repeatsU && !fullU ? Math.floor(maximumU) : 0;
+  const vStart = repeatsV && !fullV ? Math.floor(minimumV) : 0;
+  const vEnd = repeatsV && !fullV ? Math.floor(maximumV) : 0;
+  const layout = manifest.mipLayouts[mip]!;
+  for (let dy = 0; dy <= vEnd - vStart; dy += 1) {
+    const tileY = vStart + dy;
+    for (let dx = 0; dx <= uEnd - uStart; dx += 1) {
+      const tileX = uStart + dx;
+      let localMinU = fullU ? 0 : repeatsU ? Math.max(0, minimumU - tileX) : minimumU;
+      let localMaxU = fullU ? 1 : repeatsU ? Math.min(1, maximumU - tileX) : maximumU;
+      let localMinV = fullV ? 0 : repeatsV ? Math.max(0, minimumV - tileY) : minimumV;
+      let localMaxV = fullV ? 1 : repeatsV ? Math.min(1, maximumV - tileY) : maximumV;
+      if (!fullU && sampler.wrapS === "mirrored-repeat" && Math.abs(tileX) % 2 === 1) {
+        const previousMinimum = localMinU;
+        localMinU = 1 - localMaxU;
+        localMaxU = 1 - previousMinimum;
+      }
+      if (!fullV && sampler.wrapT === "mirrored-repeat" && Math.abs(tileY) % 2 === 1) {
+        const previousMinimum = localMinV;
+        localMinV = 1 - localMaxV;
+        localMaxV = 1 - previousMinimum;
+      }
+      const x0 = Math.min(layout.width - 1, Math.max(0, Math.floor(localMinU * layout.width)));
+      const y0 = Math.min(layout.height - 1, Math.max(0, Math.floor(localMinV * layout.height)));
+      const x1 = Math.min(layout.width - 1, Math.max(0, Math.floor(Math.max(0, localMaxU - Number.EPSILON) * layout.width)));
+      const y1 = Math.min(layout.height - 1, Math.max(0, Math.floor(Math.max(0, localMaxV - Number.EPSILON) * layout.height)));
+      for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) {
+        for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) {
+          addPageWithAncestors(workspace, manifest, mip, x, y);
+          if (workspace.overflow) return;
+        }
+      }
+    }
+  }
+};

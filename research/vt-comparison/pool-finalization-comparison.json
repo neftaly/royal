@@ -1,0 +1,442 @@
+{
+  "sourceHashes": {
+    "before": "7710910e60df0a2a11dca8dc0030870dd914e9b7f22b0a964a2b89bf5ea8c9d5",
+    "after": "24d571f50be4cf8ad1ec27b8c12721c4f5518b6079f8aeb40386212a510b97c1"
+  },
+  "equivalentCases": 10000,
+  "results": [
+    {
+      "version": "before",
+      "count": 1,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 41.79419999999993,
+      "cpuMs": 94.375,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 1,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 24.647203999999988,
+      "cpuMs": 29.629,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 1,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 23.30552799999998,
+      "cpuMs": 28.935,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 1,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 22.78434100000004,
+      "cpuMs": 47.822,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 1,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 22.989806999999928,
+      "cpuMs": 47.868,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 1,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 21.78775100000007,
+      "cpuMs": 36.006,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 1,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 30.177032999999938,
+      "cpuMs": 35.057,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 1,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 19.45843600000012,
+      "cpuMs": 24.149,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 1,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 31.562147000000095,
+      "cpuMs": 50.6,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 1,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 35.65317600000003,
+      "cpuMs": 86.727,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 1,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 19.56183299999998,
+      "cpuMs": 24.273,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 1,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 19.48208999999997,
+      "cpuMs": 24.719,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 1,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 18.616479000000027,
+      "cpuMs": 23.631,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 1,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 33.679035999999996,
+      "cpuMs": 53.612,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 1,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 23.751578999999992,
+      "cpuMs": 50.012,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 1,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 33.497715999999855,
+      "cpuMs": 62.955,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 16,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 112.54670199999987,
+      "cpuMs": 117.642,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 16,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 63.61658699999998,
+      "cpuMs": 68.349,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 16,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 85.46927899999991,
+      "cpuMs": 109.513,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 16,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 133.25659700000006,
+      "cpuMs": 183.204,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 16,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 110.88756699999999,
+      "cpuMs": 116.182,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 16,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 62.964864000000034,
+      "cpuMs": 67.773,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 16,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 82.91641600000003,
+      "cpuMs": 108.224,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 16,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 141.10327300000017,
+      "cpuMs": 201.036,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 16,
+      "pools": 8,
+      "round": 0,
+      "elapsedMs": 183.08942199999956,
+      "cpuMs": 187.819,
+      "checksum": 400000
+    },
+    {
+      "version": "after",
+      "count": 16,
+      "pools": 8,
+      "round": 0,
+      "elapsedMs": 129.16718300000002,
+      "cpuMs": 133.747,
+      "checksum": 400000
+    },
+    {
+      "version": "after",
+      "count": 16,
+      "pools": 8,
+      "round": 1,
+      "elapsedMs": 150.60030300000017,
+      "cpuMs": 175.01,
+      "checksum": 400000
+    },
+    {
+      "version": "before",
+      "count": 16,
+      "pools": 8,
+      "round": 1,
+      "elapsedMs": 159.07484899999963,
+      "cpuMs": 221.502,
+      "checksum": 400000
+    },
+    {
+      "version": "before",
+      "count": 16,
+      "pools": 8,
+      "round": 2,
+      "elapsedMs": 137.3144629999997,
+      "cpuMs": 142.313,
+      "checksum": 400000
+    },
+    {
+      "version": "after",
+      "count": 16,
+      "pools": 8,
+      "round": 2,
+      "elapsedMs": 129.37425299999995,
+      "cpuMs": 134.196,
+      "checksum": 400000
+    },
+    {
+      "version": "after",
+      "count": 16,
+      "pools": 8,
+      "round": 3,
+      "elapsedMs": 143.27073599999994,
+      "cpuMs": 167.908,
+      "checksum": 400000
+    },
+    {
+      "version": "before",
+      "count": 16,
+      "pools": 8,
+      "round": 3,
+      "elapsedMs": 148.11728600000015,
+      "cpuMs": 207.652,
+      "checksum": 400000
+    },
+    {
+      "version": "before",
+      "count": 128,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 792.2157290000005,
+      "cpuMs": 796.348,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 128,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 372.70049800000015,
+      "cpuMs": 408.723,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 128,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 386.27063999999973,
+      "cpuMs": 424.01,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 128,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 815.7209059999996,
+      "cpuMs": 849.801,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 128,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 802.9201949999997,
+      "cpuMs": 839.338,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 128,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 380.12951599999997,
+      "cpuMs": 418.237,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "count": 128,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 369.23230199999944,
+      "cpuMs": 374.193,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 128,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 779.1552430000011,
+      "cpuMs": 784.19,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "count": 128,
+      "pools": 8,
+      "round": 0,
+      "elapsedMs": 848.6779409999999,
+      "cpuMs": 938.374,
+      "checksum": 400000
+    },
+    {
+      "version": "after",
+      "count": 128,
+      "pools": 8,
+      "round": 0,
+      "elapsedMs": 540.6752029999989,
+      "cpuMs": 564.108,
+      "checksum": 400000
+    },
+    {
+      "version": "after",
+      "count": 128,
+      "pools": 8,
+      "round": 1,
+      "elapsedMs": 533.1535159999985,
+      "cpuMs": 538.168,
+      "checksum": 400000
+    },
+    {
+      "version": "before",
+      "count": 128,
+      "pools": 8,
+      "round": 1,
+      "elapsedMs": 820.3924260000003,
+      "cpuMs": 824.466,
+      "checksum": 400000
+    },
+    {
+      "version": "before",
+      "count": 128,
+      "pools": 8,
+      "round": 2,
+      "elapsedMs": 840.7568910000009,
+      "cpuMs": 904.207,
+      "checksum": 400000
+    },
+    {
+      "version": "after",
+      "count": 128,
+      "pools": 8,
+      "round": 2,
+      "elapsedMs": 545.6001930000002,
+      "cpuMs": 565.184,
+      "checksum": 400000
+    },
+    {
+      "version": "after",
+      "count": 128,
+      "pools": 8,
+      "round": 3,
+      "elapsedMs": 501.1717239999998,
+      "cpuMs": 505.951,
+      "checksum": 400000
+    },
+    {
+      "version": "before",
+      "count": 128,
+      "pools": 8,
+      "round": 3,
+      "elapsedMs": 815.3204760000008,
+      "cpuMs": 869.042,
+      "checksum": 400000
+    }
+  ],
+  "note": "Extracted runtime aggregation blocks, TypeScript transpiled. Refresh, atlas key and page-byte functions stubbed equally; allocator returns requests and budget. Excludes rendering, asynchronous work and GPU execution."
+}

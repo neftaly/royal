@@ -1,0 +1,91 @@
+{
+  "sources": {
+    "before": "const virtualTextureAtlasKey = (\n  asset: Pick<TextureSourceRef | VirtualTextureAssetRef, \"colorSpace\">,\n  manifest: VirtualTextureManifest,\n): string => JSON.stringify([\n  manifest.pageSize + manifest.borderTexels * 2,\n  manifest.pageEncoding,\n  asset.colorSpace ?? manifest.colorSpace,\n]);",
+    "after": "const virtualTextureAtlasKey = ({ asset, gpu }: RuntimeResource, manifest: VirtualTextureManifest): string => gpu?.atlas.key ?? JSON.stringify([\n  manifest.pageSize + manifest.borderTexels * 2,\n  manifest.pageEncoding,\n  asset.colorSpace ?? manifest.colorSpace,\n]);"
+  },
+  "resident": true,
+  "comparisons": 43008,
+  "uniqueKeys": 14336,
+  "node": "v24.12.0",
+  "nodeOptions": [
+    "--expose-gc",
+    "--min-semi-space-size=16",
+    "--max-semi-space-size=16"
+  ],
+  "checksum": 12000000,
+  "results": [
+    {
+      "version": "before",
+      "round": 0,
+      "iterations": 1000000,
+      "cpuMs": 222.16,
+      "elapsedMs": 211.76711199999997,
+      "gcEvents": 6,
+      "gcMs": 0.956089973449707
+    },
+    {
+      "version": "after",
+      "round": 0,
+      "iterations": 1000000,
+      "cpuMs": 33.877,
+      "elapsedMs": 24.24236400000001,
+      "gcEvents": 0,
+      "gcMs": 0
+    },
+    {
+      "version": "after",
+      "round": 1,
+      "iterations": 1000000,
+      "cpuMs": 40.26,
+      "elapsedMs": 26.538915999999972,
+      "gcEvents": 0,
+      "gcMs": 0
+    },
+    {
+      "version": "before",
+      "round": 1,
+      "iterations": 1000000,
+      "cpuMs": 238.683,
+      "elapsedMs": 225.61166200000002,
+      "gcEvents": 6,
+      "gcMs": 0.829154908657074
+    },
+    {
+      "version": "before",
+      "round": 2,
+      "iterations": 1000000,
+      "cpuMs": 244.83,
+      "elapsedMs": 234.94331699999998,
+      "gcEvents": 6,
+      "gcMs": 1.0082880854606628
+    },
+    {
+      "version": "after",
+      "round": 2,
+      "iterations": 1000000,
+      "cpuMs": 38.513,
+      "elapsedMs": 23.012796999999978,
+      "gcEvents": 0,
+      "gcMs": 0
+    },
+    {
+      "version": "after",
+      "round": 3,
+      "iterations": 1000000,
+      "cpuMs": 32.472,
+      "elapsedMs": 21.086345999999935,
+      "gcEvents": 0,
+      "gcMs": 0
+    },
+    {
+      "version": "before",
+      "round": 3,
+      "iterations": 1000000,
+      "cpuMs": 237.561,
+      "elapsedMs": 225.85058400000003,
+      "gcEvents": 6,
+      "gcMs": 0.8871119618415833
+    }
+  ],
+  "note": "Actual source helpers, TypeScript types stripped. Key outputs consumed by Map lookups and checksum; repeated input represents a settled atlas. Microbenchmark excludes all other rendering work."
+}

@@ -1,0 +1,106 @@
+{
+  "before": {
+    "raster": {
+      "height": 1773,
+      "status": "ready",
+      "timings": {
+        "decodeDurationMs": 78.5,
+        "decodeQueueDurationMs": 0.19999992847442627,
+        "firstReadyAfterMs": 152.10000002384186,
+        "preparationDurationMs": 151.40000009536743,
+        "preparationQueueDurationMs": 0.2999999523162842,
+        "transportDurationMs": 28.299999952316284,
+        "transportQueueDurationMs": 0.2999999523162842
+      },
+      "width": 1773
+    },
+    "vt": {
+      "admittedUploadBytes": 71060,
+      "atlasBytes": 2230272,
+      "atlasPools": 1,
+      "atlasGrowthFailures": 0,
+      "desiredPages": 21,
+      "admittedPages": 21,
+      "unresidentPages": 20,
+      "automaticCandidates": 1,
+      "automaticDecodedBytes": 12574116,
+      "automaticIneligible": 0,
+      "automaticResources": 1,
+      "automaticWaiting": 0,
+      "deferredUploads": 0,
+      "failedPages": 0,
+      "pageRequests": 2,
+      "pendingPages": 1,
+      "pendingPageBytes": 69696,
+      "pendingPageByteLimit": 16777216,
+      "residentPages": 1,
+      "uploadedPages": 1,
+      "uploadBudgetBytes": 33554432
+    }
+  },
+  "after": {
+    "raster": {
+      "height": 2048,
+      "status": "ready",
+      "timings": {
+        "decodeDurationMs": 18.5,
+        "decodeQueueDurationMs": 0,
+        "firstReadyAfterMs": 309.2999999523163,
+        "preparationDurationMs": 26.399999976158142,
+        "preparationQueueDurationMs": 0,
+        "transportDurationMs": 7.299999952316284,
+        "transportQueueDurationMs": 0.10000002384185791
+      },
+      "width": 2048
+    },
+    "vt": {
+      "admittedUploadBytes": 280148,
+      "atlasBytes": 2230272,
+      "atlasPools": 1,
+      "atlasGrowthFailures": 0,
+      "desiredPages": 21,
+      "admittedPages": 21,
+      "unresidentPages": 0,
+      "automaticCandidates": 1,
+      "automaticDecodedBytes": 16777216,
+      "automaticIneligible": 0,
+      "automaticResources": 1,
+      "automaticWaiting": 0,
+      "deferredUploads": 0,
+      "failedPages": 0,
+      "pageRequests": 42,
+      "pendingPages": 0,
+      "pendingPageBytes": 0,
+      "pendingPageByteLimit": 16777216,
+      "residentPages": 21,
+      "uploadedPages": 42,
+      "uploadBudgetBytes": 33554432
+    }
+  },
+  "pixel": [
+    255,
+    0,
+    0,
+    255
+  ],
+  "note": "ASTC support deliberately hidden; manifest held until fitted PNG has automatic VT residency. Verifies transport independence, lease release, full-size re-decode and GPU publication.",
+  "gc": {
+    "events": 0,
+    "totalMs": 0,
+    "maxMs": 0,
+    "heapBefore": {
+      "usedSize": 2033092,
+      "totalSize": 2621440,
+      "embedderHeapUsedSize": 947256,
+      "backingStorageSize": 447931
+    },
+    "heapAfter": {
+      "usedSize": 2154156,
+      "totalSize": 2621440,
+      "embedderHeapUsedSize": 438552,
+      "backingStorageSize": 447931
+    },
+    "note": "Warm-up and final diagnostics are excluded from the trace. Forced-GC heaps retain the live scene before/after measurement."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

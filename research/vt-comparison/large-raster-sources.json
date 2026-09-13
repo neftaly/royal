@@ -1,0 +1,6 @@
+{
+  "research/vt-comparison/source-combinations.ts": "84b07144df2bc0b874413ac99bc9ed995c85b859c7622db05979f996652d6104",
+  "packages/renderer-webgl/src/texture/browser-decode.ts": "73dae45f1e78a0f5d9446dca2816d53b14d7eb8ddf16e6b4fb89840d5b544365",
+  "packages/renderer-webgl/src/texture/storage-fit.ts": "b2c16175f8a0023e37ab5fcf5c2bce79446401c378ff72a94f26326eb25670bb",
+  "packages/renderer-webgl/src/virtual-texture/runtime.ts": "6faa84b0b6bbb11f1c38b251162a7472e2c5f984ba1d94023b3b7ba1ec06778a"
+}

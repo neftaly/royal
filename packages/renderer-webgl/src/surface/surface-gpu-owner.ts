@@ -628,8 +628,11 @@ export class SurfaceGpuOwner {
   ): number {
     const scene = this.#scene;
     if (scene === null) return ordinaryTextureStorageBudget(persistentBudgetBytes, 0);
+    const referenced = scene.surfaces.some(surface => surface.material.baseColorVirtualAsset !== undefined);
+    const required = referenced ? this.#virtualTexture?.authoredStorageRequired : false;
     let plannedNonTextureBytes = this.#geometryGpu.plannedRetainedBytes(scene.surfaces)
-      + this.#largeLights.plannedByteLength;
+      + this.#largeLights.plannedByteLength
+      + (required !== false ? Math.floor(persistentBudgetBytes * 0.75) : 0);
     for (const volume of scene.volumes) {
       plannedNonTextureBytes += volume.geometry.positions.byteLength
         + volume.geometry.indices.byteLength;

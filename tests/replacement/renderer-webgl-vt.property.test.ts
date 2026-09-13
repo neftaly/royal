@@ -7,16 +7,110 @@ import { transformedWorldBounds } from "../../packages/renderer-webgl/src/surfac
 import {
   collectVirtualTextureDemand,
   createVirtualTextureDemandWorkspace,
+  truncateVirtualTextureDemand,
 } from "../../packages/renderer-webgl/src/virtual-texture/demand";
 import {
   derivedVirtualTextureMipCount,
   parseVirtualTextureManifest,
   virtualTexturePageKeyParts,
 } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
-import { writeVirtualTexturePageTable } from "../../packages/renderer-webgl/src/virtual-texture/residency";
+import { addVirtualTexturePageTablePage, writeVirtualTexturePageTable } from "../../packages/renderer-webgl/src/virtual-texture/residency";
 import { assertFuzz, forEachFuzzCase } from "../fuzz";
 
 describe("VT2 bounded planning properties", () => {
+  it("coarsens direct demand only as far as needed while preserving every requested region", () => {
+    forEachFuzzCase({ cases: 64, seed: 0x76_74_32_04 }, ({ random }) => {
+      const width = random.int(1, 16), height = random.int(1, 16);
+      const original = [{ mip: 4, x: 0, y: 0 }];
+      const originalKeys = new Set(["4/0/0"]);
+      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        for (const mip of random.boolean() ? [0, 1] : [0]) {
+          const page = { mip, x: Math.floor(x / 2 ** mip), y: Math.floor(y / 2 ** mip) };
+          const key = `${page.mip}/${page.x}/${page.y}`;
+          if (!originalKeys.has(key)) { originalKeys.add(key); original.push(page); }
+        }
+      }
+      for (const capacity of [1, 4, random.int(1, original.length), original.length]) {
+        const workspace = createVirtualTextureDemandWorkspace(512, "coarsest");
+        original.forEach((page, index) => {
+          workspace.mips[index] = page.mip; workspace.xs[index] = page.x; workspace.ys[index] = page.y;
+          workspace.keys.add(virtualTexturePageKeyParts(page.mip, page.x, page.y));
+        });
+        workspace.count = original.length;
+        // Direct oracle projects all original regions to each candidate level,
+        // independently of the production routine's iterative in-place merges.
+        let expected = new Set<string>();
+        for (let level = 0; level <= 4; level++) {
+          expected = new Set(original.map(page => {
+            const mip = Math.max(level, page.mip), scale = 2 ** (mip - page.mip);
+            return `${mip}/${Math.floor(page.x / scale)}/${Math.floor(page.y / scale)}`;
+          }));
+          if (expected.size <= capacity) break;
+        }
+        truncateVirtualTextureDemand(workspace, capacity);
+        const actual = Array.from({ length: workspace.count }, (_, index) =>
+          `${workspace.mips[index]}/${workspace.xs[index]}/${workspace.ys[index]}`);
+        assertFuzz(actual.length === expected.size && actual.every(key => expected.has(key)), "coarsening lost coverage or skipped a feasible detail level");
+        assertFuzz(workspace.keys.size === actual.length && workspace.count <= capacity, "coarsened membership or capacity diverged");
+        for (let index = 0; index < workspace.count; index++) assertFuzz(workspace.keys.has(
+          virtualTexturePageKeyParts(workspace.mips[index]!, workspace.xs[index]!, workspace.ys[index]!),
+        ), "coarsened key index lost a retained page");
+      }
+    });
+  });
+
+  it("clears stale ancestors through randomized replacement and empty-table cycles", () => {
+    forEachFuzzCase({ cases: 24, seed: 0x76_74_32_03 }, ({ random }) => {
+      const manifest = parseVirtualTextureManifest({
+        borderTexels: 1, contractVersion: 2, pageSize: 128,
+        pages: { uriTemplate: "{page}.png" },
+        virtualSize: [random.int(1, 1025), random.int(1, 1025)],
+      });
+      const pages = manifest.mipLayouts.flatMap((layout, mip) => Array.from(
+        { length: layout.width * layout.height }, (_, index) =>
+          ({ mip, x: index % layout.width, y: Math.floor(index / layout.width) })));
+      const slots: (typeof pages[number] | undefined)[] = Array(7).fill(undefined);
+      const residents = new Map<number | string, number>();
+      const table = new Uint8Array(manifest.tableByteLength);
+      for (let step = 0; step < 80; step += 1) {
+        if (step % 17 === 16) {
+          slots.fill(undefined);
+          residents.clear();
+          writeVirtualTexturePageTable(manifest, residents, 3, table);
+        } else {
+          const page = random.pick(pages), slot = random.int(0, slots.length - 1);
+          const key = virtualTexturePageKeyParts(page.mip, page.x, page.y);
+          const previousSlot = residents.get(key);
+          if (previousSlot !== undefined) slots[previousSlot] = undefined;
+          const evicted = slots[slot];
+          if (evicted !== undefined) residents.delete(virtualTexturePageKeyParts(evicted.mip, evicted.x, evicted.y));
+          slots[slot] = page;
+          residents.set(key, slot);
+          if (evicted !== undefined) writeVirtualTexturePageTable(manifest, residents, 3, table);
+          else addVirtualTexturePageTablePage(manifest, page, slot, 3, table);
+        }
+        // Independent oracle searches physical residents directly, including
+        // holes with no ancestor. It does not read neighboring table entries.
+        const expected = new Uint8Array(table.length);
+        for (const page of pages) {
+          let closest = Infinity, selected = -1;
+          for (const [slot, resident] of slots.entries()) {
+            if (resident === undefined || resident.mip < page.mip || resident.mip >= closest) continue;
+            const scale = 2 ** (resident.mip - page.mip);
+            if (resident.x === Math.floor(page.x / scale) && resident.y === Math.floor(page.y / scale)) {
+              closest = resident.mip; selected = slot;
+            }
+          }
+          if (selected < 0) continue;
+          const offset = manifest.mipLayouts[page.mip]!.byteOffset
+            + (page.y * Math.max(1, manifest.tableWidth / 2 ** page.mip) + page.x) * 4;
+          expected.set([selected % 3, Math.floor(selected / 3), closest, 255], offset);
+        }
+        assertFuzz(table.every((value, index) => value === expected[index]), `stale page-table mapping at step ${step}`);
+      }
+    });
+  });
+
   it("keeps randomized demand finite, unique, in-grid, and capacity-bounded", () => {
     forEachFuzzCase({ cases: 32, seed: 0x76_74_32_01 }, ({ random }) => {
       const pageSize = random.pick([64, 128, 256]);

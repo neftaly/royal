@@ -22,6 +22,8 @@ const ordinaryTextureIdentity = (
         asset.mimeType,
         asset.sourceEncoding ?? null,
         asset.svgPreview ?? null,
+        asset.rasterPreview?.width ?? null,
+        asset.rasterPreview?.height ?? null,
         asset.colorSpace ?? "srgb",
         asset.bytes.byteLength,
         numericArrayHash(asset.bytes),
@@ -76,6 +78,8 @@ const textureAssetsEqual = (
   return left.mimeType === right.mimeType
     && left.sourceEncoding === right.sourceEncoding
     && left.svgPreview === right.svgPreview
+    && left.rasterPreview?.width === right.rasterPreview?.width
+    && left.rasterPreview?.height === right.rasterPreview?.height
     && (left.colorSpace ?? "srgb") === (right.colorSpace ?? "srgb")
     && canonicalTextureSamplerKey(canonicalTextureSampler(left))
       === canonicalTextureSamplerKey(canonicalTextureSampler(right))

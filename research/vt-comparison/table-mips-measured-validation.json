@@ -1,0 +1,20 @@
+{
+  "sha256": {
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "ac809cb036df45aaf1e0742b8d8a443274f1d7b7ea239aab9ad5a3a54519184a",
+    "tests/replacement/renderer-webgl-vt-runtime.test.ts": "f21e58449b96df42d8cd44aa4addaec6ccde05b581a4fbe521a5567fcb65cf06",
+    "research/vt-comparison/steady.ts": "19e70ca57444547036f655a4a85cd1b06e1ec21425d0e39c65c62bd6b831d417",
+    "scripts/bundle-size-budget.json": "f2963ad5f2cbc3291d8c6d64f61e027ec057d55ab82ce3db76cf73c2d8b12ee7",
+    "scripts/package-size-budget.json": "4dd0b8e5964812d3c33ddf3f8e7fa22779a27e9b487a07277aefda42f1cb783a"
+  },
+  "checks": {
+    "fullSuite": "1466 tests across 149 files, 65 glTF manifest cases",
+    "types": "pass",
+    "lint": "pass",
+    "bundle": "pass after named 32-byte total-graph allowance",
+    "mutations": "exclusive mip bound and omitted coarse rebuild uploads each fail targeted regression",
+    "gpu": "four before/after runs at 128 MiB ASTC8x8 and candidate 64 MiB ASTC6x6 native-first; all 336 resident/672 uploads after restoration",
+    "packedConsumer": "pass after named 64-byte allowance; initial measured tarball 750715 vs old ceiling 750656"
+  },
+  "productionNetLines": 2,
+  "committed": false
+}

@@ -1,0 +1,280 @@
+{
+  "results": [
+    {
+      "name": "png-preview-166",
+      "minFilter": "astc",
+      "frames": 8,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "sourceSize": 4096,
+      "decodedBitmaps": [
+        {
+          "width": 3547,
+          "height": 3547
+        }
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/rectangular-square-regression-images/png-preview-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 75156,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 50325668,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-preview-166",
+      "minFilter": "astc",
+      "frames": 5,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "sourceSize": 4096,
+      "decodedBitmaps": [
+        {
+          "width": 3547,
+          "height": 3547
+        }
+      ],
+      "pixel": [
+        0,
+        0,
+        254,
+        255
+      ],
+      "screenshot": "research/vt-comparison/rectangular-square-regression-images/jpeg-preview-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 75156,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 50325668,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-preview-172",
+      "minFilter": "astc",
+      "frames": 4,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "sourceSize": 4096,
+      "decodedBitmaps": [
+        {
+          "width": 3547,
+          "height": 3547
+        }
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/rectangular-square-regression-images/png-preview-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 75156,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 50325220,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-preview-172",
+      "minFilter": "astc",
+      "frames": 5,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "sourceSize": 4096,
+      "decodedBitmaps": [
+        {
+          "width": 3547,
+          "height": 3547
+        }
+      ],
+      "pixel": [
+        0,
+        0,
+        254,
+        255
+      ],
+      "screenshot": "research/vt-comparison/rectangular-square-regression-images/jpeg-preview-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 75156,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 50325220,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    }
+  ],
+  "note": "ASTC 6x6/8x8 complete mip pyramids; forced unsupported capability uses the same host GPU. SVG/PNG/JPEG/WebP/AVIF authority is blue; native alternative is red to expose unintended substitution.",
+  "gc": {
+    "events": 4,
+    "totalMs": 8.659,
+    "maxMs": 3.203,
+    "heapBefore": {
+      "usedSize": 933920,
+      "totalSize": 1572864,
+      "embedderHeapUsedSize": 334016,
+      "backingStorageSize": 316902
+    },
+    "heapAfter": {
+      "usedSize": 3133148,
+      "totalSize": 3670016,
+      "embedderHeapUsedSize": 405904,
+      "backingStorageSize": 482452
+    },
+    "note": "Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

@@ -1,0 +1,1910 @@
+{
+  "results": [
+    {
+      "name": "svg-166",
+      "minFilter": "astc",
+      "frames": 21,
+      "phases": [],
+      "reads": [
+        "astc",
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/svg-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 366164,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 5,
+        "admittedPages": 5,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 262976,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "svg-166",
+      "minFilter": "unsupported",
+      "frames": 6,
+      "phases": [],
+      "reads": [
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/svg-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-166",
+      "minFilter": "astc",
+      "frames": 4,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/webp-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-166",
+      "minFilter": "unsupported",
+      "frames": 4,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/webp-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-166",
+      "minFilter": "astc",
+      "frames": 5,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/avif-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-166",
+      "minFilter": "unsupported",
+      "frames": 6,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        1,
+        253,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/avif-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-166",
+      "minFilter": "astc",
+      "frames": 5,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/png-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-166",
+      "minFilter": "unsupported",
+      "frames": 6,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/png-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-166",
+      "minFilter": "astc",
+      "frames": 7,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/jpeg-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-166",
+      "minFilter": "unsupported",
+      "frames": 7,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        254,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/jpeg-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-svg-166",
+      "minFilter": "astc",
+      "frames": 16,
+      "phases": [],
+      "reads": [
+        "astc",
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/png-svg-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 5,
+        "admittedPages": 5,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 262976,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-svg-166",
+      "minFilter": "unsupported",
+      "frames": 13,
+      "phases": [],
+      "reads": [
+        "raster",
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/png-svg-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 366164,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 5,
+        "admittedPages": 5,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 311428,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-preview-166",
+      "minFilter": "astc",
+      "frames": 4,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/png-preview-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 69780,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 1049408,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-preview-166",
+      "minFilter": "unsupported",
+      "frames": 6,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/png-preview-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-preview-166",
+      "minFilter": "astc",
+      "frames": 5,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        254,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/jpeg-preview-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4195136,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-preview-166",
+      "minFilter": "unsupported",
+      "frames": 5,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        254,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/jpeg-preview-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-metadata-preview-166",
+      "minFilter": "astc",
+      "frames": 4,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        254,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/jpeg-metadata-preview-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4195136,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-metadata-preview-166",
+      "minFilter": "unsupported",
+      "frames": 2,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        254,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/jpeg-metadata-preview-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-preview-166",
+      "minFilter": "astc",
+      "frames": 4,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/webp-preview-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 70036,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4195136,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-preview-166",
+      "minFilter": "unsupported",
+      "frames": 6,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/webp-preview-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-preview-166",
+      "minFilter": "astc",
+      "frames": 6,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        1,
+        253,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/avif-preview-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4195136,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-preview-166",
+      "minFilter": "unsupported",
+      "frames": 6,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        1,
+        253,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/avif-preview-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "svg-172",
+      "minFilter": "astc",
+      "frames": 14,
+      "phases": [],
+      "reads": [
+        "astc",
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/svg-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 366164,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 5,
+        "admittedPages": 5,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 262528,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "svg-172",
+      "minFilter": "unsupported",
+      "frames": 4,
+      "phases": [],
+      "reads": [
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/svg-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-172",
+      "minFilter": "astc",
+      "frames": 6,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/webp-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-172",
+      "minFilter": "unsupported",
+      "frames": 6,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/webp-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-172",
+      "minFilter": "astc",
+      "frames": 6,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/avif-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-172",
+      "minFilter": "unsupported",
+      "frames": 2,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        1,
+        253,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/avif-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-172",
+      "minFilter": "astc",
+      "frames": 1,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/png-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-172",
+      "minFilter": "unsupported",
+      "frames": 2,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/png-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-172",
+      "minFilter": "astc",
+      "frames": 2,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/jpeg-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-172",
+      "minFilter": "unsupported",
+      "frames": 2,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        254,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/jpeg-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-svg-172",
+      "minFilter": "astc",
+      "frames": 5,
+      "phases": [],
+      "reads": [
+        "astc",
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/png-svg-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 366164,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 5,
+        "admittedPages": 5,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 262528,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-svg-172",
+      "minFilter": "unsupported",
+      "frames": 5,
+      "phases": [],
+      "reads": [
+        "raster",
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/png-svg-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 366164,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 5,
+        "admittedPages": 5,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 311428,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-preview-172",
+      "minFilter": "astc",
+      "frames": 2,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/png-preview-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 69780,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 1048960,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-preview-172",
+      "minFilter": "unsupported",
+      "frames": 1,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/png-preview-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-preview-172",
+      "minFilter": "astc",
+      "frames": 2,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        254,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/jpeg-preview-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 70036,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4194688,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-preview-172",
+      "minFilter": "unsupported",
+      "frames": 3,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        254,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/jpeg-preview-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-metadata-preview-172",
+      "minFilter": "astc",
+      "frames": 2,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        254,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/jpeg-metadata-preview-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 70036,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4194688,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "jpeg-metadata-preview-172",
+      "minFilter": "unsupported",
+      "frames": 3,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        254,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/jpeg-metadata-preview-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-preview-172",
+      "minFilter": "astc",
+      "frames": 2,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/webp-preview-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 70036,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4194688,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-preview-172",
+      "minFilter": "unsupported",
+      "frames": 2,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/webp-preview-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-preview-172",
+      "minFilter": "astc",
+      "frames": 2,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        1,
+        253,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/avif-preview-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 70036,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4194688,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-preview-172",
+      "minFilter": "unsupported",
+      "frames": 3,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        1,
+        253,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-integration-source-regression-images/avif-preview-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    }
+  ],
+  "note": "ASTC 6x6/8x8 complete mip pyramids; forced unsupported capability uses the same host GPU. SVG/PNG/JPEG/WebP/AVIF authority is blue; native alternative is red to expose unintended substitution.",
+  "gc": {
+    "events": 21,
+    "totalMs": 97.017,
+    "maxMs": 22.196,
+    "heapBefore": {
+      "usedSize": 935972,
+      "totalSize": 1572864,
+      "embedderHeapUsedSize": 350168,
+      "backingStorageSize": 318383
+    },
+    "heapAfter": {
+      "usedSize": 4188908,
+      "totalSize": 4456448,
+      "embedderHeapUsedSize": 457864,
+      "backingStorageSize": 488464
+    },
+    "note": "Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

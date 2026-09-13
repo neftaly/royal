@@ -1,0 +1,27 @@
+{
+  "head": "56130d3438cc30860dd87b4df26500117f35e9f3",
+  "files": {
+    "packages/renderer-webgl/src/gltf/static-material.ts": "ad6dee7d4be30949717b12f3398f5067eb7eca38c10e76bdadfad697aa7f37df",
+    "packages/renderer-webgl/src/gltf/static-texture-image-plan.ts": "9ce6127ec3b52cbe61b045296555616a1acce901cb8d8142d7bba39ad58c714f",
+    "packages/renderer-webgl/src/surface/automatic-surface-instancing.ts": "be9b8847360f47cd632399ec94849439f5fb83bb885dd8dc518956432e2032c9",
+    "packages/renderer-webgl/src/texture/asset-owner.ts": "1340eb1640475d7e2b18f09b65281d26f41dc4e5f86507a600869d44784d93b6",
+    "packages/renderer-webgl/src/texture/browser-decode.ts": "73dae45f1e78a0f5d9446dca2816d53b14d7eb8ddf16e6b4fb89840d5b544365",
+    "packages/renderer-webgl/src/texture/source.ts": "c1c24dc36affb62f1f1615d8202080ba3f2963c12b867de5282da7a14c9efd18",
+    "packages/renderer-webgl/src/virtual-texture/automatic-page-source.ts": "6a6f75ce92f59b9b34237898a4954cc7d184c97c7e9849be05e84c6ee2fae323",
+    "packages/renderer-webgl/src/virtual-texture/automatic-policy.ts": "f02b84c44941b8955e4b78ff72415a53c4f1c43c179a4858c710a9ccb1e00ba6",
+    "packages/renderer-webgl/src/virtual-texture/demand.ts": "64a72192ad60199cfe2fb3f6bfb52ec7116f9d57e55333a1ab545c30f8dfcce5",
+    "packages/renderer-webgl/src/virtual-texture/pool-budget.ts": "2e7f1292dbf4ef75d91a4b264a5cdb18e775cd8dcafe8f6ad9f13557b0ebce7d",
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "c6a8f5b090d27994893d4b6e477e54493cf4f4f6c591ca68ab950699dda41fd4",
+    "scripts/package-size-budget.json": "554c3e6927151391ccccb8306e7803a214137128251b37b639285c1060b4b980",
+    "scripts/bundle-size-budget.json": "3f13aa56a62504a6cab236987dc93624430057065b42bb6d44d905adcbd8e97a"
+  },
+  "validation": {
+    "tests": 1280,
+    "testFiles": 149,
+    "gltfManifestCases": 65,
+    "rootTypes": true,
+    "lint": true,
+    "researchTypes": true
+  },
+  "note": "Uncommitted retained checkpoint after ETC2 unsupported coverage and rejected admission-loop experiment; no commit or deployment performed."
+}

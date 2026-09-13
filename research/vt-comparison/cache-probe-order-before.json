@@ -1,0 +1,190 @@
+{
+  "results": [
+    {
+      "name": "svg-172",
+      "minFilter": "astc",
+      "frames": 11,
+      "phases": [],
+      "reads": [
+        "astc",
+        "svg"
+      ],
+      "demandAllocations": {
+        "frames": 360,
+        "arrays": 5,
+        "pageObjects": 221,
+        "cacheProbes": 15850,
+        "note": "Instrumented Array.from page-list outputs and decoded SVG cache probes during moving-camera updates; counts include asynchronous page work, timings are not a performance comparison."
+      },
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/cache-probe-order-before-images/svg-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 8921088,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 81,
+        "admittedPages": 81,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 384,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 85,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 85,
+        "uploadedPages": 85,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-preview-172",
+      "minFilter": "astc",
+      "frames": 2,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "demandAllocations": {
+        "frames": 360,
+        "arrays": 0,
+        "pageObjects": 0,
+        "cacheProbes": 0,
+        "note": "Instrumented Array.from page-list outputs and decoded SVG cache probes during moving-camera updates; counts include asynchronous page work, timings are not a performance comparison."
+      },
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/cache-probe-order-before-images/png-preview-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 2230272,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 21,
+        "admittedPages": 21,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 1048960,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 22,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 21,
+        "uploadedPages": 22,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-preview-172",
+      "minFilter": "astc",
+      "frames": 2,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "demandAllocations": {
+        "frames": 360,
+        "arrays": 0,
+        "pageObjects": 0,
+        "cacheProbes": 0,
+        "note": "Instrumented Array.from page-list outputs and decoded SVG cache probes during moving-camera updates; counts include asynchronous page work, timings are not a performance comparison."
+      },
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/cache-probe-order-before-images/webp-preview-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 8921088,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 81,
+        "admittedPages": 81,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4194688,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 86,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 85,
+        "uploadedPages": 86,
+        "uploadBudgetBytes": 33554432
+      }
+    }
+  ],
+  "note": "ASTC 6x6/8x8 complete mip pyramids; forced unsupported capability uses the same host GPU. SVG/PNG/WebP authority is blue; native alternative is red to expose unintended substitution.",
+  "gc": {
+    "events": 50,
+    "totalMs": 28.350000000000005,
+    "maxMs": 2.357,
+    "heapBefore": {
+      "usedSize": 924832,
+      "totalSize": 1572864,
+      "embedderHeapUsedSize": 333448,
+      "backingStorageSize": 308556
+    },
+    "heapAfter": {
+      "usedSize": 3451244,
+      "totalSize": 4194304,
+      "embedderHeapUsedSize": 420120,
+      "backingStorageSize": 476058
+    },
+    "note": "Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run."
+  }
+}

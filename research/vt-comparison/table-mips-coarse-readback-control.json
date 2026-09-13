@@ -1,0 +1,7 @@
+{
+  "expectedFailure": true,
+  "mutation": "Skip every coarse rebuild upload, including initial tables.",
+  "case": "First ASTC6x6 byte-cap neighbor-first case; subsequent cases did not run",
+  "error": "Uncaught (in promise) Error: Missing coarse table upload",
+  "renderer": "Renderer: ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

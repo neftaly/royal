@@ -1,0 +1,40 @@
+--- a/packages/renderer-webgl/src/virtual-texture/runtime.ts
++++ b/packages/renderer-webgl/src/virtual-texture/runtime.ts
+@@ -770,15 +770,15 @@
+       this.#atlasDemandBytes.set(key, (this.#atlasDemandBytes.get(key) ?? 0) + count * bytesPerPage);
+       this.#atlasMinimumSlots.set(key, (this.#atlasMinimumSlots.get(key) ?? 0) + (count > 0 ? 1 : 0));
+       if (count === 0 && !this.#atlases.has(key)) continue;
+-      if (manifest.pageEncoding !== "image") {
+-        if (!compressedKeys.has(key)) compressedBytes += this.#atlases.get(key)?.allocationBytes ?? 32 * 1024 * 1024;
++      if (manifest.pageEncoding !== "image" && this.#atlases.has(key)) {
++        if (!compressedKeys.has(key)) compressedBytes += this.#atlases.get(key)!.allocationBytes;
+         compressedKeys.add(key);
+       } else {
+-        if (!poolRequests.has(key)) poolRequests.set(key, { key, minimumBytes: bytesPerPage, wantedBytes: 0 });
++        if (!poolRequests.has(key)) poolRequests.set(key, { key, minimumBytes: bytesPerPage, wantedBytes: manifest.pageEncoding === "image" ? 0 : 32 * 1024 * 1024 });
+       }
+     }
+     for (const request of poolRequests.values()) {
+-      request.wantedBytes = 2 ** Math.ceil(Math.log2(Math.max(1, this.#atlasDemand.get(request.key)!))) * request.minimumBytes;
++      request.wantedBytes ||= 2 ** Math.ceil(Math.log2(Math.max(1, this.#atlasDemand.get(request.key)!))) * request.minimumBytes;
+       request.minimumBytes *= Math.max(1, this.#atlasMinimumSlots.get(request.key)!);
+     }
+     this.#atlasShares = allocateVirtualTexturePoolBytes([...poolRequests.values()],
+@@ -951,7 +951,7 @@
+       const atlas = this.#atlases.get(virtualTextureAtlasKey(resource, manifest));
+       const pageBytes = virtualTexturePageBytes(manifest);
+       resource.allocationBudgetBlocked = this.#budget.availableBytes < manifest.tableByteLength + (atlas === undefined ? pageBytes : 0)
+-        || (atlas === undefined && manifest.pageEncoding === "image" && this.#atlasAllowance(undefined, virtualTextureAtlasKey(resource, manifest)) < pageBytes);
++        || (atlas === undefined && this.#atlasAllowance(undefined, virtualTextureAtlasKey(resource, manifest)) < pageBytes);
+       if (resource.allocationBudgetBlocked) return false;
+       if (!this.#uploadBudget.tryAdmitAllocation()) {
+         resource.demandRevision = -1;
+@@ -1297,7 +1297,7 @@
+         maxTextureSize,
+         this.#budget.availableBytes,
+         manifest.pageEncoding !== "image" ? Infinity : this.#targetAtlasSlots(atlasKey),
+-        manifest.pageEncoding !== "image" ? undefined : this.#atlasAllowance(undefined, atlasKey),
++        this.#atlasAllowance(undefined, atlasKey),
+       );
+       atlas = createGpuVirtualTextureAtlas(
+         this.#gl,

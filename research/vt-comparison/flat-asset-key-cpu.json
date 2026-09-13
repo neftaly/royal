@@ -1,0 +1,95 @@
+{
+  "cases": 6000,
+  "identityClasses": 780,
+  "iterations": 200000,
+  "warmupIterations": 20000,
+  "checksum": 435172500,
+  "results": [
+    {
+      "version": "before",
+      "round": 0,
+      "elapsedMs": 122.043227
+    },
+    {
+      "version": "after",
+      "round": 0,
+      "elapsedMs": 74.18087300000002
+    },
+    {
+      "version": "after",
+      "round": 1,
+      "elapsedMs": 78.87091799999996
+    },
+    {
+      "version": "before",
+      "round": 1,
+      "elapsedMs": 123.92765899999995
+    },
+    {
+      "version": "before",
+      "round": 2,
+      "elapsedMs": 122.51621099999988
+    },
+    {
+      "version": "after",
+      "round": 2,
+      "elapsedMs": 88.15986100000009
+    },
+    {
+      "version": "after",
+      "round": 3,
+      "elapsedMs": 71.31593399999997
+    },
+    {
+      "version": "before",
+      "round": 3,
+      "elapsedMs": 121.42680199999995
+    },
+    {
+      "version": "before",
+      "round": 4,
+      "elapsedMs": 141.26622399999997
+    },
+    {
+      "version": "after",
+      "round": 4,
+      "elapsedMs": 77.12218699999994
+    },
+    {
+      "version": "after",
+      "round": 5,
+      "elapsedMs": 76.3842279999999
+    },
+    {
+      "version": "before",
+      "round": 5,
+      "elapsedMs": 126.42215799999985
+    },
+    {
+      "version": "before",
+      "round": 6,
+      "elapsedMs": 123.85580600000003
+    },
+    {
+      "version": "after",
+      "round": 6,
+      "elapsedMs": 79.01522399999976
+    },
+    {
+      "version": "after",
+      "round": 7,
+      "elapsedMs": 77.81132800000023
+    },
+    {
+      "version": "before",
+      "round": 7,
+      "elapsedMs": 122.30841800000007
+    }
+  ],
+  "sourceHashes": {
+    "before": "3f595e6437a129b93ad9fad5106518652dc77fcb43559c5c3f334293d79e8fd1",
+    "after": "516f9ec2a715fafd16c05ae264c18b3a1d19a1d0382c523d84ce673c17560cc5",
+    "sampler": "b6bbd7e3f1140cb873ab1985ea3a11fc75ee66e36bd88598bf19c257ed4e1658"
+  },
+  "note": "Actual transpiled key and sampler functions. Bidirectional identity-class oracle permits new internal key strings but forbids merges/splits of sampled existing identities. Synthetic key-only CPU measurement, not a renderer benchmark."
+}

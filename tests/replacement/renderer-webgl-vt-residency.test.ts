@@ -113,4 +113,17 @@ describe("VT2 residency core", () => {
       { has: () => true },
     )).toBe(2);
   });
+
+  it("reuses only an unprotected owned slot when the resource is at its ceiling", () => {
+    const slots = [undefined, { resourceKey: "neighbor", pageKey: 0 },
+      { resourceKey: "capped", pageKey: 0 }, { resourceKey: "capped", pageKey: 1 },
+      { resourceKey: "capped", pageKey: 2 }];
+    const frames = new Uint32Array([0, 0, 1, 3, 2]);
+    const protectedPages = { has: (_resource: string, page: number | string) => page === 0 };
+    const owned = new Map([[0, 2], [1, 3], [2, 4]]);
+    expect(selectVirtualTexturePoolSlot("capped", 3, slots, frames, protectedPages, owned)).toBe(4);
+    expect(selectVirtualTexturePoolSlot("capped", 0, slots, frames, protectedPages, owned)).toBe(2);
+    expect(selectVirtualTexturePoolSlot("capped", 3, slots, frames, { has: () => true }, owned)).toBe(-1);
+    expect(selectVirtualTexturePoolSlot("capped", 3, slots, frames, protectedPages)).toBe(0);
+  });
 });

@@ -1,0 +1,5 @@
+{
+  "module": "packages/renderer-webgl/src/virtual-texture/runtime.ts",
+  "before": "4f7d1a3cb2562826c80cd8bf1ba9d87637bc8e0fee9deb66e277c4eee4f9aa4a",
+  "after": "08b2fd5b2c324194a7ead6343dd0ff72f140a3807273afae5475057bd9b8b2f3"
+}

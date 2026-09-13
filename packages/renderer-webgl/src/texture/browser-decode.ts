@@ -7,6 +7,7 @@ import type {
   GltfTextureAssetRef,
   TextureLeafSourceRef,
   TextureSourceRef,
+  TexturePreviewSource,
 } from "./source";
 import { decodedTextureKey } from "./source";
 import { decodeBrowserImageElement } from "./browser-image-element";
@@ -45,6 +46,11 @@ type PendingWork = {
 };
 
 const aborted = (): DOMException => new DOMException("Texture decode was aborted", "AbortError");
+const fullRasterSource = (asset: TextureSourceRef): TextureSourceRef => {
+  if (asset.rasterPreview === undefined) return asset;
+  const { astc: _astc, rasterPreview: _preview, ...full } = asset;
+  return full;
+};
 /** Bounds one asynchronous texture-work stage without coupling it to asset ownership. */
 class BrowserWorkQueue {
   #active = 0;
@@ -743,6 +749,8 @@ export const createBrowserTextureDecoder = (
     maxStorageBytes: number | undefined,
     retainAlpha: boolean | undefined,
     fallback = false,
+    detailRead = false,
+    expectedSize?: Readonly<{ width: number; height: number }>,
   ): Promise<DecodedTextureSource> => {
     if ((asset.astc !== undefined || asset.sourceEncoding === "ktx2-astc") && gl !== undefined) {
       await waitForTextureContext(gl, signal);
@@ -762,7 +770,19 @@ export const createBrowserTextureDecoder = (
       svg,
       transportDurationMs = 0,
       transportQueueDurationMs = 0,
-    } = await read(asset, signal);
+    } = await read(asset, signal, detailRead);
+    if (expectedSize !== undefined) {
+      const prefixBytes = encodedImageDimensionPrefixByteLength(blob.type) ?? 128 * 1024;
+      let dimensions = readEncodedImageDimensions(new Uint8Array(await blob.slice(0, prefixBytes).arrayBuffer()));
+      // JPEG metadata can precede the frame header. PNG/WebP need only their
+      // tiny fixed prefix; don't allocate a 128 KiB validation buffer per image.
+      if (dimensions === undefined && prefixBytes === 16 * 1024) {
+        dimensions = readEncodedImageDimensions(new Uint8Array(await blob.slice(0, 128 * 1024).arrayBuffer()));
+      }
+      if (ktx2 || svg || dimensions?.width !== expectedSize.width || dimensions.height !== expectedSize.height) {
+        throw new TypeError("Royal raster preview dimensions must match a supported full raster header");
+      }
+    }
     if (fallback && svg) {
       throw new TypeError("Royal SVG texture fallback must be an ordinary raster or ETC2 source");
     }
@@ -784,7 +804,7 @@ export const createBrowserTextureDecoder = (
             retainAlpha,
             svg ? "canvas" : undefined,
           );
-    });
+    }, detailRead);
     const decodeCompletedAt = now();
     const timed = {
       ...decoded,
@@ -807,23 +827,42 @@ export const createBrowserTextureDecoder = (
     maxStorageBytes?: number,
     retainAlpha?: boolean,
   ): Promise<DecodedTextureSource> => {
-    if (asset.svgPreview && asset.fallback !== undefined) {
+    const size = asset.rasterPreview;
+    const fullRaster = fullRasterSource(asset);
+    if (size !== undefined && gl !== undefined) await waitForTextureContext(gl, signal);
+    if (size !== undefined && selectRaster(asset, retainAlpha) === asset) {
+      return decodeLeaf(fullRaster, signal, maxStorageBytes, retainAlpha, false, false, size);
+    }
+    const previewAsset = size !== undefined ? asset.astc : asset.svgPreview ? asset.fallback : undefined;
+    if (previewAsset !== undefined) {
       let preview: DecodedTextureSource;
       try {
-        preview = await decodeLeaf(asset.fallback, signal, Math.min(maxStorageBytes ?? Infinity, 128 * 128 * 4), retainAlpha, true);
+        preview = await decodeLeaf(previewAsset, signal, Math.min(maxStorageBytes ?? Infinity, 128 * 128 * 4), retainAlpha, true);
       } catch (error) {
         if (signal.aborted) throw error;
         // A missing preview must not prevent a usable authoritative source.
-        return decodeLeaf(asset, signal, maxStorageBytes, retainAlpha);
+        return decodeLeaf(size === undefined ? asset : fullRaster, signal, maxStorageBytes, retainAlpha, false, false, size);
       }
       const lifetime = new AbortController();
-      let pending: Promise<import("./source").EncodedSvgTextureSource> | undefined;
-      const detail: {
-        error?: string;
-        encoded?: import("./source").EncodedSvgTextureSource;
-        load(): Promise<import("./source").EncodedSvgTextureSource>;
-      } = {
-        load: () => pending ??= (async () => {
+      const detailStorageLimit = 64 * 1024 * 1024;
+      const fitted = size === undefined ? undefined : fitOrdinaryTextureStorage(size.width, size.height, detailStorageLimit);
+      let pending: ReturnType<TexturePreviewSource["load"]> | undefined;
+      const detail: { -readonly [Key in keyof TexturePreviewSource]: TexturePreviewSource[Key] } = {
+        ...(fitted === undefined ? {} : { size, rasterBytes: fitted.width * fitted.height * 4, retainedBytes: 0 }),
+        load: () => lifetime.signal.aborted ? Promise.reject(aborted()) : pending ??= (async () => {
+          if (size !== undefined) {
+            detail.retainedBytes = detail.rasterBytes!;
+            const raster = await decodeLeaf(fullRaster, lifetime.signal, detailStorageLimit, false, false, true, size);
+            if (raster.kind !== undefined || lifetime.signal.aborted) { raster.close?.(); throw aborted(); }
+            if (raster.width * raster.height * 4 > detail.rasterBytes!
+              || (raster.sourceWidth ?? raster.width) !== size.width || (raster.sourceHeight ?? raster.height) !== size.height) {
+              raster.close?.();
+              throw new TypeError("Royal raster detail exceeded its reservation or declared dimensions");
+            }
+            detail.raster = raster;
+            detail.retainedBytes = raster.width * raster.height * 4;
+            return raster;
+          }
           const { blob, svg } = await read(asset, lifetime.signal, true);
           if (!svg) throw new TypeError("Royal SVG detail must contain an SVG source");
           const { validateSvgTextureBlob } = await import("./svg-source");
@@ -836,6 +875,7 @@ export const createBrowserTextureDecoder = (
           detail.encoded = encoded;
           return encoded;
         })().catch((error: unknown) => {
+          detail.retainedBytes = 0;
           detail.error = String(error instanceof Error ? error.message : error).slice(0, 400);
           throw error;
         }),
@@ -853,11 +893,15 @@ export const createBrowserTextureDecoder = (
       }
       return {
         ...preview,
+        ...(size === undefined ? {} : { sourceWidth: size.width, sourceHeight: size.height }),
         close: () => {
+          if (lifetime.signal.aborted) return;
           lifetime.abort();
+          detail.raster?.close?.();
+          detail.retainedBytes = 0;
           preview.close?.();
         },
-        svgPreview: detail,
+        preview: detail,
       };
     }
     try {
@@ -877,7 +921,7 @@ export const createBrowserTextureDecoder = (
       const leaf = selectRaster(asset.svgPreview ? asset.fallback! : asset, retainAlpha);
       if (leaf.sourceEncoding === "ktx2-astc" && (retainAlpha || gl === undefined
         || !nativeTextureAvailable(gl, "astc-6x6", leaf.colorSpace ?? "srgb"))) return;
-      readAhead.preload(leaf, signal);
+      readAhead.preload(leaf === asset ? fullRasterSource(asset) : leaf, signal);
     },
     readAheadSnapshot: (): StagedByteReadSnapshot => readAhead.snapshot(),
   };

@@ -1,0 +1,18 @@
+{
+  "blendCases": 30,
+  "fallbackCases": 18,
+  "controlFailure": {
+    "vk": 0,
+    "linearMip": 1,
+    "width": 224,
+    "pixel": [
+      255,
+      0,
+      0,
+      255
+    ]
+  },
+  "shaderSha256": "a45321147792c8c506740f3c60ddd03fef3ed624505c33fc703580a22555f74b",
+  "productionChanged": false,
+  "committed": false
+}

@@ -48,6 +48,7 @@ export type VirtualTextureDemandWorkspace = Readonly<{
   subdivision: Float64Array;
   vertexCache: Float64Array;
   vertexKeys: Int32Array;
+  vertexFlags: Uint8Array;
   xs: Uint32Array;
   ys: Uint32Array;
 }> & { count: number; overflow: boolean; coarsestTarget: boolean; minimumMip: number; mipLinear: boolean };
@@ -56,6 +57,9 @@ const CLIP_VERTEX_COMPONENTS = 6;
 const MAX_CLIPPED_VERTICES = 12;
 const MAX_DEMAND_SUBDIVISION_DEPTH = 4;
 const VERTEX_CACHE_SIZE = 256;
+const FINEST_FOOTPRINT_SQUARED = 15;
+
+export const virtualTextureDemandLod = (workspace: VirtualTextureDemandWorkspace): number => 0.5 * Math.log2(Math.max(1, workspace.screen[FINEST_FOOTPRINT_SQUARED]!));
 
 export const createVirtualTextureDemandWorkspace = (
   maxPages: number,
@@ -64,6 +68,8 @@ export const createVirtualTextureDemandWorkspace = (
   if (!Number.isSafeInteger(maxPages) || maxPages < 1) {
     throw new RangeError("Royal VT demand capacity must be a positive safe integer");
   }
+  const screen = new Float64Array(FINEST_FOOTPRINT_SQUARED + 1);
+  screen[FINEST_FOOTPRINT_SQUARED] = Infinity;
   return {
     ancestors,
     coarsestTarget: false,
@@ -79,12 +85,13 @@ export const createVirtualTextureDemandWorkspace = (
     model: identityMat4(),
     modelViewProjection: identityMat4(),
     overflow: false,
-    screen: new Float64Array(15),
+    screen,
     subdivision: new Float64Array(
       MAX_DEMAND_SUBDIVISION_DEPTH * 3 * CLIP_VERTEX_COMPONENTS,
     ),
     vertexCache: new Float64Array(VERTEX_CACHE_SIZE * CLIP_VERTEX_COMPONENTS),
     vertexKeys: new Int32Array(VERTEX_CACHE_SIZE),
+    vertexFlags: new Uint8Array(VERTEX_CACHE_SIZE),
     xs: new Uint32Array(maxPages),
     ys: new Uint32Array(maxPages),
   };
@@ -93,6 +100,7 @@ export const createVirtualTextureDemandWorkspace = (
 export const resetVirtualTextureDemand = (workspace: VirtualTextureDemandWorkspace): void => {
   workspace.count = 0;
   workspace.coarsestTarget = false;
+  workspace.screen[FINEST_FOOTPRINT_SQUARED] = Infinity;
   workspace.keys.clear();
   workspace.overflow = false;
 };
@@ -212,7 +220,10 @@ const addCoarsestMip = (
   const mip = manifest.mipCount - 1;
   const layout = manifest.mipLayouts[mip]!;
   for (let y = 0; y < layout.height; y += 1) {
-    for (let x = 0; x < layout.width; x += 1) addPage(workspace, mip, x, y);
+    for (let x = 0; x < layout.width; x += 1) {
+      addPage(workspace, mip, x, y);
+      if (workspace.overflow) return;
+    }
   }
 };
 
@@ -309,20 +320,16 @@ const clipAgainstPlane = (
   return targetCount;
 };
 
-/** Exact homogeneous trivial accept/reject before the polygon clipping slow path. */
-const triangleClipKind = (vertices: Float64Array): -1 | 0 | 1 => {
-  let commonOutsidePlanes = 0b11_1111;
-  let anyOutsidePlanes = 0;
-  for (let vertex = 0; vertex < 3; vertex += 1) {
-    const offset = vertex * CLIP_VERTEX_COMPONENTS;
-    let outsidePlanes = 0;
-    for (let plane = 0; plane < 6; plane += 1) {
-      if (planeDistance(vertices, offset, plane) < 0) outsidePlanes |= 1 << plane;
-    }
-    commonOutsidePlanes &= outsidePlanes;
-    anyOutsidePlanes |= outsidePlanes;
+/** Cache finite validation and the six homogeneous outside-plane bits per vertex. */
+const clipVertexFlags = (vertices: Float64Array, offset: number): number => {
+  for (let component = 0; component < CLIP_VERTEX_COMPONENTS; component++) {
+    if (!Number.isFinite(vertices[offset + component]!)) return 0b100_0000;
   }
-  return commonOutsidePlanes !== 0 ? -1 : anyOutsidePlanes === 0 ? 1 : 0;
+  let flags = 0;
+  for (let plane = 0; plane < 6; plane++) {
+    if (planeDistance(vertices, offset, plane) < 0) flags |= 1 << plane;
+  }
+  return flags;
 };
 
 const writeClipVertex = (
@@ -377,101 +384,56 @@ const copyInstanceModel = (
   }
 };
 
-const addClampedRange = (
-  workspace: VirtualTextureDemandWorkspace,
-  manifest: VirtualTextureManifest,
-  mip: number,
-  minU: number,
-  maxU: number,
-  minV: number,
-  maxV: number,
-): void => {
-  const layout = manifest.mipLayouts[mip]!;
-  const x0 = Math.min(layout.width - 1, Math.max(0, Math.floor(minU * layout.width)));
-  const y0 = Math.min(layout.height - 1, Math.max(0, Math.floor(minV * layout.height)));
-  const x1 = Math.min(
-    layout.width - 1,
-    Math.max(0, Math.floor(Math.max(0, maxU - Number.EPSILON) * layout.width)),
-  );
-  const y1 = Math.min(
-    layout.height - 1,
-    Math.max(0, Math.floor(Math.max(0, maxV - Number.EPSILON) * layout.height)),
-  );
-  for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y += 1) {
-    for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x += 1) {
-      addPageWithAncestors(workspace, manifest, mip, x, y);
-      if (workspace.overflow) return;
-    }
-  }
-};
-
 const addWrappedRange = (
   workspace: VirtualTextureDemandWorkspace,
   manifest: VirtualTextureManifest,
   mip: number,
-  minimumU: number,
-  maximumU: number,
-  minimumV: number,
-  maximumV: number,
   sampler: CanonicalTextureSampler,
 ): void => {
+  const screen = workspace.screen;
+  const minimumU = Math.min(screen[2]! / screen[4]!, screen[7]! / screen[9]!, screen[12]! / screen[14]!);
+  const maximumU = Math.max(screen[2]! / screen[4]!, screen[7]! / screen[9]!, screen[12]! / screen[14]!);
+  const minimumV = Math.min(screen[3]! / screen[4]!, screen[8]! / screen[9]!, screen[13]! / screen[14]!);
+  const maximumV = Math.max(screen[3]! / screen[4]!, screen[8]! / screen[9]!, screen[13]! / screen[14]!);
   const repeatsU = sampler.wrapS !== "clamp-to-edge";
   const repeatsV = sampler.wrapT !== "clamp-to-edge";
-  if (!repeatsU && !repeatsV) {
-    addClampedRange(
-      workspace,
-      manifest,
-      mip,
-      Math.max(0, Math.min(1, minimumU)),
-      Math.max(0, Math.min(1, maximumU)),
-      Math.max(0, Math.min(1, minimumV)),
-      Math.max(0, Math.min(1, maximumV)),
-    );
-    return;
-  }
-  const uSpan = maximumU - minimumU;
-  const vSpan = maximumV - minimumV;
-  const uStart = repeatsU ? Math.floor(minimumU) : 0;
-  const uEnd = repeatsU ? Math.floor(maximumU) : 0;
-  const vStart = repeatsV ? Math.floor(minimumV) : 0;
-  const vEnd = repeatsV ? Math.floor(maximumV) : 0;
-  if ((repeatsU && uSpan >= 1) || (repeatsV && vSpan >= 1)) {
-    addClampedRange(
-      workspace,
-      manifest,
-      mip,
-      repeatsU && uSpan >= 1 ? 0 : minimumU - Math.floor(minimumU),
-      repeatsU && uSpan >= 1 ? 1 : maximumU - Math.floor(minimumU),
-      repeatsV && vSpan >= 1 ? 0 : minimumV - Math.floor(minimumV),
-      repeatsV && vSpan >= 1 ? 1 : maximumV - Math.floor(minimumV),
-    );
-    return;
-  }
-  for (let tileY = vStart; tileY <= vEnd; tileY += 1) {
-    for (let tileX = uStart; tileX <= uEnd; tileX += 1) {
-      let localMinU = repeatsU ? Math.max(0, minimumU - tileX) : minimumU;
-      let localMaxU = repeatsU ? Math.min(1, maximumU - tileX) : maximumU;
-      let localMinV = repeatsV ? Math.max(0, minimumV - tileY) : minimumV;
-      let localMaxV = repeatsV ? Math.min(1, maximumV - tileY) : maximumV;
-      if (sampler.wrapS === "mirrored-repeat" && Math.abs(tileX) % 2 === 1) {
+  // Saturate each repeating axis independently. The other axis still needs
+  // its own clamp, seam splitting and mirrored-tile orientation.
+  const fullU = repeatsU && maximumU - minimumU >= 1;
+  const fullV = repeatsV && maximumV - minimumV >= 1;
+  const uStart = repeatsU && !fullU ? Math.floor(minimumU) : 0;
+  const uEnd = repeatsU && !fullU ? Math.floor(maximumU) : 0;
+  const vStart = repeatsV && !fullV ? Math.floor(minimumV) : 0;
+  const vEnd = repeatsV && !fullV ? Math.floor(maximumV) : 0;
+  const layout = manifest.mipLayouts[mip]!;
+  for (let dy = 0; dy <= vEnd - vStart; dy += 1) {
+    const tileY = vStart + dy;
+    for (let dx = 0; dx <= uEnd - uStart; dx += 1) {
+      const tileX = uStart + dx;
+      let localMinU = fullU ? 0 : repeatsU ? Math.max(0, minimumU - tileX) : minimumU;
+      let localMaxU = fullU ? 1 : repeatsU ? Math.min(1, maximumU - tileX) : maximumU;
+      let localMinV = fullV ? 0 : repeatsV ? Math.max(0, minimumV - tileY) : minimumV;
+      let localMaxV = fullV ? 1 : repeatsV ? Math.min(1, maximumV - tileY) : maximumV;
+      if (!fullU && sampler.wrapS === "mirrored-repeat" && Math.abs(tileX) % 2 === 1) {
         const previousMinimum = localMinU;
         localMinU = 1 - localMaxU;
         localMaxU = 1 - previousMinimum;
       }
-      if (sampler.wrapT === "mirrored-repeat" && Math.abs(tileY) % 2 === 1) {
+      if (!fullV && sampler.wrapT === "mirrored-repeat" && Math.abs(tileY) % 2 === 1) {
         const previousMinimum = localMinV;
         localMinV = 1 - localMaxV;
         localMaxV = 1 - previousMinimum;
       }
-      addClampedRange(
-        workspace,
-        manifest,
-        mip,
-        localMinU,
-        localMaxU,
-        localMinV,
-        localMaxV,
-      );
+      const x0 = Math.min(layout.width - 1, Math.max(0, Math.floor(localMinU * layout.width)));
+      const y0 = Math.min(layout.height - 1, Math.max(0, Math.floor(localMinV * layout.height)));
+      const x1 = Math.min(layout.width - 1, Math.max(0, Math.floor(Math.max(0, localMaxU - Number.EPSILON) * layout.width)));
+      const y1 = Math.min(layout.height - 1, Math.max(0, Math.floor(Math.max(0, localMaxV - Number.EPSILON) * layout.height)));
+      for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) {
+        for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) {
+          addPageWithAncestors(workspace, manifest, mip, x, y);
+          if (workspace.overflow) return;
+        }
+      }
     }
   }
 };
@@ -545,7 +507,10 @@ const addClippedTriangleDemand = (
     // Match the shader's squared footprint without variadic hypot calls in the
     // triangle loop. Overflow selects the coarsest mip; values below one clamp.
     const footprintSquared = Math.max(duDx * duDx + dvDx * dvDx, duDy * duDy + dvDy * dvDy);
-    const mip = Math.max(workspace.minimumMip, Math.min(
+    // Preserve unclamped preview demand in existing typed scratch. Convert
+    // its finest footprint to a fractional LOD once when the runtime asks.
+    if (footprintSquared < screen[FINEST_FOOTPRINT_SQUARED]!) screen[FINEST_FOOTPRINT_SQUARED] = footprintSquared;
+    const mip = Number.isNaN(footprintSquared) ? manifest.mipCount - 1 : Math.max(workspace.minimumMip, Math.min(
       manifest.mipCount - 1,
       Math.floor(0.5 * Math.log2(Math.max(1, footprintSquared))),
     ));
@@ -624,26 +589,6 @@ const addClippedTriangleDemand = (
     workspace,
     manifest,
     targetMip,
-    Math.min(
-      screen[2]! / screen[4]!,
-      screen[7]! / screen[9]!,
-      screen[12]! / screen[14]!,
-    ),
-    Math.max(
-      screen[2]! / screen[4]!,
-      screen[7]! / screen[9]!,
-      screen[12]! / screen[14]!,
-    ),
-    Math.min(
-      screen[3]! / screen[4]!,
-      screen[8]! / screen[9]!,
-      screen[13]! / screen[14]!,
-    ),
-    Math.max(
-      screen[3]! / screen[4]!,
-      screen[8]! / screen[9]!,
-      screen[13]! / screen[14]!,
-    ),
     sampler,
   );
 };
@@ -663,7 +608,7 @@ const collectModelDemand = (
   // Clear per model/view so it cannot reuse transforms or UVs across instances.
   workspace.vertexKeys.fill(-1);
   for (let index = 0; index + 2 < indices.length && !workspace.overflow; index += 3) {
-    let finite = true;
+    let commonOutsidePlanes = 0b11_1111, anyFlags = 0;
     for (let corner = 0; corner < 3; corner += 1) {
       const vertex = indices[index + corner]!;
       const slot = vertex & (VERTEX_CACHE_SIZE - 1);
@@ -672,20 +617,19 @@ const collectModelDemand = (
         writeClipVertex(workspace.vertexCache, cachedOffset, vertex * 3, geometry,
           workspace.modelViewProjection, surface.textureCoordinates);
         workspace.vertexKeys[slot] = vertex;
+        workspace.vertexFlags[slot] = clipVertexFlags(workspace.vertexCache, cachedOffset);
       }
       copyVertex(workspace.clipA, corner * CLIP_VERTEX_COMPONENTS, workspace.vertexCache, cachedOffset);
-      const offset = corner * CLIP_VERTEX_COMPONENTS;
-      for (let component = 0; component < CLIP_VERTEX_COMPONENTS; component += 1) {
-        if (!Number.isFinite(workspace.clipA[offset + component]!)) finite = false;
-      }
+      const flags = workspace.vertexFlags[slot]!;
+      commonOutsidePlanes &= flags;
+      anyFlags |= flags;
     }
-    if (!finite) {
+    if (anyFlags & 0b100_0000) {
       addCoarsestMip(workspace, manifest);
       continue;
     }
-    const clipKind = triangleClipKind(workspace.clipA);
-    if (clipKind < 0) continue;
-    if (clipKind > 0) {
+    if (commonOutsidePlanes !== 0) continue;
+    if (anyFlags === 0) {
       addClippedTriangleDemand(
         workspace,
         manifest,

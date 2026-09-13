@@ -1,0 +1,24 @@
+{
+  "cases": 8,
+  "settledViews": 48,
+  "pixelChecks": 144,
+  "controlExitCode": 1,
+  "controlFailure": "First ASTC 6x6 byte-limit case retains four pages after the first pan, instead of three. Other cases are not run after this failure.",
+  "controlRuntimeSource": {
+    "path": "/tmp/royal-vt-before-resident-limit-runtime.ts",
+    "sha256": "32316fcbc7a317e6e878db5a15e27bbcfb87e6b63a6f18731db11586b9c52d96"
+  },
+  "sources": {
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "b6573774a9ac93f9bd6eff1c9a113faab2e1b392a1e1a2061d604dd1f2337ec1",
+    "packages/renderer-webgl/src/virtual-texture/residency.ts": "78b501474b674366564d1223e6386602c714cb2feaa27e7ddf677f04d1a8a49a",
+    "research/vt-comparison/resident-limit-gpu.ts": "541755483082dfc70033eea4c12c9d9e8a30072ebdc87ed3da4e675281abeb9e",
+    "research/vt-comparison/resident-limit-gpu.html": "7ba159d23931c2b859317b1966a0df9c598c459b55cf192345e1d6f731f8e9b4",
+    "research/vt-comparison/build-client.mjs": "e233bee01b630911488ee8a45ebdd2011e1ace0d0aac35e061485793517883bc"
+  },
+  "logs": {
+    "/tmp/royal-vt-resident-limit-gpu.log": "8081e9d3ae8d6a9f006a1852ab0e4e16848d90ec947365e316c0353da5ba058c",
+    "/tmp/royal-vt-resident-limit-gpu-control.log": "bfa6a09b7794e6d19abb115f571b654bca045aedd58dbba73ca72d5e0646f175",
+    "/tmp/royal-vt-resident-limit-gpu-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "note": "Control build overrides runtime.ts with its pre-fix source while retaining the current helper. The production worktree was not mutated. No commits."
+}

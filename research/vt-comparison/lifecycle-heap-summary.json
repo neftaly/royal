@@ -1,0 +1,1725 @@
+{
+  "summaries": {
+    "before": {
+      "path": "/tmp/royal-vt-lifecycle-snapshot-before.heapsnapshot",
+      "sha256": "c1bd916f446bcbdbebd406fb3b4f10c776be879fd26909c67f2d7aacaeaca433",
+      "nodes": 60143,
+      "totalSelfBytes": 3669003,
+      "byType": {
+        "synthetic": {
+          "count": 32,
+          "bytes": 0
+        },
+        "native": {
+          "count": 13223,
+          "bytes": 1489763
+        },
+        "string": {
+          "count": 13591,
+          "bytes": 151044
+        },
+        "object shape": {
+          "count": 3769,
+          "bytes": 225944
+        },
+        "code": {
+          "count": 18740,
+          "bytes": 1507204
+        },
+        "array": {
+          "count": 524,
+          "bytes": 148932
+        },
+        "number": {
+          "count": 4976,
+          "bytes": 1272
+        },
+        "symbol": {
+          "count": 560,
+          "bytes": 8080
+        },
+        "closure": {
+          "count": 3458,
+          "bytes": 98032
+        },
+        "object": {
+          "count": 1005,
+          "bytes": 33420
+        },
+        "concatenated string": {
+          "count": 260,
+          "bytes": 5200
+        },
+        "regexp": {
+          "count": 3,
+          "bytes": 72
+        },
+        "sliced string": {
+          "count": 2,
+          "bytes": 40
+        }
+      },
+      "resourceNodes": {
+        "native:WebGLTexture": {
+          "count": 2,
+          "bytes": 144
+        },
+        "object:ArrayBuffer": {
+          "count": 33,
+          "bytes": 1668
+        },
+        "object:WebGLTexture": {
+          "count": 1,
+          "bytes": 16
+        },
+        "object:HTMLCanvasElement": {
+          "count": 1,
+          "bytes": 16
+        },
+        "object:ImageBitmap": {
+          "count": 1,
+          "bytes": 16
+        },
+        "object:Blob": {
+          "count": 1,
+          "bytes": 16
+        }
+      }
+    },
+    "after": {
+      "path": "/tmp/royal-vt-lifecycle-snapshot-after.heapsnapshot",
+      "sha256": "aae847bfbade554e67ed972b571fb7de1cef0812d0b14dbaf738f2fe8ae0cb73",
+      "nodes": 65632,
+      "totalSelfBytes": 4617855,
+      "byType": {
+        "synthetic": {
+          "count": 32,
+          "bytes": 0
+        },
+        "native": {
+          "count": 14716,
+          "bytes": 1662711
+        },
+        "string": {
+          "count": 13614,
+          "bytes": 151120
+        },
+        "object shape": {
+          "count": 4084,
+          "bytes": 240732
+        },
+        "code": {
+          "count": 22265,
+          "bytes": 2264928
+        },
+        "array": {
+          "count": 539,
+          "bytes": 149380
+        },
+        "number": {
+          "count": 4998,
+          "bytes": 1500
+        },
+        "symbol": {
+          "count": 560,
+          "bytes": 8080
+        },
+        "closure": {
+          "count": 3458,
+          "bytes": 98032
+        },
+        "object": {
+          "count": 1101,
+          "bytes": 36060
+        },
+        "concatenated string": {
+          "count": 260,
+          "bytes": 5200
+        },
+        "regexp": {
+          "count": 3,
+          "bytes": 72
+        },
+        "sliced string": {
+          "count": 2,
+          "bytes": 40
+        }
+      },
+      "resourceNodes": {
+        "object:ArrayBuffer": {
+          "count": 33,
+          "bytes": 1668
+        },
+        "object:HTMLCanvasElement": {
+          "count": 1,
+          "bytes": 16
+        },
+        "object:WebGLTexture": {
+          "count": 1,
+          "bytes": 16
+        },
+        "object:ImageBitmap": {
+          "count": 1,
+          "bytes": 16
+        },
+        "object:Blob": {
+          "count": 1,
+          "bytes": 16
+        },
+        "native:WebGLTexture": {
+          "count": 2,
+          "bytes": 144
+        }
+      }
+    },
+    "disposed": {
+      "path": "/tmp/royal-vt-lifecycle-snapshot-disposed.heapsnapshot",
+      "sha256": "3a6c2237aec1dad5bd58cc40cfb75abcd59a04beb12297b4de3f0660070b5629",
+      "nodes": 65616,
+      "totalSelfBytes": 4588887,
+      "byType": {
+        "synthetic": {
+          "count": 32,
+          "bytes": 0
+        },
+        "native": {
+          "count": 14657,
+          "bytes": 1657803
+        },
+        "string": {
+          "count": 13632,
+          "bytes": 151848
+        },
+        "object shape": {
+          "count": 4090,
+          "bytes": 240964
+        },
+        "code": {
+          "count": 22282,
+          "bytes": 2239948
+        },
+        "array": {
+          "count": 538,
+          "bytes": 149356
+        },
+        "number": {
+          "count": 5001,
+          "bytes": 1500
+        },
+        "symbol": {
+          "count": 560,
+          "bytes": 8080
+        },
+        "closure": {
+          "count": 3460,
+          "bytes": 98092
+        },
+        "object": {
+          "count": 1099,
+          "bytes": 35984
+        },
+        "concatenated string": {
+          "count": 260,
+          "bytes": 5200
+        },
+        "regexp": {
+          "count": 3,
+          "bytes": 72
+        },
+        "sliced string": {
+          "count": 2,
+          "bytes": 40
+        }
+      },
+      "resourceNodes": {
+        "object:ArrayBuffer": {
+          "count": 33,
+          "bytes": 1668
+        },
+        "object:HTMLCanvasElement": {
+          "count": 1,
+          "bytes": 16
+        },
+        "object:WebGLTexture": {
+          "count": 1,
+          "bytes": 16
+        },
+        "object:ImageBitmap": {
+          "count": 1,
+          "bytes": 16
+        },
+        "object:Blob": {
+          "count": 1,
+          "bytes": 16
+        },
+        "native:WebGLTexture": {
+          "count": 2,
+          "bytes": 144
+        }
+      }
+    }
+  },
+  "largestGrowth": [
+    {
+      "name": "code:system / InstructionStream",
+      "before": {
+        "count": 353,
+        "bytes": 704640
+      },
+      "after": {
+        "count": 720,
+        "bytes": 1221376
+      },
+      "countDelta": 367,
+      "bytesDelta": 516736
+    },
+    {
+      "name": "code:system / TrustedByteArray",
+      "before": {
+        "count": 900,
+        "bytes": 111292
+      },
+      "after": {
+        "count": 1674,
+        "bytes": 222680
+      },
+      "countDelta": 774,
+      "bytesDelta": 111388
+    },
+    {
+      "name": "native:system / DoubleStringCache",
+      "before": {
+        "count": 1,
+        "bytes": 1544
+      },
+      "after": {
+        "count": 1,
+        "bytes": 49160
+      },
+      "countDelta": 0,
+      "bytesDelta": 47616
+    },
+    {
+      "name": "code:system / FeedbackVector",
+      "before": {
+        "count": 347,
+        "bytes": 82028
+      },
+      "after": {
+        "count": 576,
+        "bytes": 123332
+      },
+      "countDelta": 229,
+      "bytesDelta": 41304
+    },
+    {
+      "name": "code:system / ProtectedFixedArray",
+      "before": {
+        "count": 1,
+        "bytes": 176
+      },
+      "after": {
+        "count": 136,
+        "bytes": 33428
+      },
+      "countDelta": 135,
+      "bytesDelta": 33252
+    },
+    {
+      "name": "code:system / Code",
+      "before": {
+        "count": 353,
+        "bytes": 25416
+      },
+      "after": {
+        "count": 720,
+        "bytes": 51840
+      },
+      "countDelta": 367,
+      "bytesDelta": 26424
+    },
+    {
+      "name": "native:system / WeakArrayList",
+      "before": {
+        "count": 25,
+        "bytes": 1796
+      },
+      "after": {
+        "count": 470,
+        "bytes": 23248
+      },
+      "countDelta": 445,
+      "bytesDelta": 21452
+    },
+    {
+      "name": "native:blink::ScriptTimingInfo",
+      "before": {
+        "count": 6,
+        "bytes": 816
+      },
+      "after": {
+        "count": 157,
+        "bytes": 21352
+      },
+      "countDelta": 151,
+      "bytesDelta": 20536
+    },
+    {
+      "name": "native:PerformanceScriptTiming",
+      "before": {
+        "count": 6,
+        "bytes": 720
+      },
+      "after": {
+        "count": 157,
+        "bytes": 18840
+      },
+      "countDelta": 151,
+      "bytesDelta": 18120
+    },
+    {
+      "name": "native:PerformanceLongAnimationFrameTiming",
+      "before": {
+        "count": 4,
+        "bytes": 704
+      },
+      "after": {
+        "count": 83,
+        "bytes": 14608
+      },
+      "countDelta": 79,
+      "bytesDelta": 13904
+    },
+    {
+      "name": "native:PerformanceResourceTiming",
+      "before": {
+        "count": 19,
+        "bytes": 2584
+      },
+      "after": {
+        "count": 115,
+        "bytes": 15640
+      },
+      "countDelta": 96,
+      "bytesDelta": 13056
+    },
+    {
+      "name": "object shape:system / Map",
+      "before": {
+        "count": 2538,
+        "bytes": 102784
+      },
+      "after": {
+        "count": 2781,
+        "bytes": 112504
+      },
+      "countDelta": 243,
+      "bytesDelta": 9720
+    },
+    {
+      "name": "native:TaskAttributionTiming",
+      "before": {
+        "count": 2,
+        "bytes": 240
+      },
+      "after": {
+        "count": 74,
+        "bytes": 8880
+      },
+      "countDelta": 72,
+      "bytesDelta": 8640
+    },
+    {
+      "name": "code:system / WeakFixedArray",
+      "before": {
+        "count": 1018,
+        "bytes": 23748
+      },
+      "after": {
+        "count": 1500,
+        "bytes": 31916
+      },
+      "countDelta": 482,
+      "bytesDelta": 8168
+    },
+    {
+      "name": "code:system / LoadHandler",
+      "before": {
+        "count": 700,
+        "bytes": 11360
+      },
+      "after": {
+        "count": 1165,
+        "bytes": 18888
+      },
+      "countDelta": 465,
+      "bytesDelta": 7528
+    },
+    {
+      "name": "native:PerformanceLongTaskTiming",
+      "before": {
+        "count": 2,
+        "bytes": 208
+      },
+      "after": {
+        "count": 74,
+        "bytes": 7696
+      },
+      "countDelta": 72,
+      "bytesDelta": 7488
+    },
+    {
+      "name": "code:system / TrustedWeakFixedArray",
+      "before": {
+        "count": 1,
+        "bytes": 28
+      },
+      "after": {
+        "count": 136,
+        "bytes": 5048
+      },
+      "countDelta": 135,
+      "bytesDelta": 5020
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<cppgc::internal::BasicMember<blink::ContextLifecycleObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::KeyValuePair<cppgc::internal::BasicMember<blink::ContextLifecycleObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, unsigned int>, blink::KeyValuePairExtractor, blink::HashMapValueTraits<blink::HashTraits<cppgc::internal::BasicMember<blink::ContextLifecycleObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HashTraits<unsigned int>>, blink::HashTraits<cppgc::internal::BasicMember<blink::ContextLifecycleObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 4104
+      },
+      "after": {
+        "count": 1,
+        "bytes": 8200
+      },
+      "countDelta": 0,
+      "bytesDelta": 4096
+    },
+    {
+      "name": "object shape:system / DescriptorArray",
+      "before": {
+        "count": 827,
+        "bytes": 110112
+      },
+      "after": {
+        "count": 883,
+        "bytes": 114176
+      },
+      "countDelta": 56,
+      "bytesDelta": 4064
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<cppgc::internal::BasicMember<blink::CanvasRenderingContextHost, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::KeyValuePair<cppgc::internal::BasicMember<blink::CanvasRenderingContextHost, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, cppgc::internal::BasicMember<blink::ExecutionContext, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::KeyValuePairExtractor, blink::HashMapValueTraits<blink::HashTraits<cppgc::internal::BasicMember<blink::CanvasRenderingContextHost, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HashTraits<cppgc::internal::BasicMember<blink::ExecutionContext, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>>, blink::HashTraits<cppgc::internal::BasicMember<blink::CanvasRenderingContextHost, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 1032
+      },
+      "after": {
+        "count": 1,
+        "bytes": 4104
+      },
+      "countDelta": 0,
+      "bytesDelta": 3072
+    },
+    {
+      "name": "code:system / AllocationSite",
+      "before": {
+        "count": 112,
+        "bytes": 3132
+      },
+      "after": {
+        "count": 222,
+        "bytes": 6188
+      },
+      "countDelta": 110,
+      "bytesDelta": 3056
+    },
+    {
+      "name": "code:system / CodeWrapper",
+      "before": {
+        "count": 2874,
+        "bytes": 2824
+      },
+      "after": {
+        "count": 3241,
+        "bytes": 5760
+      },
+      "countDelta": 367,
+      "bytesDelta": 2936
+    },
+    {
+      "name": "object:Object",
+      "before": {
+        "count": 270,
+        "bytes": 6920
+      },
+      "after": {
+        "count": 346,
+        "bytes": 9240
+      },
+      "countDelta": 76,
+      "bytesDelta": 2320
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<cppgc::internal::BasicMember<blink::PageVisibilityObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::KeyValuePair<cppgc::internal::BasicMember<blink::PageVisibilityObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, unsigned int>, blink::KeyValuePairExtractor, blink::HashMapValueTraits<blink::HashTraits<cppgc::internal::BasicMember<blink::PageVisibilityObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HashTraits<unsigned int>>, blink::HashTraits<cppgc::internal::BasicMember<blink::PageVisibilityObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 2056
+      },
+      "after": {
+        "count": 1,
+        "bytes": 4104
+      },
+      "countDelta": 0,
+      "bytesDelta": 2048
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<cppgc::internal::BasicMember<blink::PerformanceScriptTiming, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>",
+      "before": {
+        "count": 4,
+        "bytes": 96
+      },
+      "after": {
+        "count": 83,
+        "bytes": 1992
+      },
+      "countDelta": 79,
+      "bytesDelta": 1896
+    },
+    {
+      "name": "native:system / ProtectedFixedArray",
+      "before": {
+        "count": 2,
+        "bytes": 20
+      },
+      "after": {
+        "count": 137,
+        "bytes": 1872
+      },
+      "countDelta": 135,
+      "bytesDelta": 1852
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<cppgc::internal::BasicMember<blink::TaskAttributionTiming, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>",
+      "before": {
+        "count": 2,
+        "bytes": 48
+      },
+      "after": {
+        "count": 74,
+        "bytes": 1776
+      },
+      "countDelta": 72,
+      "bytesDelta": 1728
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<std::pair<cppgc::internal::BasicMember<const blink::ActiveScriptWrappableBase, cppgc::internal::UntracedMemberTag, cppgc::internal::NoWriteBarrierPolicy>, cppgc::internal::BasicMember<const blink::ActiveScriptWrappableBase, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>>",
+      "before": {
+        "count": 1,
+        "bytes": 752
+      },
+      "after": {
+        "count": 1,
+        "bytes": 2152
+      },
+      "countDelta": 0,
+      "bytesDelta": 1400
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<blink::VectorBackedLinkedListNode<cppgc::internal::BasicMember<blink::PageVisibilityObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 896
+      },
+      "after": {
+        "count": 1,
+        "bytes": 2216
+      },
+      "countDelta": 0,
+      "bytesDelta": 1320
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<cppgc::internal::BasicMember<blink::ContextLifecycleObserver, cppgc::internal::UntracedMemberTag, cppgc::internal::NoWriteBarrierPolicy>>",
+      "before": {
+        "count": 1,
+        "bytes": 1184
+      },
+      "after": {
+        "count": 1,
+        "bytes": 2424
+      },
+      "countDelta": 0,
+      "bytesDelta": 1240
+    },
+    {
+      "name": "native:system / SharedFunctionInfoWrapper",
+      "before": {
+        "count": 1,
+        "bytes": 8
+      },
+      "after": {
+        "count": 136,
+        "bytes": 1088
+      },
+      "countDelta": 135,
+      "bytesDelta": 1080
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<blink::String, blink::KeyValuePair<blink::String, cppgc::internal::BasicMember<blink::Resource, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::KeyValuePairExtractor, blink::HashMapValueTraits<blink::HashTraits<String>, blink::HashTraits<cppgc::internal::BasicMember<blink::Resource, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>>, blink::HashTraits<String>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 1032
+      },
+      "after": {
+        "count": 1,
+        "bytes": 2056
+      },
+      "countDelta": 0,
+      "bytesDelta": 1024
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<cppgc::internal::BasicMember<blink::PerformanceEntry, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>",
+      "before": {
+        "count": 5,
+        "bytes": 192
+      },
+      "after": {
+        "count": 5,
+        "bytes": 1216
+      },
+      "countDelta": 0,
+      "bytesDelta": 1024
+    },
+    {
+      "name": "code:system / StoreHandler",
+      "before": {
+        "count": 105,
+        "bytes": 1444
+      },
+      "after": {
+        "count": 165,
+        "bytes": 2176
+      },
+      "countDelta": 60,
+      "bytesDelta": 732
+    },
+    {
+      "name": "object shape:system / TransitionArray",
+      "before": {
+        "count": 71,
+        "bytes": 2660
+      },
+      "after": {
+        "count": 76,
+        "bytes": 3384
+      },
+      "countDelta": 5,
+      "bytesDelta": 724
+    },
+    {
+      "name": "code:system / WeakArrayList",
+      "before": {
+        "count": 3,
+        "bytes": 56
+      },
+      "after": {
+        "count": 27,
+        "bytes": 728
+      },
+      "countDelta": 24,
+      "bytesDelta": 672
+    },
+    {
+      "name": "array:",
+      "before": {
+        "count": 402,
+        "bytes": 102520
+      },
+      "after": {
+        "count": 407,
+        "bytes": 103184
+      },
+      "countDelta": 5,
+      "bytesDelta": 664
+    },
+    {
+      "name": "code:(constant elements)",
+      "before": {
+        "count": 114,
+        "bytes": 2548
+      },
+      "after": {
+        "count": 142,
+        "bytes": 3204
+      },
+      "countDelta": 28,
+      "bytesDelta": 656
+    },
+    {
+      "name": "array:(object elements)",
+      "before": {
+        "count": 58,
+        "bytes": 2356
+      },
+      "after": {
+        "count": 72,
+        "bytes": 2796
+      },
+      "countDelta": 14,
+      "bytesDelta": 440
+    },
+    {
+      "name": "object:Array",
+      "before": {
+        "count": 159,
+        "bytes": 2556
+      },
+      "after": {
+        "count": 179,
+        "bytes": 2876
+      },
+      "countDelta": 20,
+      "bytesDelta": 320
+    }
+  ],
+  "objectGrowth": [
+    {
+      "name": "native:system / DoubleStringCache",
+      "before": {
+        "count": 1,
+        "bytes": 1544
+      },
+      "after": {
+        "count": 1,
+        "bytes": 49160
+      },
+      "countDelta": 0,
+      "bytesDelta": 47616
+    },
+    {
+      "name": "native:system / WeakArrayList",
+      "before": {
+        "count": 25,
+        "bytes": 1796
+      },
+      "after": {
+        "count": 470,
+        "bytes": 23248
+      },
+      "countDelta": 445,
+      "bytesDelta": 21452
+    },
+    {
+      "name": "native:blink::ScriptTimingInfo",
+      "before": {
+        "count": 6,
+        "bytes": 816
+      },
+      "after": {
+        "count": 157,
+        "bytes": 21352
+      },
+      "countDelta": 151,
+      "bytesDelta": 20536
+    },
+    {
+      "name": "native:PerformanceScriptTiming",
+      "before": {
+        "count": 6,
+        "bytes": 720
+      },
+      "after": {
+        "count": 157,
+        "bytes": 18840
+      },
+      "countDelta": 151,
+      "bytesDelta": 18120
+    },
+    {
+      "name": "native:PerformanceLongAnimationFrameTiming",
+      "before": {
+        "count": 4,
+        "bytes": 704
+      },
+      "after": {
+        "count": 83,
+        "bytes": 14608
+      },
+      "countDelta": 79,
+      "bytesDelta": 13904
+    },
+    {
+      "name": "native:PerformanceResourceTiming",
+      "before": {
+        "count": 19,
+        "bytes": 2584
+      },
+      "after": {
+        "count": 115,
+        "bytes": 15640
+      },
+      "countDelta": 96,
+      "bytesDelta": 13056
+    },
+    {
+      "name": "native:TaskAttributionTiming",
+      "before": {
+        "count": 2,
+        "bytes": 240
+      },
+      "after": {
+        "count": 74,
+        "bytes": 8880
+      },
+      "countDelta": 72,
+      "bytesDelta": 8640
+    },
+    {
+      "name": "native:PerformanceLongTaskTiming",
+      "before": {
+        "count": 2,
+        "bytes": 208
+      },
+      "after": {
+        "count": 74,
+        "bytes": 7696
+      },
+      "countDelta": 72,
+      "bytesDelta": 7488
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<cppgc::internal::BasicMember<blink::ContextLifecycleObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::KeyValuePair<cppgc::internal::BasicMember<blink::ContextLifecycleObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, unsigned int>, blink::KeyValuePairExtractor, blink::HashMapValueTraits<blink::HashTraits<cppgc::internal::BasicMember<blink::ContextLifecycleObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HashTraits<unsigned int>>, blink::HashTraits<cppgc::internal::BasicMember<blink::ContextLifecycleObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 4104
+      },
+      "after": {
+        "count": 1,
+        "bytes": 8200
+      },
+      "countDelta": 0,
+      "bytesDelta": 4096
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<cppgc::internal::BasicMember<blink::CanvasRenderingContextHost, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::KeyValuePair<cppgc::internal::BasicMember<blink::CanvasRenderingContextHost, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, cppgc::internal::BasicMember<blink::ExecutionContext, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::KeyValuePairExtractor, blink::HashMapValueTraits<blink::HashTraits<cppgc::internal::BasicMember<blink::CanvasRenderingContextHost, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HashTraits<cppgc::internal::BasicMember<blink::ExecutionContext, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>>, blink::HashTraits<cppgc::internal::BasicMember<blink::CanvasRenderingContextHost, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 1032
+      },
+      "after": {
+        "count": 1,
+        "bytes": 4104
+      },
+      "countDelta": 0,
+      "bytesDelta": 3072
+    },
+    {
+      "name": "object:Object",
+      "before": {
+        "count": 270,
+        "bytes": 6920
+      },
+      "after": {
+        "count": 346,
+        "bytes": 9240
+      },
+      "countDelta": 76,
+      "bytesDelta": 2320
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<cppgc::internal::BasicMember<blink::PageVisibilityObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::KeyValuePair<cppgc::internal::BasicMember<blink::PageVisibilityObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, unsigned int>, blink::KeyValuePairExtractor, blink::HashMapValueTraits<blink::HashTraits<cppgc::internal::BasicMember<blink::PageVisibilityObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HashTraits<unsigned int>>, blink::HashTraits<cppgc::internal::BasicMember<blink::PageVisibilityObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 2056
+      },
+      "after": {
+        "count": 1,
+        "bytes": 4104
+      },
+      "countDelta": 0,
+      "bytesDelta": 2048
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<cppgc::internal::BasicMember<blink::PerformanceScriptTiming, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>",
+      "before": {
+        "count": 4,
+        "bytes": 96
+      },
+      "after": {
+        "count": 83,
+        "bytes": 1992
+      },
+      "countDelta": 79,
+      "bytesDelta": 1896
+    },
+    {
+      "name": "native:system / ProtectedFixedArray",
+      "before": {
+        "count": 2,
+        "bytes": 20
+      },
+      "after": {
+        "count": 137,
+        "bytes": 1872
+      },
+      "countDelta": 135,
+      "bytesDelta": 1852
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<cppgc::internal::BasicMember<blink::TaskAttributionTiming, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>",
+      "before": {
+        "count": 2,
+        "bytes": 48
+      },
+      "after": {
+        "count": 74,
+        "bytes": 1776
+      },
+      "countDelta": 72,
+      "bytesDelta": 1728
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<std::pair<cppgc::internal::BasicMember<const blink::ActiveScriptWrappableBase, cppgc::internal::UntracedMemberTag, cppgc::internal::NoWriteBarrierPolicy>, cppgc::internal::BasicMember<const blink::ActiveScriptWrappableBase, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>>",
+      "before": {
+        "count": 1,
+        "bytes": 752
+      },
+      "after": {
+        "count": 1,
+        "bytes": 2152
+      },
+      "countDelta": 0,
+      "bytesDelta": 1400
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<blink::VectorBackedLinkedListNode<cppgc::internal::BasicMember<blink::PageVisibilityObserver, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 896
+      },
+      "after": {
+        "count": 1,
+        "bytes": 2216
+      },
+      "countDelta": 0,
+      "bytesDelta": 1320
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<cppgc::internal::BasicMember<blink::ContextLifecycleObserver, cppgc::internal::UntracedMemberTag, cppgc::internal::NoWriteBarrierPolicy>>",
+      "before": {
+        "count": 1,
+        "bytes": 1184
+      },
+      "after": {
+        "count": 1,
+        "bytes": 2424
+      },
+      "countDelta": 0,
+      "bytesDelta": 1240
+    },
+    {
+      "name": "native:system / SharedFunctionInfoWrapper",
+      "before": {
+        "count": 1,
+        "bytes": 8
+      },
+      "after": {
+        "count": 136,
+        "bytes": 1088
+      },
+      "countDelta": 135,
+      "bytesDelta": 1080
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<blink::String, blink::KeyValuePair<blink::String, cppgc::internal::BasicMember<blink::Resource, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::KeyValuePairExtractor, blink::HashMapValueTraits<blink::HashTraits<String>, blink::HashTraits<cppgc::internal::BasicMember<blink::Resource, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>>, blink::HashTraits<String>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 1032
+      },
+      "after": {
+        "count": 1,
+        "bytes": 2056
+      },
+      "countDelta": 0,
+      "bytesDelta": 1024
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<cppgc::internal::BasicMember<blink::PerformanceEntry, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>",
+      "before": {
+        "count": 5,
+        "bytes": 192
+      },
+      "after": {
+        "count": 5,
+        "bytes": 1216
+      },
+      "countDelta": 0,
+      "bytesDelta": 1024
+    },
+    {
+      "name": "object:Array",
+      "before": {
+        "count": 159,
+        "bytes": 2556
+      },
+      "after": {
+        "count": 179,
+        "bytes": 2876
+      },
+      "countDelta": 20,
+      "bytesDelta": 320
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<cppgc::internal::BasicMember<blink::ResourceFetcher, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, cppgc::internal::BasicMember<blink::ResourceFetcher, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::IdentityExtractor, blink::HashTraits<cppgc::internal::BasicMember<blink::ResourceFetcher, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HashTraits<cppgc::internal::BasicMember<blink::ResourceFetcher, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 264
+      },
+      "after": {
+        "count": 1,
+        "bytes": 520
+      },
+      "countDelta": 0,
+      "bytesDelta": 256
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<int, blink::KeyValuePair<int, cppgc::internal::BasicMember<blink::Node, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::KeyValuePairExtractor, blink::HashMapValueTraits<blink::HashTraits<int>, blink::HashTraits<cppgc::internal::BasicMember<blink::Node, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>>, blink::HashTraits<int>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 264
+      },
+      "after": {
+        "count": 1,
+        "bytes": 520
+      },
+      "countDelta": 0,
+      "bytesDelta": 256
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<cppgc::internal::BasicMember<blink::FontCacheClient, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, cppgc::internal::BasicMember<blink::FontCacheClient, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::IdentityExtractor, blink::HashTraits<cppgc::internal::BasicMember<blink::FontCacheClient, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HashTraits<cppgc::internal::BasicMember<blink::FontCacheClient, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 264
+      },
+      "after": {
+        "count": 1,
+        "bytes": 520
+      },
+      "countDelta": 0,
+      "bytesDelta": 256
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<cppgc::internal::BasicMember<blink::scheduler::AgentGroupSchedulerImpl, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, cppgc::internal::BasicMember<blink::scheduler::AgentGroupSchedulerImpl, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::IdentityExtractor, blink::HashTraits<cppgc::internal::BasicMember<blink::scheduler::AgentGroupSchedulerImpl, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HashTraits<cppgc::internal::BasicMember<blink::scheduler::AgentGroupSchedulerImpl, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 136
+      },
+      "after": {
+        "count": 1,
+        "bytes": 264
+      },
+      "countDelta": 0,
+      "bytesDelta": 128
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<cppgc::internal::BasicMember<blink::Resource, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, cppgc::internal::BasicMember<blink::Resource, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::IdentityExtractor, blink::HashTraits<cppgc::internal::BasicMember<blink::Resource, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HashTraits<cppgc::internal::BasicMember<blink::Resource, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 136
+      },
+      "after": {
+        "count": 1,
+        "bytes": 264
+      },
+      "countDelta": 0,
+      "bytesDelta": 128
+    },
+    {
+      "name": "native:system / WeakFixedArray",
+      "before": {
+        "count": 17,
+        "bytes": 1924
+      },
+      "after": {
+        "count": 20,
+        "bytes": 1984
+      },
+      "countDelta": 3,
+      "bytesDelta": 60
+    },
+    {
+      "name": "native:system / PropertyArray",
+      "before": {
+        "count": 334,
+        "bytes": 17412
+      },
+      "after": {
+        "count": 336,
+        "bytes": 17468
+      },
+      "countDelta": 2,
+      "bytesDelta": 56
+    },
+    {
+      "name": "native:system / RegExpDataWrapper",
+      "before": {
+        "count": 9,
+        "bytes": 72
+      },
+      "after": {
+        "count": 12,
+        "bytes": 96
+      },
+      "countDelta": 3,
+      "bytesDelta": 24
+    },
+    {
+      "name": "native:blink::ElementDataCache",
+      "before": {
+        "count": 1,
+        "bytes": 32
+      },
+      "after": {
+        "count": 0,
+        "bytes": 0
+      },
+      "countDelta": -1,
+      "bytesDelta": -32
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<unsigned int, blink::KeyValuePair<unsigned int, std::pair<const blink::StringImpl *, cppgc::internal::BasicMember<blink::ShareableElementData, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>>, blink::KeyValuePairExtractor, blink::HashMapValueTraits<blink::AlreadyHashedTraits, blink::HashTraits<std::pair<const blink::StringImpl *, cppgc::internal::BasicMember<blink::ShareableElementData, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>>>, blink::AlreadyHashedTraits, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 776
+      },
+      "after": {
+        "count": 0,
+        "bytes": 0
+      },
+      "countDelta": -1,
+      "bytesDelta": -776
+    }
+  ],
+  "disposalChanges": [
+    {
+      "name": "code:system / BytecodeArray",
+      "before": {
+        "count": 719,
+        "bytes": 228976
+      },
+      "after": {
+        "count": 751,
+        "bytes": 235092
+      },
+      "countDelta": 32,
+      "bytesDelta": 6116
+    },
+    {
+      "name": "code:system / ScopeInfo",
+      "before": {
+        "count": 834,
+        "bytes": 48068
+      },
+      "after": {
+        "count": 867,
+        "bytes": 49512
+      },
+      "countDelta": 33,
+      "bytesDelta": 1444
+    },
+    {
+      "name": "code:system / FeedbackMetadata",
+      "before": {
+        "count": 709,
+        "bytes": 32548
+      },
+      "after": {
+        "count": 741,
+        "bytes": 33792
+      },
+      "countDelta": 32,
+      "bytesDelta": 1244
+    },
+    {
+      "name": "code:(constant pool)",
+      "before": {
+        "count": 645,
+        "bytes": 38264
+      },
+      "after": {
+        "count": 671,
+        "bytes": 39188
+      },
+      "countDelta": 26,
+      "bytesDelta": 924
+    },
+    {
+      "name": "string:One live root repeatedly loads source URLs (unique by default, fixed with reuse=1) and removes its scene. Six resident loads and two early replacements per window; forced-GC samples occur with an empty scene. Early replacement is not a guaranteed transport abort. Fetch counts end at response headers, not body consumption. Snapshot/GL checks are intentional lifecycle harness overhead, not frame timing measurements.",
+      "before": {
+        "count": 0,
+        "bytes": 0
+      },
+      "after": {
+        "count": 1,
+        "bytes": 432
+      },
+      "countDelta": 1,
+      "bytesDelta": 432
+    },
+    {
+      "name": "code:system / ObjectBoilerplateDescription",
+      "before": {
+        "count": 385,
+        "bytes": 15800
+      },
+      "after": {
+        "count": 392,
+        "bytes": 16168
+      },
+      "countDelta": 7,
+      "bytesDelta": 368
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<cppgc::internal::BasicMember<const blink::EventTarget, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::KeyValuePair<cppgc::internal::BasicMember<const blink::EventTarget, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>, blink::HashSet<const blink::StringImpl *>>, blink::KeyValuePairExtractor, blink::HashMapValueTraits<blink::HashTraits<cppgc::internal::BasicMember<const blink::EventTarget, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HashTraits<blink::HashSet<const blink::StringImpl *>>>, blink::HashTraits<cppgc::internal::BasicMember<const blink::EventTarget, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::HeapAllocator>>",
+      "before": {
+        "count": 0,
+        "bytes": 0
+      },
+      "after": {
+        "count": 1,
+        "bytes": 264
+      },
+      "countDelta": 1,
+      "bytesDelta": 264
+    },
+    {
+      "name": "code:system / BytecodeWrapper",
+      "before": {
+        "count": 719,
+        "bytes": 5752
+      },
+      "after": {
+        "count": 751,
+        "bytes": 6008
+      },
+      "countDelta": 32,
+      "bytesDelta": 256
+    },
+    {
+      "name": "native:system / FunctionTemplateInfo",
+      "before": {
+        "count": 3263,
+        "bytes": 208704
+      },
+      "after": {
+        "count": 3266,
+        "bytes": 208896
+      },
+      "countDelta": 3,
+      "bytesDelta": 192
+    },
+    {
+      "name": "object shape:(enum cache)",
+      "before": {
+        "count": 2,
+        "bytes": 64
+      },
+      "after": {
+        "count": 4,
+        "bytes": 248
+      },
+      "countDelta": 2,
+      "bytesDelta": 184
+    },
+    {
+      "name": "native:blink::AnimationFrameTimingInfo",
+      "before": {
+        "count": 1,
+        "bytes": 136
+      },
+      "after": {
+        "count": 2,
+        "bytes": 272
+      },
+      "countDelta": 1,
+      "bytesDelta": 136
+    },
+    {
+      "name": "native:blink::LayoutResult::RareData",
+      "before": {
+        "count": 0,
+        "bytes": 0
+      },
+      "after": {
+        "count": 1,
+        "bytes": 136
+      },
+      "countDelta": 1,
+      "bytesDelta": 136
+    },
+    {
+      "name": "native:Event",
+      "before": {
+        "count": 0,
+        "bytes": 0
+      },
+      "after": {
+        "count": 1,
+        "bytes": 136
+      },
+      "countDelta": 1,
+      "bytesDelta": 136
+    },
+    {
+      "name": "array:(object properties)",
+      "before": {
+        "count": 60,
+        "bytes": 43400
+      },
+      "after": {
+        "count": 61,
+        "bytes": 43528
+      },
+      "countDelta": 1,
+      "bytesDelta": 128
+    },
+    {
+      "name": "code:system / SharedFunctionInfo",
+      "before": {
+        "count": 235,
+        "bytes": 9408
+      },
+      "after": {
+        "count": 237,
+        "bytes": 9504
+      },
+      "countDelta": 2,
+      "bytesDelta": 96
+    },
+    {
+      "name": "object shape:system / Map",
+      "before": {
+        "count": 2781,
+        "bytes": 112504
+      },
+      "after": {
+        "count": 2783,
+        "bytes": 112600
+      },
+      "countDelta": 2,
+      "bytesDelta": 96
+    },
+    {
+      "name": "native:system / ObjectTemplateInfo",
+      "before": {
+        "count": 175,
+        "bytes": 4900
+      },
+      "after": {
+        "count": 177,
+        "bytes": 4956
+      },
+      "countDelta": 2,
+      "bytesDelta": 56
+    },
+    {
+      "name": "native:system / ArrayList",
+      "before": {
+        "count": 110,
+        "bytes": 71588
+      },
+      "after": {
+        "count": 111,
+        "bytes": 71640
+      },
+      "countDelta": 1,
+      "bytesDelta": 52
+    },
+    {
+      "name": "string:WEBGL_lose_context",
+      "before": {
+        "count": 0,
+        "bytes": 0
+      },
+      "after": {
+        "count": 1,
+        "bytes": 52
+      },
+      "countDelta": 1,
+      "bytesDelta": 52
+    },
+    {
+      "name": "code:system / WeakFixedArray",
+      "before": {
+        "count": 1500,
+        "bytes": 31916
+      },
+      "after": {
+        "count": 1502,
+        "bytes": 31964
+      },
+      "countDelta": 2,
+      "bytesDelta": 48
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<blink::PaintChunk>",
+      "before": {
+        "count": 1,
+        "bytes": 776
+      },
+      "after": {
+        "count": 1,
+        "bytes": 648
+      },
+      "countDelta": 0,
+      "bytesDelta": -128
+    },
+    {
+      "name": "native:blink::HeapVectorBacking<blink::PendingLayer>",
+      "before": {
+        "count": 1,
+        "bytes": 824
+      },
+      "after": {
+        "count": 1,
+        "bytes": 688
+      },
+      "countDelta": 0,
+      "bytesDelta": -136
+    },
+    {
+      "name": "code:system / CodeWrapper",
+      "before": {
+        "count": 3241,
+        "bytes": 5760
+      },
+      "after": {
+        "count": 3223,
+        "bytes": 5616
+      },
+      "countDelta": -18,
+      "bytesDelta": -144
+    },
+    {
+      "name": "native:system / SharedFunctionInfoWrapper",
+      "before": {
+        "count": 136,
+        "bytes": 1088
+      },
+      "after": {
+        "count": 118,
+        "bytes": 944
+      },
+      "countDelta": -18,
+      "bytesDelta": -144
+    },
+    {
+      "name": "array:",
+      "before": {
+        "count": 407,
+        "bytes": 103184
+      },
+      "after": {
+        "count": 405,
+        "bytes": 103032
+      },
+      "countDelta": -2,
+      "bytesDelta": -152
+    },
+    {
+      "name": "native:blink::LayoutHTMLCanvas",
+      "before": {
+        "count": 1,
+        "bytes": 160
+      },
+      "after": {
+        "count": 0,
+        "bytes": 0
+      },
+      "countDelta": -1,
+      "bytesDelta": -160
+    },
+    {
+      "name": "native:blink::ClipPaintPropertyNode",
+      "before": {
+        "count": 3,
+        "bytes": 600
+      },
+      "after": {
+        "count": 2,
+        "bytes": 400
+      },
+      "countDelta": -1,
+      "bytesDelta": -200
+    },
+    {
+      "name": "native:WebGLShader",
+      "before": {
+        "count": 5,
+        "bytes": 368
+      },
+      "after": {
+        "count": 2,
+        "bytes": 144
+      },
+      "countDelta": -3,
+      "bytesDelta": -224
+    },
+    {
+      "name": "native:blink::BoxOverflowModel",
+      "before": {
+        "count": 2,
+        "bytes": 240
+      },
+      "after": {
+        "count": 0,
+        "bytes": 0
+      },
+      "countDelta": -2,
+      "bytesDelta": -240
+    },
+    {
+      "name": "native:blink::Scrollbar",
+      "before": {
+        "count": 1,
+        "bytes": 248
+      },
+      "after": {
+        "count": 0,
+        "bytes": 0
+      },
+      "countDelta": -1,
+      "bytesDelta": -248
+    },
+    {
+      "name": "native:blink::HeapHashTableBacking<blink::HashTable<int, blink::KeyValuePair<int, cppgc::internal::BasicMember<blink::Node, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>, blink::KeyValuePairExtractor, blink::HashMapValueTraits<blink::HashTraits<int>, blink::HashTraits<cppgc::internal::BasicMember<blink::Node, cppgc::internal::WeakMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>>, blink::HashTraits<int>, blink::HeapAllocator>>",
+      "before": {
+        "count": 1,
+        "bytes": 520
+      },
+      "after": {
+        "count": 1,
+        "bytes": 264
+      },
+      "countDelta": 0,
+      "bytesDelta": -256
+    },
+    {
+      "name": "native:WebGLUniformLocation",
+      "before": {
+        "count": 5,
+        "bytes": 280
+      },
+      "after": {
+        "count": 0,
+        "bytes": 0
+      },
+      "countDelta": -5,
+      "bytesDelta": -280
+    },
+    {
+      "name": "native:system / ProtectedFixedArray",
+      "before": {
+        "count": 137,
+        "bytes": 1872
+      },
+      "after": {
+        "count": 119,
+        "bytes": 1588
+      },
+      "countDelta": -18,
+      "bytesDelta": -284
+    },
+    {
+      "name": "code:system / UncompiledDataWithoutPreparseData",
+      "before": {
+        "count": 636,
+        "bytes": 12720
+      },
+      "after": {
+        "count": 606,
+        "bytes": 12120
+      },
+      "countDelta": -30,
+      "bytesDelta": -600
+    },
+    {
+      "name": "code:system / TrustedWeakFixedArray",
+      "before": {
+        "count": 136,
+        "bytes": 5048
+      },
+      "after": {
+        "count": 118,
+        "bytes": 4272
+      },
+      "countDelta": -18,
+      "bytesDelta": -776
+    },
+    {
+      "name": "code:system / Code",
+      "before": {
+        "count": 720,
+        "bytes": 51840
+      },
+      "after": {
+        "count": 702,
+        "bytes": 50544
+      },
+      "countDelta": -18,
+      "bytesDelta": -1296
+    },
+    {
+      "name": "native:system / ExternalStringData",
+      "before": {
+        "count": 102,
+        "bytes": 687855
+      },
+      "after": {
+        "count": 101,
+        "bytes": 685287
+      },
+      "countDelta": -1,
+      "bytesDelta": -2568
+    },
+    {
+      "name": "code:system / ProtectedFixedArray",
+      "before": {
+        "count": 136,
+        "bytes": 33428
+      },
+      "after": {
+        "count": 118,
+        "bytes": 29552
+      },
+      "countDelta": -18,
+      "bytesDelta": -3876
+    },
+    {
+      "name": "code:system / TrustedByteArray",
+      "before": {
+        "count": 1674,
+        "bytes": 222680
+      },
+      "after": {
+        "count": 1636,
+        "bytes": 216000
+      },
+      "countDelta": -38,
+      "bytesDelta": -6680
+    },
+    {
+      "name": "code:system / InstructionStream",
+      "before": {
+        "count": 720,
+        "bytes": 1221376
+      },
+      "after": {
+        "count": 702,
+        "bytes": 1199040
+      },
+      "countDelta": -18,
+      "bytesDelta": -22336
+    }
+  ],
+  "note": "Exact shallow/self-size sums by snapshot node type/name; not dominator retained sizes. Code includes V8 instruction/metadata nodes. Raw snapshots live at the recorded local paths, with SHA-256 hashes. Snapshot instrumentation may alter warm-up and GC."
+}

@@ -1,0 +1,171 @@
+{
+  "results": [
+    {
+      "name": "steady-mixed",
+      "minFilter": "moving",
+      "copies": 4,
+      "budgetMiB": 16,
+      "nativeFirst": false,
+      "frames": 120,
+      "submissionMs": {
+        "median": 0.2999999523162842,
+        "p95": 0.40000003576278687,
+        "max": 0.5999999642372131
+      },
+      "frameIntervalMs": {
+        "median": 16.700000000000728,
+        "p95": 16.700000000000728,
+        "max": 16.799999999999272
+      },
+      "before": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 1115136,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 10,
+        "admittedPages": 10,
+        "unresidentPages": 0,
+        "automaticCandidates": 2,
+        "automaticDecodedBytes": 524288,
+        "automaticIneligible": 0,
+        "automaticResources": 2,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 10,
+        "pageRequests": 20,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 10,
+        "uploadedPages": 10,
+        "uploadBudgetBytes": 33554432
+      },
+      "nativeFailures": 10,
+      "nativeFailureMode": "color-space",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 1115136,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 10,
+        "admittedPages": 10,
+        "unresidentPages": 0,
+        "automaticCandidates": 2,
+        "automaticDecodedBytes": 524288,
+        "automaticIneligible": 0,
+        "automaticResources": 2,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 10,
+        "pageRequests": 20,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 10,
+        "uploadedPages": 10,
+        "uploadBudgetBytes": 33554432
+      },
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-failure-retention-snapshots-images/steady-mixed-moving.png"
+    }
+  ],
+  "note": "Warm-up, snapshots, pixel readback and screenshots are outside the measurement window. Measured frames use camera resource commits or explicit invalidation; One reusable rAF callback and timing calls remain harness overhead. CPU/GPU source owners remain alive through heap measurement.",
+  "retention": {
+    "windows": 12,
+    "heaps": [
+      {
+        "usedSize": 2729956,
+        "totalSize": 3407872,
+        "embedderHeapUsedSize": 507440,
+        "backingStorageSize": 672130
+      },
+      {
+        "usedSize": 2832576,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 507728,
+        "backingStorageSize": 672130
+      },
+      {
+        "usedSize": 2843960,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 507728,
+        "backingStorageSize": 672130
+      },
+      {
+        "usedSize": 2866916,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 507728,
+        "backingStorageSize": 672130
+      },
+      {
+        "usedSize": 2941196,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 505048,
+        "backingStorageSize": 672130
+      },
+      {
+        "usedSize": 2942768,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 505048,
+        "backingStorageSize": 672130
+      },
+      {
+        "usedSize": 2944296,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 505048,
+        "backingStorageSize": 672130
+      },
+      {
+        "usedSize": 2945640,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 505048,
+        "backingStorageSize": 672130
+      },
+      {
+        "usedSize": 2940556,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 505048,
+        "backingStorageSize": 672130
+      },
+      {
+        "usedSize": 2940668,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 505048,
+        "backingStorageSize": 672130
+      },
+      {
+        "usedSize": 2941940,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 505048,
+        "backingStorageSize": 672130
+      },
+      {
+        "usedSize": 2941940,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 505048,
+        "backingStorageSize": 672130
+      },
+      {
+        "usedSize": 2941940,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 505048,
+        "backingStorageSize": 672130
+      }
+    ],
+    "note": "One preparation across all windows; per-window behavior belongs to the fixture. Forced GC between windows, without tracing or sampling. Finish-hook diagnostics run after the last heap sample."
+  },
+  "heapSnapshots": {
+    "paths": {
+      "before": "/tmp/royal-vt-native-failure-retention-before.heapsnapshot",
+      "after": "/tmp/royal-vt-native-failure-retention-after.heapsnapshot",
+      "disposed": "/tmp/royal-vt-native-failure-retention-disposed.heapsnapshot"
+    },
+    "note": "Snapshots perturb the benchmark and may trigger additional GC. Before/after captures bracket replacement windows; disposed capture follows cleanup. Use separate runs without snapshots for uninstrumented heap trends."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

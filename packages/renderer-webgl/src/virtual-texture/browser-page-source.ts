@@ -11,6 +11,7 @@ import { decodeBrowserImageElement } from "../texture/browser-image-element";
 import type { AsyncPreparationScheduler } from "../resource/async-preparation-owner";
 
 const prepareDirectly: AsyncPreparationScheduler = (_signal, prepare) => prepare();
+const closeNativePage = () => undefined;
 
 export type DecodedVirtualTexturePage = Readonly<{
   close(): void;
@@ -96,6 +97,10 @@ const decodeImagePage = async (
   } catch {
     return decodeWithImageElement(blob, storedPageSize, signal);
   }
+  if (signal.aborted) {
+    source.close();
+    throw new DOMException("VT page read was aborted", "AbortError");
+  }
   if (source.width !== storedPageSize || source.height !== storedPageSize) {
     source.close();
     source = await createImageBitmap(blob, {
@@ -144,8 +149,8 @@ export const readVirtualTexturePage = async (
         throw new RangeError("Royal VT KTX2 page dimensions do not match the manifest");
       }
       return {
-        blocks: parsed.levels[0]!.blocks,
-        close: () => undefined,
+        blocks: parsed.levels[0]!.blocks.slice(),
+        close: closeNativePage,
         colorSpace: parsed.colorSpace,
         kind: parsed.format,
       };

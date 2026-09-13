@@ -1,0 +1,51 @@
+--- a/packages/renderer-webgl/src/virtual-texture/runtime.ts
++++ b/packages/renderer-webgl/src/virtual-texture/runtime.ts
+@@ -88,6 +88,7 @@
+   residentPages: 0,
+   status: "idle",
+ };
++const UNCHANGED_ATLAS = { copied: 0, pending: false, changed: false };
+ const FRAME_RESULTS = [
+   { pending: false, webGlStateChanged: false },
+   { pending: true, webGlStateChanged: false },
+@@ -1048,17 +1049,16 @@
+     }, delay);
+   }
+ 
+-  #resizeAtlas(atlas: GpuVirtualTextureAtlas, copyLimit: number): { copied: number; pending: boolean; changed: boolean } {
+-    let copied = 0;
+-    let changed = false;
+-    const result = (pending: boolean) => ({ copied, pending, changed });
+-    // ETC2 cannot be a framebuffer copy destination. Its existing bounded
+-    // allocation policy remains independent from generated RGBA atlas growth.
+-    if (atlas.compressed) return result(false);
++  #resizeAtlas(atlas: GpuVirtualTextureAtlas, copyLimit: number) {
++    if (atlas.compressed) return UNCHANGED_ATLAS;
+     const demand = this.#atlasDemand.get(atlas.key) ?? 0;
+     const targetSlots = this.#targetAtlasSlots(atlas.key);
+     const capacityLimited = demand > targetSlots && targetSlots < atlas.slotCount;
+     const shrinking = capacityLimited || targetSlots <= atlas.slotCount / 2;
++    if (!shrinking) delete atlas.shrinkAfter;
++    if (atlas.growth === undefined && !shrinking && targetSlots <= atlas.slotCount) return UNCHANGED_ATLAS;
++    let copied = 0, changed = false;
++    const result = (pending: boolean) => ({ copied, pending, changed });
+     let missingBytes = 0;
+     let replacementBytes = 0;
+     for (const [key, count] of this.#atlasDemand) {
+@@ -1070,7 +1070,6 @@
+     }
+     const pressure = missingBytes > this.#atlasAllowance()
+       || replacementBytes > this.#budget.availableBytes;
+-    if (!shrinking) delete atlas.shrinkAfter;
+     if (atlas.growth !== undefined && (
+       atlas.growth.retainedSlots === undefined ? targetSlots <= atlas.slotCount
+         : (atlas.growth.capacityLimited ? targetSlots > atlas.growth.targetSlots : demand > atlas.growth.replacement.slotCount)
+@@ -1083,7 +1082,7 @@
+     }
+     const fingerprint = `${demand}:${this.#budget.availableBytes}:${this.#atlasAllowance(atlas)}`;
+     if (atlas.growth === undefined) {
+-      if ((!shrinking && targetSlots <= atlas.slotCount) || atlas.blockedGrowth === fingerprint) return result(false);
++      if (atlas.blockedGrowth === fingerprint) return result(false);
+       if (shrinking && !pressure && !capacityLimited) {
+         atlas.shrinkAfter ??= performance.now() + ATLAS_SHRINK_DELAY_MS;
+         const delay = atlas.shrinkAfter - performance.now();

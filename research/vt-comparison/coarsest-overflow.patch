@@ -1,0 +1,14 @@
+--- before/demand.ts
++++ after/demand.ts
+@@ -220,7 +220,10 @@
+   const mip = manifest.mipCount - 1;
+   const layout = manifest.mipLayouts[mip]!;
+   for (let y = 0; y < layout.height; y += 1) {
+-    for (let x = 0; x < layout.width; x += 1) addPage(workspace, mip, x, y);
++    for (let x = 0; x < layout.width; x += 1) {
++      addPage(workspace, mip, x, y);
++      if (workspace.overflow) return;
++    }
+   }
+ };
+ 

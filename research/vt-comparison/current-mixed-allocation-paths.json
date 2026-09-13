@@ -1,0 +1,1644 @@
+{
+  "sampledBytes": 16583156,
+  "largest": [
+    {
+      "bytes": 5691260,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#B",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 898,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "A",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 669,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "k",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 596,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "O",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 441,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "D",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 387,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "add",
+          "source": null
+        }
+      ]
+    },
+    {
+      "bytes": 1081684,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "A",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/pool-budget.ts",
+            "line": 8,
+            "column": 13,
+            "name": null
+          }
+        }
+      ]
+    },
+    {
+      "bytes": 983340,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "next",
+          "source": null
+        }
+      ]
+    },
+    {
+      "bytes": 721332,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        }
+      ]
+    },
+    {
+      "bytes": 624800,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 91,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#B",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 898,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "j",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 698,
+            "column": 13,
+            "name": null
+          }
+        },
+        {
+          "name": "A",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 669,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "k",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 596,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "O",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 441,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "D",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 387,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "_",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 197,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "add",
+          "source": null
+        }
+      ]
+    },
+    {
+      "bytes": 592160,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 91,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#B",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 898,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "j",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 698,
+            "column": 13,
+            "name": null
+          }
+        },
+        {
+          "name": "A",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 669,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "k",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 596,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "O",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 441,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "D",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 387,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "add",
+          "source": null
+        }
+      ]
+    },
+    {
+      "bytes": 557256,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#ne",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 1440,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#se",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 1510,
+            "column": 2,
+            "name": null
+          }
+        }
+      ]
+    },
+    {
+      "bytes": 524760,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#B",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 898,
+            "column": 2,
+            "name": null
+          }
+        }
+      ]
+    },
+    {
+      "bytes": 524488,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "map",
+          "source": null
+        },
+        {
+          "name": "",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 809,
+            "column": 97,
+            "name": null
+          }
+        }
+      ]
+    },
+    {
+      "bytes": 491616,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#B",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 898,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "S",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-visibility.ts",
+            "line": 93,
+            "column": 13,
+            "name": null
+          }
+        }
+      ]
+    },
+    {
+      "bytes": 491616,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#B",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 898,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "S",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-visibility.ts",
+            "line": 93,
+            "column": 13,
+            "name": null
+          }
+        },
+        {
+          "name": "hypot",
+          "source": null
+        }
+      ]
+    },
+    {
+      "bytes": 327780,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 91,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "next",
+          "source": null
+        }
+      ]
+    },
+    {
+      "bytes": 229452,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "U",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 106,
+            "column": 14,
+            "name": null
+          }
+        },
+        {
+          "name": "x",
+          "source": {
+            "source": "../../../../packages/renderer-core/src/camera-resource.ts",
+            "line": 197,
+            "column": 10,
+            "name": null
+          }
+        },
+        {
+          "name": "s",
+          "source": {
+            "source": "../../../../packages/renderer-core/src/camera-resource.ts",
+            "line": 101,
+            "column": 6,
+            "name": null
+          }
+        }
+      ]
+    },
+    {
+      "bytes": 229452,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 91,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#B",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 898,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "j",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 698,
+            "column": 13,
+            "name": null
+          }
+        }
+      ]
+    },
+    {
+      "bytes": 196684,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 91,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "A",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/pool-budget.ts",
+            "line": 8,
+            "column": 13,
+            "name": null
+          }
+        }
+      ]
+    },
+    {
+      "bytes": 196660,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "values",
+          "source": null
+        }
+      ]
+    },
+    {
+      "bytes": 167576,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 129,
+            "column": 22,
+            "name": null
+          }
+        }
+      ]
+    },
+    {
+      "bytes": 163980,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 91,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#B",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 898,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "m",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 100,
+            "column": 42,
+            "name": null
+          }
+        }
+      ]
+    },
+    {
+      "bytes": 131740,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#B",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 898,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "j",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 698,
+            "column": 13,
+            "name": null
+          }
+        },
+        {
+          "name": "A",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 669,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "k",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 596,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "O",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 441,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "D",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/demand.ts",
+            "line": 387,
+            "column": 6,
+            "name": null
+          }
+        },
+        {
+          "name": "add",
+          "source": null
+        }
+      ]
+    },
+    {
+      "bytes": 131200,
+      "path": [
+        {
+          "name": "(root)",
+          "source": null
+        },
+        {
+          "name": "i",
+          "source": {
+            "source": "../../../../research/vt-comparison/steady.ts",
+            "line": 164,
+            "column": 18,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 999,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "flushInvalidated",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 91,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#i",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+            "line": 118,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "#rt",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/runtime/canvas-root.ts",
+            "line": 1810,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "drawViews",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+            "line": 901,
+            "column": 2,
+            "name": null
+          }
+        },
+        {
+          "name": "update",
+          "source": {
+            "source": "../../../../packages/renderer-webgl/src/virtual-texture/runtime.ts",
+            "line": 750,
+            "column": 2,
+            "name": null
+          }
+        }
+      ]
+    }
+  ],
+  "note": "Allocation sampling estimates with stack attribution from the matching current build source maps; not retained sizes or exact allocation totals."
+}

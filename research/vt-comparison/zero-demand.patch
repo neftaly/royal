@@ -1,0 +1,14 @@
+--- runtime.before.ts
++++ runtime.candidate.ts
+@@ -768,10 +768,10 @@
+       const bytesPerPage = virtualTexturePageBytes(manifest);
+       const count = Math.min(resource.desiredPageCount ?? 0, manifest.physicalSlots ?? Infinity,
+         manifest.physicalByteBudget === undefined ? Infinity : Math.floor(manifest.physicalByteBudget / bytesPerPage));
++      if (count === 0 && !this.#atlases.has(key)) continue;
+       this.#atlasDemand.set(key, (this.#atlasDemand.get(key) ?? 0) + count);
+       this.#atlasDemandBytes.set(key, (this.#atlasDemandBytes.get(key) ?? 0) + count * bytesPerPage);
+       this.#atlasMinimumSlots.set(key, (this.#atlasMinimumSlots.get(key) ?? 0) + (count > 0 ? 1 : 0));
+-      if (count === 0 && !this.#atlases.has(key)) continue;
+       if (manifest.pageEncoding !== "image" && this.#atlases.has(key)) {
+         if (!compressedKeys.has(key)) compressedBytes += this.#atlases.get(key)!.allocationBytes;
+         compressedKeys.add(key);

@@ -63,6 +63,40 @@ describe("VT2 manifest contract", () => {
     expect(virtualTexturePageUri(manifest, { mip: 1, x: 0, y: 0 })).toBe("1/0/0.png");
   });
 
+  it.each(["mip", "x", "y"].flatMap(field =>
+    [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, "0", null, undefined].map(value => ({ field, value })),
+  ))("rejects malformed authored $field coordinate $value before key packing", ({ field, value }) => {
+    expect(() => parseVirtualTextureManifest({
+      ...fixture(),
+      pages: { entries: [{ mip: 0, x: 0, y: 0, uri: "bad.png", [field]: value }] },
+    })).toThrow("non-negative safe integer");
+  });
+
+  it("keeps wide sparse coordinates distinct from the next packed row", () => {
+    // Layout metadata only: this does not allocate an oversized GPU page table.
+    const pages = [
+      { mip: 0, x: 65535, y: 0, uri: "packed.png" },
+      { mip: 0, x: 65536, y: 0, uri: "wide.png" },
+      { mip: 0, x: 0, y: 1, uri: "next-row.png" },
+    ];
+    const input = { ...fixture(), pageSize: 1, virtualSize: [65537, 2], mipCount: 1,
+      pages: { entries: pages } };
+    const manifest = parseVirtualTextureManifest(input);
+    expect(manifest.entries.size).toBe(3);
+    for (const page of pages) expect(virtualTexturePageUri(manifest, page)).toBe(page.uri);
+    expect(() => parseVirtualTextureManifest({ ...input,
+      pages: { entries: [...pages, { ...pages[1], uri: "duplicate-wide.png" }] },
+    })).toThrow("duplicated");
+  });
+
+  it("keeps tall sparse coordinates distinct across 32-bit and packed-key limits", () => {
+    const pages = [0, 256, 65535, 65536].map(y => ({ mip: 0, x: 0, y, uri: `row-${y}.png` }));
+    const manifest = parseVirtualTextureManifest({ ...fixture(), pageSize: 1,
+      virtualSize: [2, 65537], mipCount: 1, pages: { entries: pages } });
+    expect(manifest.entries.size).toBe(4);
+    for (const page of pages) expect(virtualTexturePageUri(manifest, page)).toBe(page.uri);
+  });
+
   it("rejects ambiguous, duplicated, out-of-grid, and incompatible author data", () => {
     expect(() => parseVirtualTextureManifest({ ...fixture(), contractVersion: 1 }))
       .toThrow("contractVersion must be 2");

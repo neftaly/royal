@@ -1,0 +1,16 @@
+{
+  "sha256": {
+    "packages/renderer-webgl/src/resource/async-preparation-owner.ts": "9ca0010aca906cd1baef3cf3873bcef7f4fba3b280c4bd429288dc1b0815a74a",
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "e4e94e2ab212d037b057549142493b17e45135fe2b1be92f4c95fbdd271742fa",
+    "tests/replacement/renderer-webgl-vt-manifest-scheduling.test.ts": "a8f7f37cf7d8ce3aee2f3eee4c74651547138f3587efe2d7009ef4b01011c11e"
+  },
+  "checks": {
+    "manifestScheduling": "6 tests pass before and after mutation",
+    "types": "pass",
+    "testSourceSize": "pass",
+    "mutation": "failure to release rejected scheduler jobs causes all 4 new cases to fail: ninth read never starts"
+  },
+  "scope": "transport rejection, HTTP503, invalid JSON, invalid schema; failed-version stability over 100 updates and retry on version change",
+  "productionChanged": false,
+  "committed": false
+}

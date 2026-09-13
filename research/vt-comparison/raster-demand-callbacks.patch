@@ -1,0 +1,21 @@
+--- a/packages/renderer-webgl/src/virtual-texture/automatic-page-source.ts
++++ b/packages/renderer-webgl/src/virtual-texture/automatic-page-source.ts
+@@ -354,11 +354,13 @@
+   let demand: readonly VirtualTexturePageId[] = [];
+   return {
+     manifest,
+-    hasCachedPage: (page) => detailPages?.hasCachedPage?.(page) ?? false,
+-    setDemand: (pages) => {
+-      demand = pages;
+-      detailPages?.setDemand?.(pages);
+-    },
++    ...(size === undefined ? {
++      hasCachedPage: (page: VirtualTexturePageId) => detailPages?.hasCachedPage?.(page) ?? false,
++      setDemand: (pages: readonly VirtualTexturePageId[]) => {
++        demand = pages;
++        detailPages?.setDemand?.(pages);
++      },
++    } : {}),
+     ...(preview.kind !== undefined ? {} : { readPreview: async (page: VirtualTexturePageId, signal: AbortSignal) => {
+       if (closed || signal.aborted) throw new DOMException("Texture preview was aborted", "AbortError");
+       return renderAutomaticPage(manifest, sampler, preview.source as CanvasImageSource,

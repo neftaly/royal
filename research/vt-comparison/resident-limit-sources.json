@@ -1,0 +1,10 @@
+{
+  "packages/renderer-webgl/src/virtual-texture/runtime.ts": {
+    "before": "32316fcbc7a317e6e878db5a15e27bbcfb87e6b63a6f18731db11586b9c52d96",
+    "after": "b6573774a9ac93f9bd6eff1c9a113faab2e1b392a1e1a2061d604dd1f2337ec1"
+  },
+  "packages/renderer-webgl/src/virtual-texture/residency.ts": {
+    "before": "d5aa2bd9224a7244a4915d7fae7be73af15036acd44e7e4c19a8483be64813aa",
+    "after": "78b501474b674366564d1223e6386602c714cb2feaa27e7ddf677f04d1a8a49a"
+  }
+}

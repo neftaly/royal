@@ -1,0 +1,331 @@
+{
+  "results": [
+    {
+      "vk": 0,
+      "linearMip": 0,
+      "width": 512,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 0,
+      "linearMip": 0,
+      "width": 180,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 0,
+      "linearMip": 0,
+      "width": 128,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 0,
+      "linearMip": 1,
+      "width": 512,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 0,
+      "linearMip": 1,
+      "width": 180,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 0,
+      "linearMip": 1,
+      "width": 128,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 166,
+      "linearMip": 0,
+      "width": 512,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 166,
+      "linearMip": 0,
+      "width": 180,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 166,
+      "linearMip": 0,
+      "width": 128,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 166,
+      "linearMip": 1,
+      "width": 512,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 166,
+      "linearMip": 1,
+      "width": 180,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 166,
+      "linearMip": 1,
+      "width": 128,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 172,
+      "linearMip": 0,
+      "width": 512,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 172,
+      "linearMip": 0,
+      "width": 180,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 172,
+      "linearMip": 0,
+      "width": 128,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 172,
+      "linearMip": 1,
+      "width": 512,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 172,
+      "linearMip": 1,
+      "width": 180,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "vk": 172,
+      "linearMip": 1,
+      "width": 128,
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "expected": [
+        255,
+        0,
+        0,
+        255
+      ]
+    }
+  ],
+  "blend": false,
+  "note": "Production VT shader with red fine pages and either missing coarse entries or blue coarse pages in blend mode. Isolated GPU sampling, not runtime scheduling, scene timing or GC measurement.",
+  "gc": {
+    "events": 0,
+    "totalMs": 0,
+    "maxMs": 0,
+    "heapBefore": {
+      "usedSize": 666972,
+      "totalSize": 1310720,
+      "embedderHeapUsedSize": 328224,
+      "backingStorageSize": 14986
+    },
+    "heapAfter": {
+      "usedSize": 717964,
+      "totalSize": 1572864,
+      "embedderHeapUsedSize": 329024,
+      "backingStorageSize": 15264
+    },
+    "note": "Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

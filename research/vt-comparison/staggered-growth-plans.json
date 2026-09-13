@@ -1,0 +1,13 @@
+[
+  {
+    "demand": 168,
+    "targetSlots": 240,
+    "currentSlots": 135,
+    "currentBytes": 9408960,
+    "plannedSlots": 126,
+    "plannedBytes": 8781696,
+    "availableBytes": 8797506,
+    "allowanceBytes": 16789152,
+    "shrinking": false
+  }
+]

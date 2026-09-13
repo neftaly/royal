@@ -1,0 +1,637 @@
+{
+  "results": [
+    {
+      "name": "steady-svg",
+      "minFilter": "moving",
+      "copies": 16,
+      "frames": 600,
+      "submissionMs": {
+        "median": 0.5,
+        "p95": 0.8999999761581421,
+        "max": 1.100000023841858
+      },
+      "frameIntervalMs": {
+        "median": 16.699999999999818,
+        "p95": 16.799999999999272,
+        "max": 16.80000000000109
+      },
+      "before": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 12405888,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 336,
+        "admittedPages": 80,
+        "unresidentPages": 0,
+        "automaticCandidates": 16,
+        "automaticDecodedBytes": 4194304,
+        "automaticIneligible": 0,
+        "automaticResources": 16,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 80,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 80,
+        "uploadedPages": 80,
+        "uploadBudgetBytes": 33554432
+      },
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 12405888,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 336,
+        "admittedPages": 80,
+        "unresidentPages": 0,
+        "automaticCandidates": 16,
+        "automaticDecodedBytes": 4194304,
+        "automaticIneligible": 0,
+        "automaticResources": 16,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 80,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 80,
+        "uploadedPages": 80,
+        "uploadBudgetBytes": 33554432
+      },
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/idle-scan-after-images/steady-svg-moving.png"
+    }
+  ],
+  "note": "Warm-up, snapshots, pixel readback and screenshots are outside the measurement window. Measured frames use camera resource commits or explicit invalidation; One reusable rAF callback and timing calls remain harness overhead. CPU/GPU source owners remain alive through heap measurement.",
+  "gc": {
+    "events": 11,
+    "totalMs": 9.088000000000001,
+    "maxMs": 3.455,
+    "heapBefore": {
+      "usedSize": 3328836,
+      "totalSize": 3932160,
+      "embedderHeapUsedSize": 1007848,
+      "backingStorageSize": 2148065
+    },
+    "heapAfter": {
+      "usedSize": 3561712,
+      "totalSize": 3932160,
+      "embedderHeapUsedSize": 992064,
+      "backingStorageSize": 2148065
+    },
+    "note": "Warm-up and final diagnostics are excluded from the trace. Forced-GC heaps retain the live scene before/after measurement."
+  },
+  "profile": {
+    "cpu": [
+      {
+        "name": "(program)",
+        "url": "",
+        "hits": 5044,
+        "original": {}
+      },
+      {
+        "name": "(idle)",
+        "url": "",
+        "hits": 3811,
+        "original": {}
+      },
+      {
+        "name": "R",
+        "url": "http://127.0.0.1:5186/assets/shader-source-LbpOKHhM.js",
+        "hits": 27,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 176,
+          "column": 6,
+          "name": null
+        }
+      },
+      {
+        "name": "update",
+        "url": "http://127.0.0.1:5186/assets/runtime-C8y8hZ8S.js",
+        "hits": 22,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 746,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "Y",
+        "url": "http://127.0.0.1:5186/assets/shader-source-LbpOKHhM.js",
+        "hits": 13,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 384,
+          "column": 6,
+          "name": null
+        }
+      },
+      {
+        "name": "z",
+        "url": "http://127.0.0.1:5186/assets/shader-source-LbpOKHhM.js",
+        "hits": 13,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 197,
+          "column": 6,
+          "name": null
+        }
+      },
+      {
+        "name": "(garbage collector)",
+        "url": "",
+        "hits": 13,
+        "original": {}
+      },
+      {
+        "name": "L",
+        "url": "http://127.0.0.1:5186/assets/shader-source-LbpOKHhM.js",
+        "hits": 12,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 112,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "i",
+        "url": "http://127.0.0.1:5186/assets/steady-DQx16vNk.js",
+        "hits": 11,
+        "original": {
+          "source": "http://127.0.0.1:5186/research/vt-comparison/steady.ts",
+          "line": 52,
+          "column": 18,
+          "name": null
+        }
+      },
+      {
+        "name": "X",
+        "url": "http://127.0.0.1:5186/assets/shader-source-LbpOKHhM.js",
+        "hits": 10,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 436,
+          "column": 6,
+          "name": null
+        }
+      },
+      {
+        "name": "S",
+        "url": "http://127.0.0.1:5186/assets/native-storage-iRY9lKjw.js",
+        "hits": 10,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/surface/surface-visibility.ts",
+          "line": 93,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "drawElements",
+        "url": "",
+        "hits": 9,
+        "original": {}
+      },
+      {
+        "name": "uniform4fv",
+        "url": "",
+        "hits": 8,
+        "original": {}
+      },
+      {
+        "name": "clear",
+        "url": "",
+        "hits": 8,
+        "original": {}
+      },
+      {
+        "name": "requestAnimationFrame",
+        "url": "",
+        "hits": 8,
+        "original": {}
+      },
+      {
+        "name": "drawViews",
+        "url": "http://127.0.0.1:5186/assets/canvas-root-BfsMHGuH.js",
+        "hits": 7,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+          "line": 900,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "#Ie",
+        "url": "http://127.0.0.1:5186/assets/canvas-root-BfsMHGuH.js",
+        "hits": 7,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/surface/surface-gpu-owner.ts",
+          "line": 1386,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "applySurfaceDraw",
+        "url": "http://127.0.0.1:5186/assets/canvas-root-BfsMHGuH.js",
+        "hits": 7,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/webgl/state-owner.ts",
+          "line": 129,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "$",
+        "url": "http://127.0.0.1:5186/assets/shader-source-LbpOKHhM.js",
+        "hits": 7,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 693,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "#V",
+        "url": "http://127.0.0.1:5186/assets/runtime-C8y8hZ8S.js",
+        "hits": 7,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 1003,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "requestAnimationFrame",
+        "url": "",
+        "hits": 7,
+        "original": {}
+      },
+      {
+        "name": "#K",
+        "url": "http://127.0.0.1:5186/assets/runtime-C8y8hZ8S.js",
+        "hits": 6,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 1065,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "#rt",
+        "url": "http://127.0.0.1:5186/assets/canvas-root-BfsMHGuH.js",
+        "hits": 5,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/runtime/canvas-root.ts",
+          "line": 1809,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "uniform4fv",
+        "url": "",
+        "hits": 5,
+        "original": {}
+      },
+      {
+        "name": "#B",
+        "url": "http://127.0.0.1:5186/assets/runtime-C8y8hZ8S.js",
+        "hits": 5,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 927,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "O",
+        "url": "http://127.0.0.1:5186/assets/runtime-C8y8hZ8S.js",
+        "hits": 5,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/pool-budget.ts",
+          "line": 8,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "bindSampler",
+        "url": "",
+        "hits": 4,
+        "original": {}
+      },
+      {
+        "name": "x",
+        "url": "http://127.0.0.1:5186/assets/shader-source-LbpOKHhM.js",
+        "hits": 4,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/manifest.ts",
+          "line": 71,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "w",
+        "url": "http://127.0.0.1:5186/assets/steady-DQx16vNk.js",
+        "hits": 4,
+        "original": {
+          "source": "http://127.0.0.1:5186/research/vt-comparison/steady.ts",
+          "line": 19,
+          "column": 14,
+          "name": null
+        }
+      },
+      {
+        "name": "",
+        "url": "http://127.0.0.1:5186/assets/canvas-root-BfsMHGuH.js",
+        "hits": 4,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+          "line": 129,
+          "column": 22,
+          "name": null
+        }
+      }
+    ],
+    "allocations": [
+      {
+        "name": "add",
+        "url": "",
+        "bytes": 2532820,
+        "original": {}
+      },
+      {
+        "name": "add",
+        "url": "",
+        "bytes": 2204540,
+        "original": {}
+      },
+      {
+        "name": "$",
+        "url": "http://127.0.0.1:5186/assets/shader-source-LbpOKHhM.js",
+        "bytes": 655576,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 693,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "hypot",
+        "url": "",
+        "bytes": 655476,
+        "original": {}
+      },
+      {
+        "name": "add",
+        "url": "",
+        "bytes": 623500,
+        "original": {}
+      },
+      {
+        "name": "I",
+        "url": "http://127.0.0.1:5186/assets/shader-source-LbpOKHhM.js",
+        "bytes": 623160,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 100,
+          "column": 42,
+          "name": null
+        }
+      },
+      {
+        "name": "S",
+        "url": "http://127.0.0.1:5186/assets/native-storage-iRY9lKjw.js",
+        "bytes": 491616,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/surface/surface-visibility.ts",
+          "line": 93,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "O",
+        "url": "http://127.0.0.1:5186/assets/runtime-C8y8hZ8S.js",
+        "bytes": 458892,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/pool-budget.ts",
+          "line": 8,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "add",
+        "url": "",
+        "bytes": 426600,
+        "original": {}
+      },
+      {
+        "name": "update",
+        "url": "http://127.0.0.1:5186/assets/runtime-C8y8hZ8S.js",
+        "bytes": 393568,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 746,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "add",
+        "url": "",
+        "bytes": 361860,
+        "original": {}
+      },
+      {
+        "name": "O",
+        "url": "http://127.0.0.1:5186/assets/runtime-C8y8hZ8S.js",
+        "bytes": 360560,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/pool-budget.ts",
+          "line": 8,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "next",
+        "url": "",
+        "bytes": 360560,
+        "original": {}
+      },
+      {
+        "name": "S",
+        "url": "http://127.0.0.1:5186/assets/native-storage-iRY9lKjw.js",
+        "bytes": 327744,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/surface/surface-visibility.ts",
+          "line": 93,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "next",
+        "url": "",
+        "bytes": 295000,
+        "original": {}
+      },
+      {
+        "name": "L",
+        "url": "http://127.0.0.1:5186/assets/shader-source-LbpOKHhM.js",
+        "bytes": 262380,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 112,
+          "column": 13,
+          "name": null
+        }
+      },
+      {
+        "name": "hypot",
+        "url": "",
+        "bytes": 262188,
+        "original": {}
+      },
+      {
+        "name": "next",
+        "url": "",
+        "bytes": 229440,
+        "original": {}
+      },
+      {
+        "name": "set",
+        "url": "",
+        "bytes": 197120,
+        "original": {}
+      },
+      {
+        "name": "#z",
+        "url": "http://127.0.0.1:5186/assets/runtime-C8y8hZ8S.js",
+        "bytes": 196800,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 892,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "",
+        "url": "http://127.0.0.1:5186/assets/runtime-C8y8hZ8S.js",
+        "bytes": 196696,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 803,
+          "column": 97,
+          "name": null
+        }
+      },
+      {
+        "name": "update",
+        "url": "http://127.0.0.1:5186/assets/runtime-C8y8hZ8S.js",
+        "bytes": 196692,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 746,
+          "column": 2,
+          "name": null
+        }
+      },
+      {
+        "name": "s",
+        "url": "http://127.0.0.1:5186/assets/camera-resource-BIppcCOM.js",
+        "bytes": 196668,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-core/src/camera-resource.ts",
+          "line": 101,
+          "column": 6,
+          "name": null
+        }
+      },
+      {
+        "name": "next",
+        "url": "",
+        "bytes": 163900,
+        "original": {}
+      },
+      {
+        "name": "",
+        "url": "http://127.0.0.1:5186/assets/runtime-C8y8hZ8S.js",
+        "bytes": 131128,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/runtime.ts",
+          "line": 803,
+          "column": 97,
+          "name": null
+        }
+      },
+      {
+        "name": "next",
+        "url": "",
+        "bytes": 131120,
+        "original": {}
+      },
+      {
+        "name": "next",
+        "url": "",
+        "bytes": 131120,
+        "original": {}
+      },
+      {
+        "name": "X",
+        "url": "http://127.0.0.1:5186/assets/shader-source-LbpOKHhM.js",
+        "bytes": 131100,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/virtual-texture/demand.ts",
+          "line": 436,
+          "column": 6,
+          "name": null
+        }
+      },
+      {
+        "name": "",
+        "url": "http://127.0.0.1:5186/assets/canvas-root-BfsMHGuH.js",
+        "bytes": 104792,
+        "original": {
+          "source": "http://127.0.0.1:5186/packages/renderer-webgl/src/frame/frame-clock-owner.ts",
+          "line": 129,
+          "column": 22,
+          "name": null
+        }
+      },
+      {
+        "name": "add",
+        "url": "",
+        "bytes": 98940,
+        "original": {}
+      }
+    ],
+    "cpuPath": "research/vt-comparison/idle-scan-after.cpuprofile",
+    "heapPath": "research/vt-comparison/idle-scan-after.heapprofile",
+    "note": "Sampling adds overhead; use profiles for attribution, not frame-rate comparisons. Source locations require VT_SOURCEMAP=1 during the client build."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

@@ -1,0 +1,120 @@
+{
+  "results": [
+    {
+      "name": "steady-mixed",
+      "minFilter": "moving",
+      "copies": 4,
+      "budgetMiB": 16,
+      "nativeFirst": true,
+      "frames": 120,
+      "submissionMs": {
+        "median": 0.5,
+        "p95": 0.7000000476837158,
+        "max": 0.800000011920929
+      },
+      "frameIntervalMs": {
+        "median": 16.699999999999818,
+        "p95": 16.799999999999727,
+        "max": 16.800000000000182
+      },
+      "before": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 1115136,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 10,
+        "admittedPages": 10,
+        "unresidentPages": 0,
+        "automaticCandidates": 2,
+        "automaticDecodedBytes": 524288,
+        "automaticIneligible": 0,
+        "automaticResources": 2,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 10,
+        "pageRequests": 22,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 10,
+        "uploadedPages": 12,
+        "uploadBudgetBytes": 33554432
+      },
+      "beforeContextLoss": {
+        "admittedUploadBytes": 139392,
+        "atlasBytes": 1254528,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 10,
+        "admittedPages": 2,
+        "unresidentPages": 0,
+        "automaticCandidates": 2,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 2,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 10,
+        "pageRequests": 12,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 2,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      },
+      "nativeFailures": 10,
+      "nativeFailureMode": "height",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 1115136,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 10,
+        "admittedPages": 10,
+        "unresidentPages": 0,
+        "automaticCandidates": 2,
+        "automaticDecodedBytes": 524288,
+        "automaticIneligible": 0,
+        "automaticResources": 2,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 10,
+        "pageRequests": 22,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 10,
+        "uploadedPages": 12,
+        "uploadBudgetBytes": 33554432
+      },
+      "pixel": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/native-contract-height-native-first-images/steady-mixed-moving.png"
+    }
+  ],
+  "note": "Warm-up, snapshots, pixel readback and screenshots are outside the measurement window. Measured frames use camera resource commits or explicit invalidation; One reusable rAF callback and timing calls remain harness overhead. CPU/GPU source owners remain alive through heap measurement.",
+  "gc": {
+    "events": 1,
+    "totalMs": 0.727,
+    "maxMs": 0.727,
+    "heapBefore": {
+      "usedSize": 2907252,
+      "totalSize": 3670016,
+      "embedderHeapUsedSize": 558528,
+      "backingStorageSize": 672256
+    },
+    "heapAfter": {
+      "usedSize": 3011264,
+      "totalSize": 3670016,
+      "embedderHeapUsedSize": 558528,
+      "backingStorageSize": 672256
+    },
+    "note": "Warm-up and final diagnostics are excluded from the trace. Forced-GC heaps retain the live scene before/after measurement."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

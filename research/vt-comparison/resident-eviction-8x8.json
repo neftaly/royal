@@ -1,0 +1,107 @@
+{
+  "results": [
+    {
+      "name": "ktx2-astc-8x8",
+      "minFilter": "capped-eviction",
+      "completed": 192,
+      "pageReads": 227,
+      "neighborReads": 2,
+      "paddingBytes": 0,
+      "liveBodies": 0,
+      "trackedBodies": 32,
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33530112,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 3,
+        "admittedPages": 3,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 227,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 3,
+        "uploadedPages": 227,
+        "uploadBudgetBytes": 33554432
+      },
+      "pixels": [
+        [
+          255,
+          0,
+          0,
+          255
+        ],
+        [
+          0,
+          255,
+          0,
+          255
+        ],
+        [
+          255,
+          255,
+          0,
+          255
+        ]
+      ]
+    }
+  ],
+  "note": "32 warm-up evictions, then 32 per window, using one scene and an imperative transform ref. A fixed 32-entry WeakRef ring tracks response arrayBuffers; fixtures, fetch wrappers, promises, snapshots and rAF add harness overhead. Forced-GC windows retain a live three-page scene. No timing claim or unbounded region-visit claim.",
+  "retention": {
+    "windows": 6,
+    "heaps": [
+      {
+        "usedSize": 2159964,
+        "totalSize": 2621440,
+        "embedderHeapUsedSize": 428864,
+        "backingStorageSize": 478787
+      },
+      {
+        "usedSize": 2244464,
+        "totalSize": 2883584,
+        "embedderHeapUsedSize": 428776,
+        "backingStorageSize": 478787
+      },
+      {
+        "usedSize": 2277960,
+        "totalSize": 2883584,
+        "embedderHeapUsedSize": 428776,
+        "backingStorageSize": 478787
+      },
+      {
+        "usedSize": 2389276,
+        "totalSize": 2883584,
+        "embedderHeapUsedSize": 428776,
+        "backingStorageSize": 478787
+      },
+      {
+        "usedSize": 2415916,
+        "totalSize": 2883584,
+        "embedderHeapUsedSize": 428776,
+        "backingStorageSize": 478787
+      },
+      {
+        "usedSize": 2423256,
+        "totalSize": 2883584,
+        "embedderHeapUsedSize": 428776,
+        "backingStorageSize": 478787
+      },
+      {
+        "usedSize": 2435876,
+        "totalSize": 2883584,
+        "embedderHeapUsedSize": 428776,
+        "backingStorageSize": 478787
+      }
+    ],
+    "note": "One preparation across all windows; per-window behavior belongs to the fixture. Forced GC between windows, without tracing or sampling. Finish-hook diagnostics run after the last heap sample."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

@@ -1,0 +1,6 @@
+{
+  "packages/renderer-webgl/src/virtual-texture/runtime-contract.ts": {
+    "before": "3f595e6437a129b93ad9fad5106518652dc77fcb43559c5c3f334293d79e8fd1",
+    "after": "516f9ec2a715fafd16c05ae264c18b3a1d19a1d0382c523d84ce673c17560cc5"
+  }
+}

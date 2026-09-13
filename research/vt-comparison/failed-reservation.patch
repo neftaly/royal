@@ -1,0 +1,36 @@
+--- a/packages/renderer-webgl/src/virtual-texture/runtime.ts
++++ b/packages/renderer-webgl/src/virtual-texture/runtime.ts
+@@ -170,7 +170,8 @@
+ 
+ export type AutomaticVirtualTextureRuntimeOptions = Readonly<{
+   acquireDecoded(asset: TextureSourceRef): DecodedTextureLease | undefined;
+-  decoded(asset: TextureSourceRef): DecodedTextureSource | undefined;
++  /** Undefined while pending; null after terminal decode failure. */
++  decoded(asset: TextureSourceRef): DecodedTextureSource | null | undefined;
+   onChanged(presentationChanged: boolean): void;
+ }>;
+ 
+@@ -635,8 +636,9 @@
+         continue;
+       }
+       const decoded = this.#automatic.decoded(asset);
+-      if (decoded === undefined) {
+-        this.#automaticWaiting += 1;
++      if (decoded == null) {
++        if (decoded === undefined) this.#automaticWaiting += 1;
++        else this.#automaticIneligible += 1;
+         continue;
+       }
+       const svg = automaticVirtualTextureIsSvg(decoded);
+--- a/packages/renderer-webgl/src/runtime/canvas-root.ts
++++ b/packages/renderer-webgl/src/runtime/canvas-root.ts
+@@ -1750,7 +1750,8 @@
+         this.#asyncPreparation.runForeground,
+         {
+           acquireDecoded: (asset) => this.#textureAssets.acquireDecoded(asset),
+-          decoded: (asset) => this.#textureAssets.decoded(asset),
++          decoded: (asset) => this.#textureAssets.decoded(asset)
++            ?? (this.#textureAssets.getSourceSnapshot(asset).status === "error" ? null : undefined),
+           onChanged: (presentationChanged) => {
+             if (!this.#disposed) {
+               if (presentationChanged) this.#invalidatePresentation();

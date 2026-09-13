@@ -1,0 +1,1103 @@
+{
+  "sourceHashes": {
+    "before": "98a2a174013f3bd6363c0d36232a136d9c6ab4ae5312cd87bb3ea8c9e5d3f4b3",
+    "after": "a70aba78b53dab29bc3d2ee9492b68a3ebe2cd23fa31e45b6b2c0f2c7c9ce774"
+  },
+  "node": "v24.12.0",
+  "nodeOptions": [
+    "--expose-gc"
+  ],
+  "profile": false,
+  "baseline": "/tmp/royal-vt-before-bounded-tiles.ts",
+  "results": [
+    {
+      "cpuMs": 2230.838,
+      "elapsedMs": 2223.49438,
+      "hostLoad": [
+        2.08,
+        1.64,
+        1.6
+      ],
+      "round": 0,
+      "grid": false,
+      "version": "before",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.0053700000003118475,
+            "p95Ms": 0.005635999999867636
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.005024999999932334,
+            "p95Ms": 0.005204999999932625
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.07585300000027928,
+            "p95Ms": 0.08428800000001502
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.07991200000014942,
+            "p95Ms": 0.08818499999961205
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.7083190000003015,
+            "p95Ms": 9.116863999999623
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.716343999999481,
+            "p95Ms": 9.132141999999476
+          }
+        ]
+      },
+      "heapDelta": 4503040,
+      "gcEvents": 0,
+      "gcMs": 0
+    },
+    {
+      "cpuMs": 2216.972,
+      "elapsedMs": 2210.8372210000007,
+      "hostLoad": [
+        2.08,
+        1.64,
+        1.6
+      ],
+      "round": 0,
+      "grid": false,
+      "version": "after",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.0053219999999782885,
+            "p95Ms": 0.009697999999843887
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.005063999999947555,
+            "p95Ms": 0.005192999999962922
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.0854220000001078,
+            "p95Ms": 0.09615699999994831
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.08527300000059768,
+            "p95Ms": 0.09771299999920302
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.722882000000027,
+            "p95Ms": 8.732751000000462
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.722658000000592,
+            "p95Ms": 8.21755099999973
+          }
+        ]
+      },
+      "heapDelta": 4496184,
+      "gcEvents": 0,
+      "gcMs": 0
+    },
+    {
+      "cpuMs": 1484.45,
+      "elapsedMs": 1459.3932069999992,
+      "hostLoad": [
+        2.07,
+        1.65,
+        1.6
+      ],
+      "round": 0,
+      "grid": true,
+      "version": "before",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.017439000000194937,
+            "p95Ms": 0.021140999999261112
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.028298999999606167,
+            "p95Ms": 0.03756299999986368
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.07969800000046234,
+            "p95Ms": 0.47091700000055425
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.06320599999980914,
+            "p95Ms": 0.0715040000004592
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.872161000000233,
+            "p95Ms": 5.527007999999114
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.976346999999805,
+            "p95Ms": 6.099889999999505
+          }
+        ]
+      },
+      "heapDelta": 7442616,
+      "gcEvents": 3,
+      "gcMs": 0.5735949873924255
+    },
+    {
+      "cpuMs": 1420.782,
+      "elapsedMs": 1397.1992499999997,
+      "hostLoad": [
+        2.07,
+        1.65,
+        1.6
+      ],
+      "round": 0,
+      "grid": true,
+      "version": "after",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.017932000000655535,
+            "p95Ms": 0.01987599999847589
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.027579000001423992,
+            "p95Ms": 0.03759099999842874
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.1358730000010837,
+            "p95Ms": 0.46196400000008
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.05975799999941955,
+            "p95Ms": 0.06584900000052585
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.7595949999995355,
+            "p95Ms": 5.673194000000876
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.712790999999925,
+            "p95Ms": 5.7875719999992725
+          }
+        ]
+      },
+      "heapDelta": 8386320,
+      "gcEvents": 3,
+      "gcMs": 0.5855349898338318
+    },
+    {
+      "cpuMs": 2241.675,
+      "elapsedMs": 2238.1134249999996,
+      "hostLoad": [
+        2.07,
+        1.65,
+        1.6
+      ],
+      "round": 1,
+      "grid": false,
+      "version": "after",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.007815999999365886,
+            "p95Ms": 0.010279999998601852
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.00453400000151305,
+            "p95Ms": 0.0049189999990630895
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.08034999999836145,
+            "p95Ms": 0.10160300000097777
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.07310700000016368,
+            "p95Ms": 0.07853900000009162
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.654868999999962,
+            "p95Ms": 9.12060300000121
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.578567000000476,
+            "p95Ms": 9.629445000000487
+          }
+        ]
+      },
+      "heapDelta": 3482952,
+      "gcEvents": 0,
+      "gcMs": 0
+    },
+    {
+      "cpuMs": 2193.206,
+      "elapsedMs": 2170.0046440000006,
+      "hostLoad": [
+        2.15,
+        1.67,
+        1.61
+      ],
+      "round": 1,
+      "grid": false,
+      "version": "before",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.03285899999900721,
+            "p95Ms": 0.0382949999984703
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.020184000000881497,
+            "p95Ms": 0.025778999999602092
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.09159899999940535,
+            "p95Ms": 0.1980119999989256
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.07920700000067882,
+            "p95Ms": 0.08974899999884656
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.494958999999653,
+            "p95Ms": 8.434147999998459
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.551524000000427,
+            "p95Ms": 8.101730000000316
+          }
+        ]
+      },
+      "heapDelta": 8067944,
+      "gcEvents": 0,
+      "gcMs": 0
+    },
+    {
+      "cpuMs": 1430.171,
+      "elapsedMs": 1406.530050999998,
+      "hostLoad": [
+        2.15,
+        1.67,
+        1.61
+      ],
+      "round": 1,
+      "grid": true,
+      "version": "after",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.019527000000380212,
+            "p95Ms": 0.02376399999957357
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.011980999999650521,
+            "p95Ms": 0.013377999999647727
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.12738100000024133,
+            "p95Ms": 0.15302499999961583
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.06132699999943725,
+            "p95Ms": 0.0744460000005347
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.848818000000392,
+            "p95Ms": 5.904007000001002
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.789608000002772,
+            "p95Ms": 5.214148999999452
+          }
+        ]
+      },
+      "heapDelta": 1667320,
+      "gcEvents": 2,
+      "gcMs": 0.49913495779037476
+    },
+    {
+      "cpuMs": 1373.411,
+      "elapsedMs": 1367.3838649999998,
+      "hostLoad": [
+        2.22,
+        1.7,
+        1.62
+      ],
+      "round": 1,
+      "grid": true,
+      "version": "before",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.005130999998073094,
+            "p95Ms": 0.009562999999616295
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.004354000000603264,
+            "p95Ms": 0.007783999997627689
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.06065400000079535,
+            "p95Ms": 0.06919899999775225
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.06333400000221445,
+            "p95Ms": 0.07289600000149221
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.741089999999531,
+            "p95Ms": 5.319761000002472
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.666697000000568,
+            "p95Ms": 5.062270000002172
+          }
+        ]
+      },
+      "heapDelta": 7319592,
+      "gcEvents": 0,
+      "gcMs": 0
+    },
+    {
+      "cpuMs": 2253.023,
+      "elapsedMs": 2233.516501000002,
+      "hostLoad": [
+        2.22,
+        1.7,
+        1.62
+      ],
+      "round": 2,
+      "grid": false,
+      "version": "before",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.018851999997423263,
+            "p95Ms": 0.01959999999962747
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.021532999999180902,
+            "p95Ms": 0.025250000002415618
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.09256200000163517,
+            "p95Ms": 0.19149000000106753
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.08200600000054692,
+            "p95Ms": 0.09264400000029127
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.751541000001453,
+            "p95Ms": 8.791468999999779
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.704938999999285,
+            "p95Ms": 8.752205999997386
+          }
+        ]
+      },
+      "heapDelta": 8274248,
+      "gcEvents": 0,
+      "gcMs": 0
+    },
+    {
+      "cpuMs": 2295.155,
+      "elapsedMs": 2271.333123999997,
+      "hostLoad": [
+        2.22,
+        1.7,
+        1.62
+      ],
+      "round": 2,
+      "grid": false,
+      "version": "after",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.019554999998945277,
+            "p95Ms": 0.02287400000204798
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.017682000001514098,
+            "p95Ms": 0.025493000001006294
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.15952499999912106,
+            "p95Ms": 0.20129399999859743
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.09259100000053877,
+            "p95Ms": 0.09964400000171736
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.694545000002108,
+            "p95Ms": 8.589712000000873
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.831226999998762,
+            "p95Ms": 9.524319000000105
+          }
+        ]
+      },
+      "heapDelta": 512112,
+      "gcEvents": 1,
+      "gcMs": 0.29298001527786255
+    },
+    {
+      "cpuMs": 1415.104,
+      "elapsedMs": 1384.9039529999973,
+      "hostLoad": [
+        2.36,
+        1.73,
+        1.63
+      ],
+      "round": 2,
+      "grid": true,
+      "version": "before",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.005137000000104308,
+            "p95Ms": 0.005499000002600951
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.004766000001836801,
+            "p95Ms": 0.005239999998593703
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.07216999999945983,
+            "p95Ms": 0.08132599999953527
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.07191800000146031,
+            "p95Ms": 0.0801370000008319
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.845153000002028,
+            "p95Ms": 5.89708900000187
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.7354360000026645,
+            "p95Ms": 5.203385000000708
+          }
+        ]
+      },
+      "heapDelta": 2133928,
+      "gcEvents": 3,
+      "gcMs": 0.4742230176925659
+    },
+    {
+      "cpuMs": 1421.763,
+      "elapsedMs": 1371.1772259999998,
+      "hostLoad": [
+        2.36,
+        1.73,
+        1.63
+      ],
+      "round": 2,
+      "grid": true,
+      "version": "after",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.019677000000228873,
+            "p95Ms": 0.020663999999669613
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.012698000002274057,
+            "p95Ms": 0.018948999997519422
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.13762499999938882,
+            "p95Ms": 0.22333100000105333
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.06256799999755458,
+            "p95Ms": 0.08177699999941979
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.71559900000284,
+            "p95Ms": 5.053232999998727
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.723006000000169,
+            "p95Ms": 5.079155999999784
+          }
+        ]
+      },
+      "heapDelta": 685824,
+      "gcEvents": 9,
+      "gcMs": 1.1876470446586609
+    },
+    {
+      "cpuMs": 2278.462,
+      "elapsedMs": 2274.3323219999984,
+      "hostLoad": [
+        2.36,
+        1.73,
+        1.63
+      ],
+      "round": 3,
+      "grid": false,
+      "version": "after",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.0049849999995785765,
+            "p95Ms": 0.009782999997696606
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.004724000002170214,
+            "p95Ms": 0.006345000001601875
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.0934369999995397,
+            "p95Ms": 0.09842399999979534
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.08855299999777344,
+            "p95Ms": 0.11511199999949895
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.881902000000991,
+            "p95Ms": 9.083599999998114
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.707064999998693,
+            "p95Ms": 9.846817000001465
+          }
+        ]
+      },
+      "heapDelta": 1472128,
+      "gcEvents": 0,
+      "gcMs": 0
+    },
+    {
+      "cpuMs": 2245.272,
+      "elapsedMs": 2221.388364999999,
+      "hostLoad": [
+        2.33,
+        1.74,
+        1.64
+      ],
+      "round": 3,
+      "grid": false,
+      "version": "before",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.019228999997721985,
+            "p95Ms": 0.020646000000851927
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.012162000002717832,
+            "p95Ms": 0.013077999999950407
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.1531650000033551,
+            "p95Ms": 0.18620300000111456
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.07806399999753921,
+            "p95Ms": 0.0913299999992887
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.711981000000378,
+            "p95Ms": 9.730909000001702
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 7.5767740000010235,
+            "p95Ms": 8.593979999997828
+          }
+        ]
+      },
+      "heapDelta": 497744,
+      "gcEvents": 7,
+      "gcMs": 0.9466860890388489
+    },
+    {
+      "cpuMs": 1409.59,
+      "elapsedMs": 1388.178660999998,
+      "hostLoad": [
+        2.33,
+        1.74,
+        1.64
+      ],
+      "round": 3,
+      "grid": true,
+      "version": "after",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.01862000000255648,
+            "p95Ms": 0.02724600000146893
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.016354999999748543,
+            "p95Ms": 0.020942000002833083
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.1260229999970761,
+            "p95Ms": 0.1954440000008617
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.05789100000038161,
+            "p95Ms": 0.06988999999884982
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.7746900000020105,
+            "p95Ms": 5.469389000001684
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.734248000000662,
+            "p95Ms": 5.0556069999984175
+          }
+        ]
+      },
+      "heapDelta": 519384,
+      "gcEvents": 14,
+      "gcMs": 1.741400957107544
+    },
+    {
+      "cpuMs": 1444.907,
+      "elapsedMs": 1423.1348840000028,
+      "hostLoad": [
+        2.33,
+        1.74,
+        1.64
+      ],
+      "round": 3,
+      "grid": true,
+      "version": "before",
+      "report": {
+        "iterations": 120,
+        "results": [
+          {
+            "triangles": 2,
+            "ancestors": "coarsest",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.01827199999752338,
+            "p95Ms": 0.022396000000298955
+          },
+          {
+            "triangles": 2,
+            "ancestors": "all",
+            "pages": 21,
+            "overflow": false,
+            "medianMs": 0.011396000001695938,
+            "p95Ms": 0.01738400000249385
+          },
+          {
+            "triangles": 200,
+            "ancestors": "coarsest",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.1258750000015425,
+            "p95Ms": 0.15824900000006892
+          },
+          {
+            "triangles": 200,
+            "ancestors": "all",
+            "pages": 57,
+            "overflow": false,
+            "medianMs": 0.0596399999994901,
+            "p95Ms": 0.0691819999992731
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "coarsest",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.775314999998955,
+            "p95Ms": 6.391273000001092
+          },
+          {
+            "triangles": 20000,
+            "ancestors": "all",
+            "pages": 85,
+            "overflow": false,
+            "medianMs": 4.896727999999712,
+            "p95Ms": 5.728104000001622
+          }
+        ]
+      },
+      "heapDelta": 1003344,
+      "gcEvents": 15,
+      "gcMs": 1.5282930135726929
+    }
+  ],
+  "note": "Alternating order, four rounds (one when profiling), warmed bundles in one process. Sampling adds overhead; GC counts depend on heap sizing. Each report includes fixture construction; excludes rendering/network/decode/upload. Compare matched geometry and ancestors, not aggregate GC across unlike workloads."
+}

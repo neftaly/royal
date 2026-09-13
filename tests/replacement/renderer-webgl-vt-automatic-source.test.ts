@@ -6,7 +6,7 @@ import {
   automaticVirtualTextureIsSvg,
   createAutomaticRasterPageSource,
   createAutomaticSvgPageSource,
-  createAutomaticSvgPreviewPageSource,
+  createAutomaticPreviewPageSource,
   planAutomaticVirtualTextureAxis,
 } from "../../packages/renderer-webgl/src/virtual-texture/automatic-page-source";
 
@@ -26,6 +26,43 @@ const svgDocument = (attributes = new Map<string, string>()): XMLDocument => ({
 }) as unknown as XMLDocument;
 
 describe("automatic virtual texture page source", () => {
+  it.each(["abort", "close"] as const)("isolates %s during shared lazy raster loading", async (mode) => {
+    const context = { drawImage: vi.fn(), clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
+    const canvas = { getContext: () => context, width: 0, height: 0 };
+    const createElement = vi.fn(() => canvas);
+    vi.stubGlobal("document", { createElement });
+    const close = vi.fn();
+    const authority = { source: {} as ImageBitmap, width: 512, height: 512, close };
+    let resolve!: (value: typeof authority) => void;
+    const pending = new Promise<typeof authority>((done) => { resolve = done; });
+    const preview = { source: {} as ImageBitmap, width: 64, height: 64,
+      preview: { size: { width: 512, height: 512 }, load: () => pending } };
+    const sampler = { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" } as const;
+    const first = createAutomaticPreviewPageSource(preview, sampler, "srgb");
+    const survivor = mode === "abort" ? first : createAutomaticPreviewPageSource(preview, sampler, "srgb");
+    const signal = new AbortController();
+    const page = { mip: 0, x: 0, y: 0 };
+    const cancelled = expect(first.read(page, signal.signal)).rejects.toMatchObject({ name: "AbortError" });
+    const surviving = survivor.read(page, new AbortController().signal);
+    if (mode === "abort") signal.abort();
+    else first.close?.();
+    expect(createElement).not.toHaveBeenCalled();
+    resolve(authority);
+    await cancelled;
+    const decoded = await surviving;
+    expect(decoded?.kind).toBe("image");
+    expect(createElement).toHaveBeenCalledOnce();
+    expect(context.drawImage).toHaveBeenCalled();
+    expect(context.drawImage.mock.calls.every(([image]) => image === authority.source)).toBe(true);
+    expect(close).not.toHaveBeenCalled();
+    decoded?.close();
+    expect([canvas.width, canvas.height]).toEqual([1, 1]);
+    first.close?.();
+    survivor.close?.();
+    // The shared decoded-source owner, not either page source, closes the image.
+    expect(close).not.toHaveBeenCalled();
+  });
+
   it("shares bounded regions of a large target and releases them when demand leaves", async () => {
     const attributes = new Map<string, string>();
     const context = { drawImage: vi.fn(), getImageData: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
@@ -155,7 +192,7 @@ describe("automatic virtual texture page source", () => {
       parsed: { document: svgDocument(), viewBox: [0, 0, 64, 64] as const },
     };
     const load = vi.fn(async () => encoded);
-    const source = createAutomaticSvgPreviewPageSource({ width: 64, height: 64, source: previewImage, svgPreview: { encoded, load } },
+    const source = createAutomaticPreviewPageSource({ width: 64, height: 64, source: previewImage, preview: { encoded, load } },
       { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb");
     const page = await source.read({ mip: source.manifest.mipCount - 1 - level, x: 0, y: 0 }, new AbortController().signal);
     expect(load).toHaveBeenCalledOnce();

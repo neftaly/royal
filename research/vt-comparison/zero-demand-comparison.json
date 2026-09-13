@@ -1,0 +1,396 @@
+{
+  "sourceHashes": {
+    "before": "32316fcbc7a317e6e878db5a15e27bbcfb87e6b63a6f18731db11586b9c52d96",
+    "after": "004b9f53dbc62685635faa22f2358a51bc21583c7ea15de3d31fb9a5e344db07"
+  },
+  "equivalentCases": 10000,
+  "measuredIterations": 50000,
+  "warmupIterations": 10000,
+  "results": [
+    {
+      "version": "before",
+      "existing": false,
+      "emptyFraction": 0,
+      "round": 0,
+      "elapsedMs": 80.74958600000002,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": false,
+      "emptyFraction": 0,
+      "round": 0,
+      "elapsedMs": 78.20229100000006,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": false,
+      "emptyFraction": 0,
+      "round": 1,
+      "elapsedMs": 67.18652199999997,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": false,
+      "emptyFraction": 0,
+      "round": 1,
+      "elapsedMs": 65.57887400000004,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": false,
+      "emptyFraction": 0,
+      "round": 2,
+      "elapsedMs": 61.408066999999846,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": false,
+      "emptyFraction": 0,
+      "round": 2,
+      "elapsedMs": 77.37114500000007,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": false,
+      "emptyFraction": 0,
+      "round": 3,
+      "elapsedMs": 65.76825299999996,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": false,
+      "emptyFraction": 0,
+      "round": 3,
+      "elapsedMs": 76.52005899999995,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": false,
+      "emptyFraction": 0.5,
+      "round": 0,
+      "elapsedMs": 70.44247399999995,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": false,
+      "emptyFraction": 0.5,
+      "round": 0,
+      "elapsedMs": 60.385401,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": false,
+      "emptyFraction": 0.5,
+      "round": 1,
+      "elapsedMs": 46.709879,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": false,
+      "emptyFraction": 0.5,
+      "round": 1,
+      "elapsedMs": 60.06283600000006,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": false,
+      "emptyFraction": 0.5,
+      "round": 2,
+      "elapsedMs": 79.70386099999996,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": false,
+      "emptyFraction": 0.5,
+      "round": 2,
+      "elapsedMs": 71.81449999999995,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": false,
+      "emptyFraction": 0.5,
+      "round": 3,
+      "elapsedMs": 48.844106999999894,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": false,
+      "emptyFraction": 0.5,
+      "round": 3,
+      "elapsedMs": 61.20359099999996,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": false,
+      "emptyFraction": 1,
+      "round": 0,
+      "elapsedMs": 78.44959999999992,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "existing": false,
+      "emptyFraction": 1,
+      "round": 0,
+      "elapsedMs": 44.49879099999998,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "existing": false,
+      "emptyFraction": 1,
+      "round": 1,
+      "elapsedMs": 31.5503920000001,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "existing": false,
+      "emptyFraction": 1,
+      "round": 1,
+      "elapsedMs": 81.7222200000001,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "existing": false,
+      "emptyFraction": 1,
+      "round": 2,
+      "elapsedMs": 60.557034999999814,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "existing": false,
+      "emptyFraction": 1,
+      "round": 2,
+      "elapsedMs": 27.513041000000158,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "existing": false,
+      "emptyFraction": 1,
+      "round": 3,
+      "elapsedMs": 39.24949400000014,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "existing": false,
+      "emptyFraction": 1,
+      "round": 3,
+      "elapsedMs": 76.8549439999997,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "existing": true,
+      "emptyFraction": 0,
+      "round": 0,
+      "elapsedMs": 62.79920399999992,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": true,
+      "emptyFraction": 0,
+      "round": 0,
+      "elapsedMs": 61.36661800000002,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": true,
+      "emptyFraction": 0,
+      "round": 1,
+      "elapsedMs": 82.45803699999988,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": true,
+      "emptyFraction": 0,
+      "round": 1,
+      "elapsedMs": 78.82871599999999,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": true,
+      "emptyFraction": 0,
+      "round": 2,
+      "elapsedMs": 63.08477000000039,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": true,
+      "emptyFraction": 0,
+      "round": 2,
+      "elapsedMs": 60.74278499999991,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": true,
+      "emptyFraction": 0,
+      "round": 3,
+      "elapsedMs": 77.82610400000021,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": true,
+      "emptyFraction": 0,
+      "round": 3,
+      "elapsedMs": 82.91527099999985,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": true,
+      "emptyFraction": 0.5,
+      "round": 0,
+      "elapsedMs": 64.21601599999985,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": true,
+      "emptyFraction": 0.5,
+      "round": 0,
+      "elapsedMs": 65.46940600000016,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": true,
+      "emptyFraction": 0.5,
+      "round": 1,
+      "elapsedMs": 89.025576,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": true,
+      "emptyFraction": 0.5,
+      "round": 1,
+      "elapsedMs": 94.45378099999971,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": true,
+      "emptyFraction": 0.5,
+      "round": 2,
+      "elapsedMs": 65.63427599999977,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": true,
+      "emptyFraction": 0.5,
+      "round": 2,
+      "elapsedMs": 65.59900400000015,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": true,
+      "emptyFraction": 0.5,
+      "round": 3,
+      "elapsedMs": 87.7817640000003,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": true,
+      "emptyFraction": 0.5,
+      "round": 3,
+      "elapsedMs": 89.39265100000057,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": true,
+      "emptyFraction": 1,
+      "round": 0,
+      "elapsedMs": 62.0702739999997,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": true,
+      "emptyFraction": 1,
+      "round": 0,
+      "elapsedMs": 64.41732300000058,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": true,
+      "emptyFraction": 1,
+      "round": 1,
+      "elapsedMs": 86.13510399999996,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": true,
+      "emptyFraction": 1,
+      "round": 1,
+      "elapsedMs": 83.84937799999989,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": true,
+      "emptyFraction": 1,
+      "round": 2,
+      "elapsedMs": 61.365342000000055,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": true,
+      "emptyFraction": 1,
+      "round": 2,
+      "elapsedMs": 71.47263599999951,
+      "checksum": 50000
+    },
+    {
+      "version": "after",
+      "existing": true,
+      "emptyFraction": 1,
+      "round": 3,
+      "elapsedMs": 90.05357300000014,
+      "checksum": 50000
+    },
+    {
+      "version": "before",
+      "existing": true,
+      "emptyFraction": 1,
+      "round": 3,
+      "elapsedMs": 86.48352700000032,
+      "checksum": 50000
+    }
+  ],
+  "note": "Extracted runtime aggregation blocks, TypeScript transpiled. Refresh, atlas key and page-byte functions stubbed equally; allocator returns requests and budget. Excludes rendering, asynchronous work and GPU execution."
+}

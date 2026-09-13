@@ -209,8 +209,10 @@ export const createTextureAssetReader = (
         ...(sourceEncoding === undefined ? {} : { sourceEncoding }),
       };
     };
-    const raster = (source: StaticTextureImageSource): TextureLeafSourceRef => imagePlan.astc === undefined
-      ? readImage(source) : { ...readImage(source), astc: readImage(imagePlan.astc) };
+    const raster = (source: StaticTextureImageSource): TextureSourceRef => imagePlan.astc === undefined
+      || (imagePlan.rasterPreview !== undefined && !svgPreview)
+      ? readImage(source) : { ...readImage(source), astc: readImage(imagePlan.astc),
+        ...(imagePlan.rasterPreview === undefined ? {} : { rasterPreview: imagePlan.rasterPreview }) };
     const primary = imagePlan.fallback === undefined ? raster(imagePlan.primary) : readImage(imagePlan.primary);
     const asset: TextureSourceRef = imagePlan.fallback === undefined || (imagePlan.requiredSvg && !svgPreview)
       ? primary

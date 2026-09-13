@@ -1,0 +1,876 @@
+{
+  "results": [
+    {
+      "name": "ktx2-astc-6x6",
+      "minFilter": "false",
+      "phases": [
+        {
+          "name": "all",
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 4,
+          "reads": 8
+        },
+        {
+          "name": "one-alias",
+          "pixels": [
+            [
+              0,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 4,
+          "reads": 8
+        },
+        {
+          "name": "no-alias",
+          "pixels": [
+            [
+              0,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 4,
+          "reads": 8
+        },
+        {
+          "name": "readded",
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 5,
+          "reads": 10
+        },
+        {
+          "name": "restored",
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 9,
+          "reads": 14
+        }
+      ],
+      "reads": [
+        "/native-identity/0/index.json",
+        "/native-identity/2/index.json",
+        "/native-identity/3/index.json",
+        "/native-identity/4/index.json",
+        "/native-identity/0/0/0/0.ktx2",
+        "/native-identity/2/0/0/0.ktx2",
+        "/native-identity/3/0/0/0.ktx2",
+        "/native-identity/4/0/0/0.ktx2",
+        "/native-identity/0/index.json",
+        "/native-identity/0/0/0/0.ktx2",
+        "/native-identity/2/0/0/0.ktx2",
+        "/native-identity/3/0/0/0.ktx2",
+        "/native-identity/4/0/0/0.ktx2",
+        "/native-identity/0/0/0/0.ktx2"
+      ],
+      "screenshot": "research/vt-comparison/native-identity-gpu-images/ktx2-astc-6x6-false.png"
+    },
+    {
+      "name": "ktx2-astc-6x6",
+      "minFilter": "true",
+      "phases": [
+        {
+          "name": "all",
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 4,
+          "reads": 8
+        },
+        {
+          "name": "one-alias",
+          "pixels": [
+            [
+              0,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 4,
+          "reads": 8
+        },
+        {
+          "name": "no-alias",
+          "pixels": [
+            [
+              0,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 4,
+          "reads": 8
+        },
+        {
+          "name": "readded",
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 5,
+          "reads": 10
+        },
+        {
+          "name": "restored",
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 9,
+          "reads": 14
+        }
+      ],
+      "reads": [
+        "/native-identity/4/index.json",
+        "/native-identity/3/index.json",
+        "/native-identity/2/index.json",
+        "/native-identity/1/index.json",
+        "/native-identity/4/0/0/0.ktx2",
+        "/native-identity/3/0/0/0.ktx2",
+        "/native-identity/2/0/0/0.ktx2",
+        "/native-identity/1/0/0/0.ktx2",
+        "/native-identity/1/index.json",
+        "/native-identity/1/0/0/0.ktx2",
+        "/native-identity/4/0/0/0.ktx2",
+        "/native-identity/3/0/0/0.ktx2",
+        "/native-identity/2/0/0/0.ktx2",
+        "/native-identity/1/0/0/0.ktx2"
+      ],
+      "screenshot": "research/vt-comparison/native-identity-gpu-images/ktx2-astc-6x6-true.png"
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "minFilter": "false",
+      "phases": [
+        {
+          "name": "all",
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 4,
+          "reads": 8
+        },
+        {
+          "name": "one-alias",
+          "pixels": [
+            [
+              0,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 4,
+          "reads": 8
+        },
+        {
+          "name": "no-alias",
+          "pixels": [
+            [
+              0,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 4,
+          "reads": 8
+        },
+        {
+          "name": "readded",
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 5,
+          "reads": 10
+        },
+        {
+          "name": "restored",
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 9,
+          "reads": 14
+        }
+      ],
+      "reads": [
+        "/native-identity/0/index.json",
+        "/native-identity/2/index.json",
+        "/native-identity/3/index.json",
+        "/native-identity/4/index.json",
+        "/native-identity/0/0/0/0.ktx2",
+        "/native-identity/2/0/0/0.ktx2",
+        "/native-identity/3/0/0/0.ktx2",
+        "/native-identity/4/0/0/0.ktx2",
+        "/native-identity/0/index.json",
+        "/native-identity/0/0/0/0.ktx2",
+        "/native-identity/2/0/0/0.ktx2",
+        "/native-identity/3/0/0/0.ktx2",
+        "/native-identity/4/0/0/0.ktx2",
+        "/native-identity/0/0/0/0.ktx2"
+      ],
+      "screenshot": "research/vt-comparison/native-identity-gpu-images/ktx2-astc-8x8-false.png"
+    },
+    {
+      "name": "ktx2-astc-8x8",
+      "minFilter": "true",
+      "phases": [
+        {
+          "name": "all",
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 4,
+          "reads": 8
+        },
+        {
+          "name": "one-alias",
+          "pixels": [
+            [
+              0,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 4,
+          "reads": 8
+        },
+        {
+          "name": "no-alias",
+          "pixels": [
+            [
+              0,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 3,
+          "uploadedPages": 4,
+          "reads": 8
+        },
+        {
+          "name": "readded",
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 5,
+          "reads": 10
+        },
+        {
+          "name": "restored",
+          "pixels": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              255,
+              255,
+              0,
+              255
+            ]
+          ],
+          "residentPages": 4,
+          "uploadedPages": 9,
+          "reads": 14
+        }
+      ],
+      "reads": [
+        "/native-identity/4/index.json",
+        "/native-identity/3/index.json",
+        "/native-identity/2/index.json",
+        "/native-identity/1/index.json",
+        "/native-identity/4/0/0/0.ktx2",
+        "/native-identity/3/0/0/0.ktx2",
+        "/native-identity/2/0/0/0.ktx2",
+        "/native-identity/1/0/0/0.ktx2",
+        "/native-identity/1/index.json",
+        "/native-identity/1/0/0/0.ktx2",
+        "/native-identity/4/0/0/0.ktx2",
+        "/native-identity/3/0/0/0.ktx2",
+        "/native-identity/2/0/0/0.ktx2",
+        "/native-identity/1/0/0/0.ktx2"
+      ],
+      "screenshot": "research/vt-comparison/native-identity-gpu-images/ktx2-astc-8x8-true.png"
+    }
+  ],
+  "note": "Headless host-GPU identity correctness: content aliases and default samplers share, typed versions/content keys remain distinct, removal/re-add and context restoration preserve colors and bounded reads. No timing claim.",
+  "gc": {
+    "events": 6,
+    "totalMs": 4.164999999999999,
+    "maxMs": 0.938,
+    "heapBefore": {
+      "usedSize": 934980,
+      "totalSize": 1572864,
+      "embedderHeapUsedSize": 358488,
+      "backingStorageSize": 314308
+    },
+    "heapAfter": {
+      "usedSize": 2594424,
+      "totalSize": 2883584,
+      "embedderHeapUsedSize": 417600,
+      "backingStorageSize": 388285
+    },
+    "note": "Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

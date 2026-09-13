@@ -1,0 +1,103 @@
+{
+  "newPlainObjectCount": 2,
+  "viaAllocationSite": 0,
+  "other": [
+    {
+      "id": 131985,
+      "properties": [
+        "sampler",
+        "target",
+        "texture"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "10",
+          "node": "synthetic:(Global handles)"
+        },
+        {
+          "edge": "7 / V8PerContextData::context_",
+          "node": "native:system / NativeContext / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "cleanupVTComparison",
+          "node": "closure:H"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @43285"
+        },
+        {
+          "edge": "_",
+          "node": "object:Tl"
+        },
+        {
+          "edge": "#H",
+          "node": "object:Kc"
+        },
+        {
+          "edge": "#i",
+          "node": "object:Array"
+        },
+        {
+          "edge": "0",
+          "node": "object:Object"
+        }
+      ]
+    },
+    {
+      "id": 142827,
+      "properties": [
+        "kind",
+        "token"
+      ],
+      "allocationSite": false,
+      "reachableWithoutWeakEdges": true,
+      "pathTail": [
+        {
+          "edge": "global_object",
+          "node": "object:Window [JSGlobalObject] / http://127.0.0.1:5186"
+        },
+        {
+          "edge": "<symbol Window#DocumentCachedAccessor>",
+          "node": "native:HTMLDocument"
+        },
+        {
+          "edge": "27",
+          "node": "native:ScriptedAnimationController"
+        },
+        {
+          "edge": "2",
+          "node": "native:blink::HeapVectorBacking<cppgc::internal::BasicMember<blink::FrameCallback, cppgc::internal::StrongMemberTag, cppgc::internal::DijkstraWriteBarrierPolicy>>"
+        },
+        {
+          "edge": "1",
+          "node": "native:V8FrameCallback"
+        },
+        {
+          "edge": "1",
+          "node": "native:V8FrameRequestCallback"
+        },
+        {
+          "edge": "1",
+          "node": "closure:"
+        },
+        {
+          "edge": "context",
+          "node": "object:system / Context / scope @69103"
+        },
+        {
+          "edge": "0",
+          "node": "object:Object"
+        }
+      ]
+    }
+  ],
+  "templateExamples": [],
+  "note": "BFS paths from snapshot root, excluding weak edges. Allocation-site paths identify engine-held literal templates; path tails are truncated for readability. These are shortest reference paths, not dominator/retained-size calculations. Node IDs compare snapshots from one browser session."
+}

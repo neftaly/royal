@@ -1,0 +1,15 @@
+--- a/packages/renderer-webgl/src/virtual-texture/runtime.ts
++++ b/packages/renderer-webgl/src/virtual-texture/runtime.ts
+@@ -1429,9 +1429,9 @@
+       && idleVisits < resources.length
+       && this.#activeJobs + this.#readyPages < MAX_DECODE_JOBS
+     ) {
+-      // Consume already-rasterized target regions before a cold read evicts
+-      // them. This is bounded by the same four decoded/ready page slots.
+-      if (this.#detailJobs === 0) {
++      // Prefer cached regions before cold work can evict them. Retry after
++      // a successful read; failed visits cannot complete asynchronous work.
++      if (this.#detailJobs === 0 && idleVisits === 0) {
+         let cached = false;
+         for (let offset = 0; offset < resources.length; offset += 1) {
+           const index = (this.#scheduleCursor + offset) % resources.length;

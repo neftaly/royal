@@ -341,13 +341,13 @@ describe("browser texture decode shell", () => {
     }, new AbortController().signal);
     expect(fetch.mock.calls.map(([uri]) => uri)).toEqual(["/preview.png"]);
     expect(source).not.toHaveProperty("fallbackReason");
-    if (source.kind !== undefined || source.svgPreview === undefined) throw new Error("missing preview");
-    const first = source.svgPreview.load();
-    expect(source.svgPreview.load()).toBe(first);
+    if (source.kind !== undefined || source.preview === undefined) throw new Error("missing preview");
+    const first = source.preview.load();
+    expect(source.preview.load()).toBe(first);
     await first;
     expect(fetch.mock.calls.map(([uri]) => uri)).toEqual(["/preview.png", "/vector.svg"]);
     expect(decode).toHaveBeenCalledOnce();
-    expect(source.svgPreview.encoded?.parsed.viewBox).toEqual([0, 0, 16, 8]);
+    expect(source.preview.encoded?.parsed.viewBox).toEqual([0, 0, 16, 8]);
     source.close?.();
     expect(sourceSignal?.aborted).toBe(true);
     expect(bitmap.close).toHaveBeenCalledOnce();
@@ -371,8 +371,8 @@ describe("browser texture decode shell", () => {
       fallback: { kind: "asset", src: `/preview-${index}.png` },
     }, controller.signal)));
     const detail = sources.map((source) => {
-      if (source.kind !== undefined || source.svgPreview === undefined) throw new Error("missing preview");
-      return source.svgPreview.load().catch(() => undefined);
+      if (source.kind !== undefined || source.preview === undefined) throw new Error("missing preview");
+      return source.preview.load().catch(() => undefined);
     });
     let next: Promise<Awaited<ReturnType<typeof decoder.decode>>> | undefined;
     try {
@@ -411,11 +411,11 @@ describe("browser texture decode shell", () => {
       kind: "asset", src: "/detail.svg", sourceEncoding: "svg", svgPreview: true,
       fallback: { kind: "asset", src: "/preview.png" },
     }, controller.signal);
-    if (source.kind !== undefined || source.svgPreview === undefined) throw new Error("missing preview");
+    if (source.kind !== undefined || source.preview === undefined) throw new Error("missing preview");
     const foreground = Array.from({ length: 32 }, (_, index) => decoder.decode({
       kind: "asset", src: `/foreground-${index}.png`,
     }, controller.signal).then((decoded) => decoded.close?.(), () => undefined));
-    const detail = source.svgPreview.load().catch(() => undefined);
+    const detail = source.preview.load().catch(() => undefined);
     try {
       await waitFor(() => expect(gates.size).toBe(16));
       for (let index = 0; index < 8; index += 1) {
@@ -444,8 +444,8 @@ describe("browser texture decode shell", () => {
       ? new Response("missing", { status: 404 })
       : new Response("png", { headers: { "content-type": "image/png" } })));
     const preview = await createBrowserTextureDecoder().decode(asset, new AbortController().signal);
-    if (preview.kind !== undefined || preview.svgPreview === undefined) throw new Error("missing preview");
-    await expect(preview.svgPreview.load()).rejects.toThrow("404");
+    if (preview.kind !== undefined || preview.preview === undefined) throw new Error("missing preview");
+    await expect(preview.preview.load()).rejects.toThrow("404");
     expect(bitmap.close).not.toHaveBeenCalled();
     preview.close?.();
     vi.stubGlobal("fetch", vi.fn(async (input: string) => input.endsWith(".png")
@@ -453,7 +453,7 @@ describe("browser texture decode shell", () => {
       : new Response('<svg viewBox="0 0 16 8"/>', { headers: { "content-type": "image/svg+xml" } })));
     const vector = await createBrowserTextureDecoder().decode(asset, new AbortController().signal);
     expect(vector).toHaveProperty("encodedSvg");
-    expect(vector).not.toHaveProperty("svgPreview");
+    expect(vector).not.toHaveProperty("preview");
     vector.close?.();
   });
 

@@ -22,8 +22,8 @@ export type DecodedImageTextureSource = Readonly<{
   close?: () => void;
   /** Encoded vector authority retained only when another representation needs it. */
   encodedSvg?: EncodedSvgTextureSource;
-  /** Optional base-color preview owns one lazy, shared vector-source read. */
-  svgPreview?: SvgPreviewSource;
+  /** Base-color preview owns one lazy, shared authoritative source. */
+  preview?: TexturePreviewSource;
   /** Bounded preferred-source failure when this image came from an authored fallback. */
   fallbackReason?: string;
   height: number;
@@ -36,10 +36,16 @@ export type DecodedImageTextureSource = Readonly<{
   width: number;
 }>;
 
-export type SvgPreviewSource = Readonly<{
+export type TexturePreviewSource = Readonly<{
   error?: string;
   encoded?: EncodedSvgTextureSource;
-  load(): Promise<EncodedSvgTextureSource>;
+  raster?: DecodedImageTextureSource;
+  /** Full raster dimensions, separate from the native preview upload extent. */
+  size?: Readonly<{ width: number; height: number }>;
+  /** Planned bitmap reservation; retainedBytes includes an in-flight reservation. */
+  rasterBytes?: number;
+  retainedBytes?: number;
+  load(): Promise<EncodedSvgTextureSource | DecodedImageTextureSource>;
 }>;
 
 export type EncodedSvgTextureSource = Readonly<{
@@ -52,7 +58,7 @@ export type DecodedKtx2Etc2TextureSource = Readonly<{
   alpha?: DecodedTextureAlpha;
   close?: () => void;
   colorSpace: TextureColorSpace;
-  svgPreview?: SvgPreviewSource;
+  preview?: TexturePreviewSource;
   fallbackReason?: string;
   height: number;
   kind: "ktx2-etc2";
@@ -115,6 +121,8 @@ export type TextureSourceRef = TextureLeafSourceRef & Readonly<{
   fallback?: TextureLeafSourceRef;
   /** Required SVG validates its authority before publishing a native preview. */
   svgPreview?: true | "required";
+  /** Private explicit raster-preview recipe; ASTC alone remains a final source. */
+  rasterPreview?: Readonly<{ width: number; height: number }>;
 }>;
 
 const identityPart = (
@@ -169,6 +177,14 @@ const validateLeafAsset = (asset: TextureLeafSourceRef): void => {
 
 const validateAsset = (asset: TextureSourceRef): void => {
   validateLeafAsset(asset);
+  if (asset.rasterPreview !== undefined) {
+    const { width, height } = asset.rasterPreview;
+    if (asset.astc === undefined || asset.sourceEncoding !== undefined
+      || asset.svgPreview !== undefined || asset.fallback !== undefined
+      || !Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 || width > 16384 || height > 16384) {
+      throw new TypeError("Royal raster preview requires a full raster, optional ASTC and dimensions from 1 to 16384");
+    }
+  }
   if (asset.svgPreview !== undefined && ((asset.svgPreview !== true && asset.svgPreview !== "required") || asset.fallback === undefined)) {
     throw new TypeError("Royal SVG preview requires an optional raster fallback");
   }
@@ -202,7 +218,9 @@ const decodedTextureLeafKey = (asset: TextureLeafSourceRef): unknown => {
 /** Identity of logical decoded pixels; preferred/fallback alternates form one recipe. */
 export const decodedTextureKey = (asset: TextureSourceRef): string => {
   validateAsset(asset);
-  const preferred = decodedTextureLeafKey(asset);
+  const leaf = decodedTextureLeafKey(asset);
+  const preferred = asset.rasterPreview === undefined ? leaf
+    : ["raster-preview", asset.rasterPreview.width, asset.rasterPreview.height, leaf];
   return JSON.stringify(asset.fallback === undefined
     ? preferred
     : [asset.svgPreview === "required" ? "required-svg-with-preview" : asset.svgPreview ? "svg-with-preview" : "preferred-with-fallback", preferred, decodedTextureLeafKey(asset.fallback)]);

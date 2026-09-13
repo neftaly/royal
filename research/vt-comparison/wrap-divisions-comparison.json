@@ -1,0 +1,80 @@
+{
+  "sourceHash": "64a72192ad60199cfe2fb3f6bfb52ec7116f9d57e55333a1ab545c30f8dfcce5",
+  "equivalentCases": 10000,
+  "callsPerRound": 500000,
+  "results": [
+    {
+      "version": "before",
+      "round": 0,
+      "elapsedMs": 157.18247100000008,
+      "checksum": 50529325
+    },
+    {
+      "version": "after",
+      "round": 0,
+      "elapsedMs": 154.23471300000006,
+      "checksum": 50529325
+    },
+    {
+      "version": "after",
+      "round": 1,
+      "elapsedMs": 167.51043800000002,
+      "checksum": 50529325
+    },
+    {
+      "version": "before",
+      "round": 1,
+      "elapsedMs": 166.7611119999999,
+      "checksum": 50529325
+    },
+    {
+      "version": "before",
+      "round": 2,
+      "elapsedMs": 145.9666209999998,
+      "checksum": 50529325
+    },
+    {
+      "version": "after",
+      "round": 2,
+      "elapsedMs": 144.316423,
+      "checksum": 50529325
+    },
+    {
+      "version": "after",
+      "round": 3,
+      "elapsedMs": 146.0449840000001,
+      "checksum": 50529325
+    },
+    {
+      "version": "before",
+      "round": 3,
+      "elapsedMs": 143.21967799999993,
+      "checksum": 50529325
+    },
+    {
+      "version": "before",
+      "round": 4,
+      "elapsedMs": 141.82002499999976,
+      "checksum": 50529325
+    },
+    {
+      "version": "after",
+      "round": 4,
+      "elapsedMs": 147.10948999999982,
+      "checksum": 50529325
+    },
+    {
+      "version": "after",
+      "round": 5,
+      "elapsedMs": 142.88100900000018,
+      "checksum": 50529325
+    },
+    {
+      "version": "before",
+      "round": 5,
+      "elapsedMs": 142.55209400000012,
+      "checksum": 50529325
+    }
+  ],
+  "note": "Actual extracted wrapped-range block; page insertion replaced with identical sequence capture/checksum. CPU screening only, no rendering or allocation claim."
+}

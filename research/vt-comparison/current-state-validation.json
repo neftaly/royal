@@ -1,0 +1,18 @@
+{
+  "testFiles": 149,
+  "tests": 1417,
+  "gltfManifestCases": 65,
+  "testExitCode": 0,
+  "lintExitCode": 0,
+  "sources": {
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "32316fcbc7a317e6e878db5a15e27bbcfb87e6b63a6f18731db11586b9c52d96",
+    "packages/renderer-webgl/src/virtual-texture/browser-page-source.ts": "4edc82953596b419bed400b8e1a27c850899caa0564285b5f264a1daf7480057",
+    "tests/replacement/renderer-webgl-vt-runtime.test.ts": "3fb78322493bb51d1848b99aa5f7c1e170c3ee9d2a3f7920a6cd3c743d39390d",
+    "packages/renderer-webgl/src/gltf/static-texture-image-plan.ts": "9ce6127ec3b52cbe61b045296555616a1acce901cb8d8142d7bba39ad58c714f"
+  },
+  "logs": {
+    "/tmp/royal-vt-current-state-tests.log": "e3411309eb04dcabd0659bfd220dcaa0942a7b4fbe9ea71b69979b8ec51138dc",
+    "/tmp/royal-vt-current-state-lint.log": "376ca9de1f8e26ecd64fd86c2273f9d623325fc0ba64edbb31155195702aa149"
+  },
+  "note": "Integration check after queued/native-loading invalidation and cancellation regressions. No production edits during this review; continuing goal remains active."
+}

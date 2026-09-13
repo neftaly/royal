@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": [
+    "*.ts",
+    "../../packages/renderer-webgl/src/glsl.d.ts",
+    "../../apps/examples-react/src/vite-env.d.ts"
+  ]
+}

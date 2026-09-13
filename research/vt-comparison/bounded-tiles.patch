@@ -1,0 +1,15 @@
+--- before/demand.ts
++++ after/demand.ts
+@@ -403,8 +403,10 @@
+   const vStart = repeatsV && !fullV ? Math.floor(minimumV) : 0;
+   const vEnd = repeatsV && !fullV ? Math.floor(maximumV) : 0;
+   const layout = manifest.mipLayouts[mip]!;
+-  for (let tileY = vStart; tileY <= vEnd; tileY += 1) {
+-    for (let tileX = uStart; tileX <= uEnd; tileX += 1) {
++  for (let dy = 0; dy <= vEnd - vStart; dy += 1) {
++    const tileY = vStart + dy;
++    for (let dx = 0; dx <= uEnd - uStart; dx += 1) {
++      const tileX = uStart + dx;
+       let localMinU = fullU ? 0 : repeatsU ? Math.max(0, minimumU - tileX) : minimumU;
+       let localMaxU = fullU ? 1 : repeatsU ? Math.min(1, maximumU - tileX) : maximumU;
+       let localMinV = fullV ? 0 : repeatsV ? Math.max(0, minimumV - tileY) : minimumV;

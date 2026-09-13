@@ -1,0 +1,56 @@
+{
+  "results": [
+    {
+      "name": "etc2-rgba",
+      "blockBytes": 20736,
+      "backingBytes": 20736
+    },
+    {
+      "name": "astc-6x6",
+      "blockBytes": 9216,
+      "backingBytes": 9216
+    },
+    {
+      "name": "astc-8x8",
+      "blockBytes": 5184,
+      "backingBytes": 5184
+    },
+    {
+      "name": "bc1-rgba",
+      "blockBytes": 10368,
+      "backingBytes": 10368
+    },
+    {
+      "name": "bc3-rgba",
+      "blockBytes": 20736,
+      "backingBytes": 20736
+    },
+    {
+      "name": "bc7-rgba",
+      "blockBytes": 20736,
+      "backingBytes": 20736
+    }
+  ],
+  "liveBodies": 0,
+  "heldPages": 6,
+  "note": "Six decoded native pages remain strongly held across runner-forced GC. WeakRefs track response arrayBuffers, without dereferencing before GC. Local synthetic responses contain 1 MiB trailing data each. No GPU storage is involved.",
+  "retention": {
+    "windows": 1,
+    "heaps": [
+      {
+        "usedSize": 671892,
+        "totalSize": 1048576,
+        "embedderHeapUsedSize": 333472,
+        "backingStorageSize": 20095
+      },
+      {
+        "usedSize": 772368,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 335064,
+        "backingStorageSize": 107105
+      }
+    ],
+    "note": "One preparation across all windows; per-window behavior belongs to the fixture. Forced GC between windows, without tracing or sampling. Finish-hook diagnostics run after the last heap sample."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

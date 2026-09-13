@@ -6,7 +6,7 @@ import type { CanonicalTextureSampler } from "../texture/sampler";
 import type {
   DecodedImageTextureSource,
   DecodedTextureSource,
-  SvgPreviewSource,
+  TexturePreviewSource,
   EncodedSvgTextureSource,
 } from "../texture/source";
 import type { ParsedSvgTextureSource } from "../texture/svg-source";
@@ -199,13 +199,14 @@ export const createAutomaticRasterPageSource = (
   source: DecodedImageTextureSource,
   sampler: CanonicalTextureSampler,
   colorSpace: "linear" | "srgb",
+  size: Readonly<{ width: number; height: number }> = source,
 ): VirtualTexturePageSource => {
   const manifest = createGeneratedVirtualTextureManifest({
     borderTexels: AUTOMATIC_VT_BORDER_TEXELS,
     colorSpace,
-    height: source.height,
+    height: size.height,
     pageSize: AUTOMATIC_VT_PAGE_SIZE,
-    width: source.width,
+    width: size.width,
   });
   return {
     manifest,
@@ -213,8 +214,8 @@ export const createAutomaticRasterPageSource = (
       manifest,
       sampler,
       source.source as CanvasImageSource,
-      1,
-      1,
+      source.width / size.width,
+      source.height / size.height,
       page,
       signal,
     ),
@@ -337,52 +338,59 @@ const automaticSvgManifest = (
   });
 };
 
-/** Small preview coverage and vector detail share one logical page source. */
-export const createAutomaticSvgPreviewPageSource = (
-  preview: DecodedTextureSource & Readonly<{ svgPreview: SvgPreviewSource }>,
+/** Preview coverage and lazy authority share one logical page source. */
+export const createAutomaticPreviewPageSource = (
+  preview: DecodedTextureSource & Readonly<{ preview: TexturePreviewSource }>,
   sampler: CanonicalTextureSampler,
   colorSpace: "linear" | "srgb",
   rasterCache = new SvgRasterCache(),
 ): VirtualTexturePageSource => {
-  const manifest = automaticSvgManifest(preview.width, preview.height, colorSpace);
-  let vector: VirtualTexturePageSource | undefined;
+  const size = preview.preview.size;
+  const manifest = size === undefined ? automaticSvgManifest(preview.width, preview.height, colorSpace)
+    : createGeneratedVirtualTextureManifest({ ...size, colorSpace,
+      pageSize: AUTOMATIC_VT_PAGE_SIZE, borderTexels: AUTOMATIC_VT_BORDER_TEXELS });
+  let detailPages: VirtualTexturePageSource | undefined;
   let closed = false;
   let demand: readonly VirtualTexturePageId[] = [];
   return {
     manifest,
-    hasCachedPage: (page) => vector?.hasCachedPage?.(page) ?? false,
-    setDemand: (pages) => {
-      demand = pages;
-      vector?.setDemand?.(pages);
-    },
+    ...(size === undefined ? {
+      hasCachedPage: (page: VirtualTexturePageId) => detailPages?.hasCachedPage?.(page) ?? false,
+      setDemand: (pages: readonly VirtualTexturePageId[]) => {
+        demand = pages;
+        detailPages?.setDemand?.(pages);
+      },
+    } : {}),
     ...(preview.kind !== undefined ? {} : { readPreview: async (page: VirtualTexturePageId, signal: AbortSignal) => {
-      if (closed || signal.aborted) throw new DOMException("SVG preview was aborted", "AbortError");
+      if (closed || signal.aborted) throw new DOMException("Texture preview was aborted", "AbortError");
       return renderAutomaticPage(manifest, sampler, preview.source as CanvasImageSource,
         preview.width / manifest.width, preview.height / manifest.height, page, signal);
     } }),
     close: () => {
       closed = true;
-      vector?.close?.();
-      vector = undefined;
+      detailPages?.close?.();
+      detailPages = undefined;
     },
     read: async (page, signal) => {
-      if (closed || signal.aborted) throw new DOMException("SVG preview was aborted", "AbortError");
+      if (closed || signal.aborted) throw new DOMException("Texture preview was aborted", "AbortError");
       // The portable image is a loading/error fallback, not authoritative
       // coarse detail. Small on-screen pieces may never request a finer mip.
-      if (preview.kind === undefined && page.mip === manifest.mipCount - 1 && preview.svgPreview.error !== undefined) {
+      if (preview.kind === undefined && page.mip === manifest.mipCount - 1 && preview.preview.error !== undefined) {
         return renderAutomaticPage(
           manifest, sampler, preview.source as CanvasImageSource,
           preview.width / manifest.width, preview.height / manifest.height,
           page, signal,
         );
       }
-      const encoded = await preview.svgPreview.load();
-      if (closed || signal.aborted) throw new DOMException("SVG refinement was aborted", "AbortError");
-      if (vector === undefined) {
-        vector = createAutomaticSvgPageSource(encoded, preview.width, preview.height, sampler, colorSpace, rasterCache);
-        vector.setDemand?.(demand);
+      const authority = await preview.preview.load();
+      if (closed || signal.aborted) throw new DOMException("Texture refinement was aborted", "AbortError");
+      if (detailPages === undefined) {
+        detailPages = "parsed" in authority
+          ? createAutomaticSvgPageSource(authority, preview.width, preview.height, sampler, colorSpace, rasterCache)
+          : createAutomaticRasterPageSource(authority, sampler, colorSpace, size);
+        detailPages.setDemand?.(demand);
       }
-      return vector.read(page, signal);
+      return detailPages.read(page, signal);
     },
   };
 };

@@ -1,0 +1,11 @@
+--- before/demand.ts
++++ after/demand.ts
+@@ -510,7 +510,7 @@
+     // Preserve unclamped preview demand in existing typed scratch. Convert
+     // its finest footprint to a fractional LOD once when the runtime asks.
+     if (footprintSquared < screen[FINEST_FOOTPRINT_SQUARED]!) screen[FINEST_FOOTPRINT_SQUARED] = footprintSquared;
+-    const mip = Math.max(workspace.minimumMip, Math.min(
++    const mip = Number.isNaN(footprintSquared) ? manifest.mipCount - 1 : Math.max(workspace.minimumMip, Math.min(
+       manifest.mipCount - 1,
+       Math.floor(0.5 * Math.log2(Math.max(1, footprintSquared))),
+     ));

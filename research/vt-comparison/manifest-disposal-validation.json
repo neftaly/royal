@@ -1,0 +1,15 @@
+{
+  "sha256": {
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "e4e94e2ab212d037b057549142493b17e45135fe2b1be92f4c95fbdd271742fa",
+    "tests/replacement/renderer-webgl-vt-manifest-scheduling.test.ts": "a87deb49ad3e4844c53bce0ed1c9a70c21b8e406d09f9f960aad36e884c9cfe2"
+  },
+  "checks": {
+    "manifestSchedulingTests": "both pass before and after mutation",
+    "rootTypecheck": "pass",
+    "sourceSizeGuard": "pass",
+    "lateResultMutation": "new test fails: 8 obsolete change notifications instead of 0"
+  },
+  "scope": "Unit regression: 8 active manifest reads ignore abort, 4 queued reads at disposal; late active responses are fulfilled after disposal",
+  "productionChanged": false,
+  "committed": false
+}

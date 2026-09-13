@@ -1,0 +1,45 @@
+diff --git a/packages/renderer-webgl/src/virtual-texture/pool-budget.ts b/packages/renderer-webgl/src/virtual-texture/pool-budget.ts
+index d5e29998..576653eb 100644
+--- a/packages/renderer-webgl/src/virtual-texture/pool-budget.ts
++++ b/packages/renderer-webgl/src/virtual-texture/pool-budget.ts
+@@ -10,27 +10,32 @@ export const allocateVirtualTexturePoolBytes = (
+   budgetBytes: number,
+ ): Map<string, number> => {
+   const result = new Map<string, number>();
+-  const minimum = requests.reduce((sum, request) => sum + request.minimumBytes, 0);
++  let minimum = 0, pending = 0;
++  for (const request of requests) {
++    minimum += request.minimumBytes;
++    if (request.wantedBytes > request.minimumBytes) pending += 1;
++  }
+   const scale = minimum > budgetBytes ? budgetBytes / minimum : 1;
+   for (const request of requests) result.set(request.key, Math.floor(request.minimumBytes * scale));
+   let remaining = Math.max(0, budgetBytes - minimum);
+-  let pending = requests.filter((request) => request.wantedBytes > request.minimumBytes);
+-  while (remaining > 0 && pending.length > 0) {
+-    const previousCount = pending.length;
++  while (remaining > 0 && pending > 0) {
++    const previousCount = pending;
++    pending = 0;
+     const share = remaining / previousCount;
+     let assigned = 0;
+-    for (const request of pending) {
++    for (const request of requests) {
+       const previous = result.get(request.key)!;
++      if (request.wantedBytes <= request.minimumBytes || previous >= request.wantedBytes) continue;
+       const extra = Math.min(request.wantedBytes - previous, share);
+       result.set(request.key, previous + extra);
+       assigned += extra;
++      if (previous + extra < request.wantedBytes) pending += 1;
+     }
+     remaining = Math.max(0, remaining - assigned);
+-    pending = pending.filter((request) => result.get(request.key)! < request.wantedBytes);
+     // Without a capped request the remainder was fully distributed; any
+     // residual is floating-point error, not another useful allocation round.
+-    if (assigned === 0 || pending.length === previousCount) break;
++    if (assigned === 0 || pending === previousCount) break;
+   }
+-  for (const [key, bytes] of result) result.set(key, Math.floor(bytes));
++  for (const request of requests) result.set(request.key, Math.floor(result.get(request.key)!));
+   return result;
+ };

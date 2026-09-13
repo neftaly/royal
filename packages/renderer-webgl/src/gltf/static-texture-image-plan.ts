@@ -1,6 +1,7 @@
 import {
   fail,
   index,
+  integer,
   object,
   optionalArray,
   type JsonObject,
@@ -16,6 +17,7 @@ export type StaticTextureImagePlan = Readonly<{
   astc?: StaticTextureImageSource;
   fallback?: StaticTextureImageSource;
   requiredSvg?: true;
+  rasterPreview?: Readonly<{ width: number; height: number }>;
   primary: StaticTextureImageSource;
   texture: JsonObject;
 }>;
@@ -86,6 +88,22 @@ export const createStaticTextureImagePlanner = (
       texturePath,
     );
     const requiredSvg = svg !== undefined && required.has("GS_texture_svg");
+    const extras = texture.extras;
+    const royal = typeof extras === "object" && extras !== null && !Array.isArray(extras)
+      ? (extras as JsonObject).royal : undefined;
+    const preview = typeof royal === "object" && royal !== null && !Array.isArray(royal)
+      ? (royal as JsonObject).astcPreview : undefined;
+    let rasterPreview: StaticTextureImagePlan["rasterPreview"];
+    if (preview !== undefined) {
+      const path = `${texturePath}.extras.royal.astcPreview`;
+      const value = object(preview, label, path);
+      const width = integer(value.width, label, `${path}.width`);
+      const height = integer(value.height, label, `${path}.height`);
+      if (astc === undefined || requiredAstc || svg !== undefined || width < 1 || height < 1 || width > 16384 || height > 16384) {
+        fail(label, path, "requires optional ASTC, a full raster source, no SVG, and dimensions from 1 to 16384");
+      }
+      rasterPreview = { width, height };
+    }
     if (astc !== undefined && texture.source === undefined && !requiredAstc
       && !requiredSvg && !hasRequiredAvif && !hasRequiredWebp) {
       fail(label, `${texturePath}.source`, "or a required supported source extension is required when EXT_texture_astc is optional");
@@ -163,7 +181,8 @@ export const createStaticTextureImagePlanner = (
           "image/webp",
         );
     const alternative = native === undefined || requiredAstc ? {} : { astc: native };
-    if (svg === undefined) return { primary: fallback(), texture, ...alternative };
+    if (svg === undefined) return { primary: fallback(), texture, ...alternative,
+      ...(rasterPreview === undefined ? {} : { rasterPreview }) };
     const primary = source(
       svg.source,
       `${texturePath}.extensions.GS_texture_svg.source`,

@@ -1,0 +1,58 @@
+[
+  {
+    "version": "before",
+    "runtimeHash": "7710910e60df0a2a11dca8dc0030870dd914e9b7f22b0a964a2b89bf5ea8c9d5",
+    "outcome": "warm-up failed to settle in 600 frames",
+    "state": {
+      "admittedUploadBytes": 0,
+      "atlasBytes": 12577280,
+      "atlasPools": 1,
+      "atlasGrowthFailures": 0,
+      "desiredPages": 84,
+      "admittedPages": 84,
+      "unresidentPages": 42,
+      "automaticCandidates": 2,
+      "automaticDecodedBytes": 0,
+      "automaticIneligible": 0,
+      "automaticResources": 2,
+      "automaticWaiting": 0,
+      "deferredUploads": 0,
+      "failedPages": 0,
+      "pageRequests": 42,
+      "pendingPages": 0,
+      "pendingPageBytes": 0,
+      "pendingPageByteLimit": 16777216,
+      "residentPages": 42,
+      "uploadedPages": 42,
+      "uploadBudgetBytes": 33554432
+    }
+  },
+  {
+    "version": "after",
+    "runtimeHash": "24d571f50be4cf8ad1ec27b8c12721c4f5518b6079f8aeb40386212a510b97c1",
+    "outcome": "warm-up failed to settle in 600 frames",
+    "state": {
+      "admittedUploadBytes": 0,
+      "atlasBytes": 12577280,
+      "atlasPools": 1,
+      "atlasGrowthFailures": 0,
+      "desiredPages": 84,
+      "admittedPages": 84,
+      "unresidentPages": 42,
+      "automaticCandidates": 2,
+      "automaticDecodedBytes": 0,
+      "automaticIneligible": 0,
+      "automaticResources": 2,
+      "automaticWaiting": 0,
+      "deferredUploads": 0,
+      "failedPages": 0,
+      "pageRequests": 42,
+      "pendingPages": 0,
+      "pendingPageBytes": 0,
+      "pendingPageByteLimit": 16777216,
+      "residentPages": 42,
+      "uploadedPages": 42,
+      "uploadBudgetBytes": 33554432
+    }
+  }
+]

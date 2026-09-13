@@ -1,0 +1,26 @@
+{
+  "expectedFailure": "Uncaught (in promise) Error: Mixed VT allocated unexpected pools",
+  "state": {
+    "admittedUploadBytes": 0,
+    "atlasBytes": 12582576,
+    "atlasPools": 2,
+    "atlasGrowthFailures": 0,
+    "desiredPages": 20,
+    "admittedPages": 12,
+    "unresidentPages": 10,
+    "automaticCandidates": 2,
+    "automaticDecodedBytes": 0,
+    "automaticIneligible": 0,
+    "automaticResources": 2,
+    "automaticWaiting": 0,
+    "deferredUploads": 0,
+    "failedPages": 10,
+    "pageRequests": 12,
+    "pendingPages": 0,
+    "pendingPageBytes": 0,
+    "pendingPageByteLimit": 16777216,
+    "residentPages": 2,
+    "uploadedPages": 2,
+    "uploadBudgetBytes": 33554432
+  }
+}

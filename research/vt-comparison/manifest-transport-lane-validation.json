@@ -1,0 +1,20 @@
+{
+  "sha256": {
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "e4e94e2ab212d037b057549142493b17e45135fe2b1be92f4c95fbdd271742fa",
+    "tests/replacement/renderer-webgl-vt-manifest-scheduling.test.ts": "aaa97cb3e946cfb60dfb3580cafc7284dc9764f195ba7a8c80b74510cf4c6aa9",
+    "tests/replacement/renderer-webgl-vt-runtime.test.ts": "9b7498fd54d0527c818bff2807540899abebedca860d8c346d710415ef3c77f9",
+    "scripts/bundle-size-budget.json": "62ba3f78a761ebce0d1a5c2c0090a1ad58f083115f9caa9a7a91a5f56979d271",
+    "scripts/package-size-budget.json": "c32c8d0f6826494d64455aff18b16f3481f5706fbe4cf16f8f095337c6847fdf",
+    "research/vt-comparison/manifest-lane-native-gate.json": "813c62ecc6a9ccac51f862c4cf7d83a2befb178268fda8054a4b3e8bbf2d6a0c"
+  },
+  "checks": {
+    "suite": "1467 tests / 150 files and 65 glTF cases",
+    "types": "pass",
+    "lint": "pass",
+    "bundle": "pass with named 32-byte affected-ceiling allowance",
+    "mutations": "shared queue and 32-read concurrency each fail new test",
+    "gpu": "previously starved native-manifest gate now passes at 64 MiB; 336 residents before/after restore, 672 uploads",
+    "package": "pass with named 1152-byte allowance; measured initial tarball 751823 bytes"
+  },
+  "committed": false
+}

@@ -1,0 +1,123 @@
+{
+  "results": [
+    {
+      "name": "lifecycle-raster",
+      "minFilter": "linear-mipmap-linear",
+      "completed": 72,
+      "earlyReplacements": 24,
+      "abortedReads": 24,
+      "activeReads": 0,
+      "delayed": true,
+      "reuse": true,
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    }
+  ],
+  "note": "One live root repeatedly loads source URLs (unique by default, fixed with reuse=1) and removes its scene. Six resident loads and two early replacements per window; forced-GC samples occur with an empty scene. Early replacement is not a guaranteed transport abort. Fetch counts end at response headers, not body consumption. Snapshot/GL checks are intentional lifecycle harness overhead, not frame timing measurements.",
+  "retention": {
+    "windows": 12,
+    "heaps": [
+      {
+        "usedSize": 2315792,
+        "totalSize": 2883584,
+        "embedderHeapUsedSize": 417080,
+        "backingStorageSize": 402533
+      },
+      {
+        "usedSize": 2700172,
+        "totalSize": 3145728,
+        "embedderHeapUsedSize": 429152,
+        "backingStorageSize": 402533
+      },
+      {
+        "usedSize": 2846560,
+        "totalSize": 3145728,
+        "embedderHeapUsedSize": 430000,
+        "backingStorageSize": 402533
+      },
+      {
+        "usedSize": 2887412,
+        "totalSize": 3145728,
+        "embedderHeapUsedSize": 430856,
+        "backingStorageSize": 402533
+      },
+      {
+        "usedSize": 2949756,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 431672,
+        "backingStorageSize": 402533
+      },
+      {
+        "usedSize": 2984984,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 431728,
+        "backingStorageSize": 402533
+      },
+      {
+        "usedSize": 3039792,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 432544,
+        "backingStorageSize": 402533
+      },
+      {
+        "usedSize": 3041668,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 433424,
+        "backingStorageSize": 402533
+      },
+      {
+        "usedSize": 3051980,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 434240,
+        "backingStorageSize": 402533
+      },
+      {
+        "usedSize": 3055464,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 435136,
+        "backingStorageSize": 402533
+      },
+      {
+        "usedSize": 3067716,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 435952,
+        "backingStorageSize": 402533
+      },
+      {
+        "usedSize": 3080944,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 436768,
+        "backingStorageSize": 402533
+      },
+      {
+        "usedSize": 3091308,
+        "totalSize": 3670016,
+        "embedderHeapUsedSize": 437584,
+        "backingStorageSize": 402533
+      }
+    ],
+    "note": "One preparation across all windows; per-window behavior belongs to the fixture. Forced GC between windows, without tracing or sampling. Finish-hook diagnostics run after the last heap sample."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

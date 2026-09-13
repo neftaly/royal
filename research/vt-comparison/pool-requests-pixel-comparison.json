@@ -1,0 +1,30 @@
+[
+  {
+    "before": "before",
+    "after": "after",
+    "differentPixels": 121,
+    "maxChannelDifference": 1,
+    "sameFinalState": true
+  },
+  {
+    "before": "before",
+    "after": "before-repeat",
+    "differentPixels": 3908,
+    "maxChannelDifference": 3,
+    "sameFinalState": true
+  },
+  {
+    "before": "after",
+    "after": "after-repeat",
+    "differentPixels": 121,
+    "maxChannelDifference": 1,
+    "sameFinalState": true
+  },
+  {
+    "before": "before-repeat",
+    "after": "after-repeat",
+    "differentPixels": 3908,
+    "maxChannelDifference": 3,
+    "sameFinalState": true
+  }
+]

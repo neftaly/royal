@@ -1,0 +1,131 @@
+{
+  "results": [
+    {
+      "name": "lifecycle-svg",
+      "minFilter": "linear-mipmap-linear",
+      "completed": 72,
+      "earlyReplacements": 24,
+      "abortedReads": 0,
+      "activeReads": 0,
+      "delayed": false,
+      "reuse": true,
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    }
+  ],
+  "note": "One live root repeatedly loads source URLs (unique by default, fixed with reuse=1) and removes its scene. Six resident loads and two early replacements per window; forced-GC samples occur with an empty scene. Early replacement is not a guaranteed transport abort. Fetch counts end at response headers, not body consumption. Snapshot/GL checks are intentional lifecycle harness overhead, not frame timing measurements.",
+  "retention": {
+    "windows": 12,
+    "heaps": [
+      {
+        "usedSize": 2558292,
+        "totalSize": 3145728,
+        "embedderHeapUsedSize": 411048,
+        "backingStorageSize": 402224
+      },
+      {
+        "usedSize": 2964968,
+        "totalSize": 3407872,
+        "embedderHeapUsedSize": 434104,
+        "backingStorageSize": 402224
+      },
+      {
+        "usedSize": 3084604,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 441056,
+        "backingStorageSize": 402224
+      },
+      {
+        "usedSize": 3121916,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 447992,
+        "backingStorageSize": 402224
+      },
+      {
+        "usedSize": 3201224,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 454592,
+        "backingStorageSize": 402224
+      },
+      {
+        "usedSize": 3204344,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 462032,
+        "backingStorageSize": 402224
+      },
+      {
+        "usedSize": 3273260,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 468920,
+        "backingStorageSize": 402224
+      },
+      {
+        "usedSize": 3310288,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 475896,
+        "backingStorageSize": 402224
+      },
+      {
+        "usedSize": 3341176,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 483704,
+        "backingStorageSize": 402224
+      },
+      {
+        "usedSize": 3347300,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 491072,
+        "backingStorageSize": 402224
+      },
+      {
+        "usedSize": 3383844,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 498080,
+        "backingStorageSize": 402224
+      },
+      {
+        "usedSize": 3395580,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 505008,
+        "backingStorageSize": 402224
+      },
+      {
+        "usedSize": 3406336,
+        "totalSize": 3932160,
+        "embedderHeapUsedSize": 511856,
+        "backingStorageSize": 402224
+      }
+    ],
+    "note": "One preparation across all windows; per-window behavior belongs to the fixture. Forced GC between windows, without tracing or sampling. Finish-hook diagnostics run after the last heap sample."
+  },
+  "heapSnapshots": {
+    "paths": {
+      "before": "/tmp/royal-vt-lifecycle-snapshot-before.heapsnapshot",
+      "after": "/tmp/royal-vt-lifecycle-snapshot-after.heapsnapshot",
+      "disposed": "/tmp/royal-vt-lifecycle-snapshot-disposed.heapsnapshot"
+    },
+    "note": "Snapshots perturb the benchmark and may trigger additional GC. Before/after captures bracket replacement windows; disposed capture follows cleanup. Use separate runs without snapshots for uninstrumented heap trends."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

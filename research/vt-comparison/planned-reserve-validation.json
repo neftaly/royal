@@ -1,0 +1,21 @@
+{
+  "sha256": {
+    "packages/renderer-webgl/src/surface/surface-gpu-owner.ts": "e8c63fd06887c3f0be5204e83ba529ca6c99142fe1d6251edae45e593a1dcd2b",
+    "tests/replacement/renderer-webgl-ordinary-texture-budget.test.ts": "78e4ad1f20f5f4988338b3f18db9bdf2bcf140da8aa970669675c486e484a092",
+    "research/vt-comparison/steady.ts": "19e70ca57444547036f655a4a85cd1b06e1ec21425d0e39c65c62bd6b831d417",
+    "research/vt-comparison/planned-reserve-64.json": "9ce1b356dc7157c23a39e39d3f519935361fa5affad9e35c8c9ef07689f28b5b",
+    "research/vt-comparison/planned-reserve-128.json": "7505757b45268e10b3512105d5f372130197b15485b5360a66b978f6b289e5ac"
+  },
+  "checks": {
+    "fullSuiteBeforeNewTests": "1464 pass, 65 glTF manifest cases",
+    "newBudgetFile": "5 pass; 2 new tests fail against original planner",
+    "rootTypes": "pass",
+    "lint": "pass",
+    "bundle": "pass, unchanged ceilings",
+    "packageConsumer": "pass",
+    "gpu": "8 cases: ASTC6x6/8x8, 64/128 MiB, SVG/native first; all 336 residents before/after restoration, 672 uploads"
+  },
+  "pending": "No baseline speed comparison established; matrix does not cover arbitrary transport completion orders or other GPUs",
+  "committed": false,
+  "gpuMatrix": "planned-reserve-matrix.json"
+}

@@ -682,6 +682,7 @@ export class CanvasRoot implements RendererRoot {
   #surfaceScene: ReturnType<typeof prepareCanonicalSurfaceScene> | null = null;
   #surfaceSceneInput: Scene | null = null;
   #virtualTextureActivation: VirtualTextureActivationState = initialVirtualTextureActivationState;
+  #authoredStorageRequired: boolean | undefined;
   #virtualTextureRuntime: VirtualTextureRuntime | null = null;
   readonly #virtualTextureListeners = new KeyedRetainedListeners<string>();
   #worldPresentationRequired = false;
@@ -839,6 +840,7 @@ export class CanvasRoot implements RendererRoot {
             readAheadSnapshot: browserTextureDecoder.readAheadSnapshot,
           }),
         onAssetChanged: (key) => this.#queuePreparedTexture(key),
+        releaseDecoded: asset => this.#virtualTextureRuntime?.releaseRasterSource(asset),
         onListenerError: (error) => platform.onListenerError(error),
         onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
         ...(platform.now === undefined ? {} : { now: platform.now }),
@@ -1613,6 +1615,8 @@ export class CanvasRoot implements RendererRoot {
       size?.backingWidth ?? 1,
       size?.backingHeight ?? 1,
     );
+    const required = this.#virtualTextureRuntime?.authoredStorageRequired;
+    this.#authoredStorageRequired = required;
     this.#textureAssets.reconcile(
       assets,
       alphaMaskAssets,
@@ -1742,6 +1746,7 @@ export class CanvasRoot implements RendererRoot {
         this.#gl,
         (asset, presentationChanged) => {
           if (this.#disposed) return;
+          if (this.#authoredStorageRequired !== this.#virtualTextureRuntime?.authoredStorageRequired) this.#reconcilePreparedGltfTextures();
           this.#publishVirtualTexture(asset);
           if (presentationChanged) this.#invalidatePresentation();
           else this.#publish();
@@ -1750,7 +1755,8 @@ export class CanvasRoot implements RendererRoot {
         this.#asyncPreparation.runForeground,
         {
           acquireDecoded: (asset) => this.#textureAssets.acquireDecoded(asset),
-          decoded: (asset) => this.#textureAssets.decoded(asset),
+          decoded: (asset) => this.#textureAssets.decoded(asset)
+            ?? (this.#textureAssets.getSourceSnapshot(asset).status === "error" ? null : undefined),
           onChanged: (presentationChanged) => {
             if (!this.#disposed) {
               if (presentationChanged) this.#invalidatePresentation();
@@ -1764,6 +1770,7 @@ export class CanvasRoot implements RendererRoot {
       );
       this.#surfaceGpu.setVirtualTextureRuntime(runtime);
       this.#virtualTextureRuntime = runtime;
+      this.#reconcilePreparedGltfTextures();
       this.#virtualTextureActivation = activation;
       this.#invalidatePresentation();
     }).catch((error: unknown) => {

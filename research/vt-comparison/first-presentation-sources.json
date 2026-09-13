@@ -1,0 +1,6 @@
+{
+  "packages/renderer-webgl/src/virtual-texture/runtime.ts": "c6a8f5b090d27994893d4b6e477e54493cf4f4f6c591ca68ab950699dda41fd4",
+  "packages/renderer-webgl/src/virtual-texture/demand.ts": "64a72192ad60199cfe2fb3f6bfb52ec7116f9d57e55333a1ab545c30f8dfcce5",
+  "packages/renderer-webgl/src/texture/browser-decode.ts": "73dae45f1e78a0f5d9446dca2816d53b14d7eb8ddf16e6b4fb89840d5b544365",
+  "research/vt-comparison/first-presentation.ts": "bc6d774b269d039139debf4f7b0119275bb3c7fd78daa322e721375788e49907"
+}

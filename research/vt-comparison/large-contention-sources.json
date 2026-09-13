@@ -1,0 +1,6 @@
+{
+  "research/vt-comparison/large-contention.ts": "6cf050a0afab471080869c6fd7a0d1f37735ae2308b2f65f2f6bc2b6257fadaf",
+  "research/vt-comparison/source-combinations.html": "516b405e3d66446dcf0e48e1a8e46bf258f8ff14002a32d60598532e5936d52c",
+  "packages/renderer-webgl/src/virtual-texture/runtime.ts": "6faa84b0b6bbb11f1c38b251162a7472e2c5f984ba1d94023b3b7ba1ec06778a",
+  "packages/renderer-webgl/src/texture/browser-decode.ts": "73dae45f1e78a0f5d9446dca2816d53b14d7eb8ddf16e6b4fb89840d5b544365"
+}

@@ -1,0 +1,32 @@
+{
+  "runtimeSha256": "32316fcbc7a317e6e878db5a15e27bbcfb87e6b63a6f18731db11586b9c52d96",
+  "runtimeTestSha256": "3a64200b3bd806f77f9f949568661fe0714ed65884774ce02d08fa8129a7c84b",
+  "testFiles": 149,
+  "tests": 1381,
+  "gltfManifestCases": 65,
+  "hostGpuSourceCases": 44,
+  "checks": {
+    "tests": {
+      "exitCode": 0,
+      "logPath": "/tmp/royal-vt-integration-final-tests.log",
+      "logSha256": "c7d8c98e1737323a198c4ba60d9c694dacb16169cd1efd14b2326ec8ff094ca9"
+    },
+    "lint": {
+      "exitCode": 0,
+      "logPath": "/tmp/royal-vt-integration-final-lint.log",
+      "logSha256": "376ca9de1f8e26ecd64fd86c2273f9d623325fc0ba64edbb31155195702aa149"
+    },
+    "rootTypes": {
+      "exitCode": 0,
+      "logPath": "/tmp/royal-vt-integration-final-types.log",
+      "logSha256": "5ac71a99decf5b92dbfe798066cbe8ea317395f8f764f5a8879fd3511ca99454"
+    },
+    "researchTypes": {
+      "exitCode": 0,
+      "logPath": "/tmp/royal-vt-integration-research-types.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "gpuReport": "native-integration-source-regression.json",
+  "note": "Integration pass after malformed-page reintroduction and transport-refill coverage. Production runtime source hash matches the current GPU source map and the previously size-validated native color-space fix. No commits."
+}

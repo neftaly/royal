@@ -1,0 +1,39 @@
+--- a/packages/renderer-webgl/src/virtual-texture/runtime.ts
++++ b/packages/renderer-webgl/src/virtual-texture/runtime.ts
+@@ -826,7 +826,7 @@
+     // or another resource's previous-frame visibility.
+     for (const resource of this.#resources.values()) {
+       this.#refreshFrameDemand(resource, views);
+-      if (this.#prepareFrameDemand(resource)) webGlStateChanged = true;
++      if (this.#prepareFrameDemand(resource)) { webGlStateChanged = true; pending = true; }
+       if (resource.workspace.count > 0 && resource.gpu === undefined && resource.manifestFailure === undefined && !resource.allocationBudgetBlocked) pending = true;
+     }
+     for (const resource of this.#resources.values()) {
+@@ -926,6 +926,16 @@
+       resource.demandNeedsFit = true;
+       this.#cancelStalePageReads(resource);
+     }
++    if (resource.workspace.count > 0 && resource.failedPages.size >= resource.workspace.count
++      && (resource.gpu?.residentSlots.size ?? 0) === 0) {
++      let allFailed = true;
++      for (const key of resource.workspace.keys) if (!resource.failedPages.has(key)) { allFailed = false; break; }
++      if (allFailed) {
++        resetVirtualTextureDemand(resource.workspace);
++        resource.desiredPageCount = 0;
++        resource.demandNeedsFit = true;
++      }
++    }
+   }
+ 
+   #prepareFrameDemand(
+@@ -945,6 +955,10 @@
+         resource.demandNeedsFit = false;
+         this.#clearReadyPages(resource);
+         this.#publishSourceDemand(resource);
++      }
++      if (resource.failedPages.size > 0 && resource.gpu?.residentSlots.size === 0) {
++        this.#releaseGpuResource(resource);
++        return true;
+       }
+       return false;
+     }

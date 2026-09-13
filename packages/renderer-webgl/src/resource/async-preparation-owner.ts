@@ -1,5 +1,3 @@
-import { RetainedFifo } from "./retained-fifo";
-
 export const DEFAULT_ASYNC_PREPARATION_JOB_LIMIT = 8;
 const FOREGROUND_BURST_LIMIT = 4;
 
@@ -56,7 +54,37 @@ type PendingPreparation<Value = unknown> = {
   readonly resolve: (value: Value) => void;
   readonly signal: AbortSignal;
   started: boolean;
+  previous: PendingPreparation | undefined;
+  next: PendingPreparation | undefined;
 };
+
+/** Intrusive FIFO: cancellation unlinks in O(1), without allocating queue nodes. */
+class PreparationQueue {
+  #first: PendingPreparation | undefined;
+  #last: PendingPreparation | undefined;
+
+  enqueue(value: PendingPreparation): void {
+    value.previous = this.#last;
+    if (this.#last === undefined) this.#first = value;
+    else this.#last.next = value;
+    this.#last = value;
+  }
+
+  remove(value: PendingPreparation): void {
+    if (value.previous === undefined) this.#first = value.next;
+    else value.previous.next = value.next;
+    if (value.next === undefined) this.#last = value.previous;
+    else value.next.previous = value.previous;
+    value.previous = undefined;
+    value.next = undefined;
+  }
+
+  dequeue(): PendingPreparation | undefined {
+    const value = this.#first;
+    if (value !== undefined) this.remove(value);
+    return value;
+  }
+}
 
 type PreparationResult =
   | Readonly<{ readonly ok: true; readonly value: unknown }>
@@ -74,8 +102,8 @@ export class AsyncPreparationOwner {
   #foregroundQueued = 0;
   readonly #jobLimit: number;
   readonly #onChanged: () => void;
-  readonly #pendingDetail = new RetainedFifo<PendingPreparation>();
-  readonly #pendingForeground = new RetainedFifo<PendingPreparation>();
+  readonly #pendingDetail = new PreparationQueue();
+  readonly #pendingForeground = new PreparationQueue();
 
   constructor(jobLimit: number, onChanged: () => void = () => undefined) {
     if (!Number.isSafeInteger(jobLimit) || jobLimit < 1) {
@@ -127,6 +155,8 @@ export class AsyncPreparationOwner {
         cancel: () => undefined,
         cancelled: false,
         lane,
+        previous: undefined,
+        next: undefined,
         prepare,
         reject,
         resolve: (value) => resolve(value as Value),
@@ -139,6 +169,7 @@ export class AsyncPreparationOwner {
         pending.prepare = undefined;
         this.#decrementQueued(lane);
         reject(aborted());
+        (lane === "foreground" ? this.#pendingForeground : this.#pendingDetail).remove(pending);
         this.#drain();
         this.#onChanged();
       };
@@ -158,8 +189,6 @@ export class AsyncPreparationOwner {
 
   #drain(): void {
     while (!this.#disposed && this.#activeJobs < this.#jobLimit) {
-      this.#discardCancelled(this.#pendingForeground);
-      this.#discardCancelled(this.#pendingDetail);
       const selection = selectAsyncPreparationLane(
         this.#foregroundQueued,
         this.#activeDetailJobs === 0 ? this.#detailQueued : 0,
@@ -214,11 +243,7 @@ export class AsyncPreparationOwner {
     else this.#detailQueued -= 1;
   }
 
-  #discardCancelled(queue: RetainedFifo<PendingPreparation>): void {
-    while (queue.peek()?.cancelled === true) queue.dequeue();
-  }
-
-  #rejectQueued(queue: RetainedFifo<PendingPreparation>): void {
+  #rejectQueued(queue: PreparationQueue): void {
     for (;;) {
       const pending = queue.dequeue();
       if (pending === undefined) return;

@@ -1,6 +1,14 @@
 # VT follow-up — 2026-09-12
 
-Completed the renderer-scene benchmarks, integrated mip filtering, exercised the
+For retained behavior, current limitations, and how to interpret the evidence, start with the [current worktree guide](CURRENT.md).
+
+The opening report below describes the initial September 12 checkpoint. Later
+reports at the end of this file record further changes and rejected experiments;
+their candidates are not all part of the retained renderer. See the
+[retained checkpoint review](retained-checkpoint-review.md) for the combined
+validation record and source hashes.
+
+That initial follow-up completed the renderer-scene benchmarks, integrated mip filtering, exercised the
 offline baker through browser rendering, and investigated demand scaling and GC.
 The renderer changes total 26 net lines and add no dependencies or public
 options. The authoring and benchmark tools remain outside the renderer bundle.
@@ -240,3 +248,288 @@ a 1 KiB ceiling allowance. The baker and benchmark fixtures are not published.
 Final checks: all 1,216 tests across 148 files passed, as did type checking,
 renderer lint/build, bundle ceilings, packed-package consumer checks, the four
 offline baker tests and the research harness type check.
+
+## Explicit raster-preview follow-up
+
+The proposal review accepted required full-source combinations and explicit
+raster preview intent. See [the implementation and measured review](raster-preview-results.md)
+for the shared SVG/raster refinement path, bounded bitmap admission and the
+headless host-GPU comparison against 56130d34. This is separate from the historical
+release comparison above.
+
+The subsequent [range-demand simplification](demand-range-results.md) removes
+67 renderer lines, fixes independent-axis wrapping and measures reduced GC churn.
+Both follow-ups remain uncommitted at the user's request.
+
+[Cached vertex clipping flags](demand-flags-results.md) then reduce repeated
+finite/plane checks with 256 bytes of fixed scratch. CPU and headless GPU results
+are reported separately, including browser timing variance.
+
+[Raster preview callback omission](raster-demand-callbacks-results.md) removes
+unused SVG demand/cache callbacks from bitmap authority. A moving-camera audit
+counts eliminated page-list allocations while verifying unchanged SVG behavior.
+
+[Unchanged source-demand reuse](source-demand-publication-results.md) then avoids
+republishing identical SVG page lists while preserving immutable lists for
+asynchronous readers. The camera audit records 98.5% fewer SVG demand-list objects.
+
+[Eligibility before cache probing](cache-probe-order-results.md) avoids cache work
+for resident or blocked pages without adding source lines. The moving-camera
+audit records 97% fewer decoded SVG cache lookups, with identical pixels.
+
+[Warmed VT profiling](steady-profile-results.md) separates loading and diagnostics
+from repeated frames and preserves source-mapped CPU/allocation samples. It
+identifies pool-budget work as the next measured optimization target.
+
+[Repeated live-scene retention checks](retention-results.md) disable profiling and
+measure six consecutive windows. The initial heap increase tapers off in fixed
+SVG, moving SVG and moving raster scenes.
+
+[Pool-budget allocation](pool-budget-results.md) removes temporary filtered arrays
+and Map entry pairs. Allocation results match 10,036 baseline cases; the warmed
+host-GPU profile attributes about 59% less allocation to this helper.
+
+[Stable atlas bookkeeping](stable-atlas-results.md) exits before unnecessary
+migration calculations. Existing migration behavior passes 86 targeted tests and
+24 headless host-GPU source cases, with identical comparison screenshots.
+
+[Atlas membership and key experiments](membership-key-results.md) retains a simpler
+membership scan with lower sampled allocation. A shorter atlas key was rejected:
+real Map-lookup measurements showed more CPU and GC despite fewer source lines.
+
+[Source replacement and cancellation](lifecycle-results.md) checks repeated unique
+SVG/PNG sources and controlled fetch cancellation. Reported VT ownership releases
+cleanly, while JS heap growth still needs longer-run retention investigation.
+
+[Source identity retention control](identity-results.md) compares 96 replacements
+with unique versus reused URLs. Their heap traces are nearly identical; the
+remaining increase calls for heap-retainer inspection rather than a URL-cache fix.
+
+[Lifecycle heap attribution](lifecycle-heap-results.md) identifies most retained
+growth as V8 code and browser timing metadata. Source-like new objects are engine
+literal templates; checked resource-wrapper counts remain flat.
+
+[Late full-raster bitmap review](late-bitmap-review.md) tests marked ASTC 6x6/8x8
+previews through removal and same-glTF replacement. Late bitmaps close once without
+disturbing replacement residency or decode accounting.
+
+[Real-browser AVIF authority review](avif-review.md) closes the mocked-decode gap:
+32 source cases and six late-bitmap cases now include actual required AVIF with
+ASTC previews, unsupported fallback, migration and context restoration.
+
+[Failed native authority storage](authority-failure-review.md) fixes a reproduced
+empty-atlas retention bug. Failed full sources preserve their native preview while
+releasing unused VT storage and stopping detail demand; twelve GPU failure cases
+and the full suite pass.
+
+[Failed-authority context restoration](failure-restoration-review.md) verifies that
+native previews return without new reads or VT allocations. All twelve failure
+cases retain identical VT snapshots across loss/restoration.
+
+[Versioned authority recovery](version-recovery-review.md) verifies that explicit
+glTF version replacement clears a prior source failure through a fresh identity,
+without enabling per-frame retries for the old version.
+
+[Shared-atlas failure isolation](shared-failure-review.md) tests both resource
+orders: failed authority releases its page table while the healthy neighbour keeps
+its binding and residency, then the final owner releases the atlas.
+
+[Failed-authority alias diagnostics](alias-failure-review.md) covers a later sampler
+alias of an already-failed source: it reports the inherited failure without new
+loads or GPU allocations.
+
+[JPEG authority and metadata coverage](jpeg-review.md) extends the host checks to
+core JPEG, including a frame header beyond the initial read window and delayed
+bitmap delivery. All 44 source combinations and 10 bitmap lifetime cases pass.
+
+[JPEG failure and recovery](jpeg-recovery-review.md) completes the expanded
+20-case failure matrix: native previews survive, failed authorities retain no VT
+atlas, and explicit version replacement recovers with one fresh source read pair.
+
+[Steady diagnostic redraw](diagnostic-redraw-review.md) corrects a discarded-buffer
+readback in the performance fixture. Earlier steady screenshot equality is not
+visual evidence; refreshed profiles retain valid images and unchanged VT state.
+
+[Rejected settled-budget early exit](settled-budget-review.md) records a one-line
+experiment that helped minimum-only demand but repeatedly slowed active single-pool
+allocation. The renderer is unchanged; the CPU benchmark now covers both demands.
+
+[Large raster fitting](large-raster-review.md) verifies real 4096px PNG/JPEG
+authorities: fitted browser bitmaps stay within the retained-source budget and
+survive atlas resizing/context restoration with one decode and one source read.
+
+[Large-authority contention](large-contention-review.md) checks two real decoded
+sources competing for one root budget. The second keeps its preview without a
+detail read, then promotes automatically after the first is removed.
+
+[Simultaneous admission](simultaneous-contention-review.md) starts both large
+authorities together in both scene orders. A fetch-level guard rules out transient
+double admission before the winning texture releases capacity.
+
+[Resident atlas-key reuse](resident-key-review.md) removes repeated JSON key
+construction using existing GPU ownership. The helper benchmark improves with
+no extra state and three fewer runtime lines; full-frame speedup is not claimed.
+
+[Context loss during contention](contention-restore-review.md) checks the resident
+key change with both large textures alive: retained detail restores, waiting
+preview coverage remains bounded, and release still permits later promotion.
+
+[Shared pool requests](pool-requests-review.md) updates one request per atlas pool
+inside each frame. The 16-texture fixture shows reduced VT-update allocation with
+unchanged median/p95 submissions and no increase in runtime line count.
+
+[Rejected key-set usage marking](usage-keys-review.md) records a shorter loop
+that improved isolated CPU tests but increased allocation in the browser's full
+frame-preparation method. The original array loop remains in the renderer.
+
+[Page-key boundaries](page-key-validation-review.md) adds parser regressions for
+malformed coordinates, packed/string transitions and numeric keys beyond 32 bits,
+without adding validation work to the frame loop.
+
+[Idle cached-page scans](idle-scan-review.md) uses the scheduler's existing idle
+counter to avoid repeated unsuccessful scans. Matched host runs improve submission
+times with no additional state, runtime lines or size allowance.
+
+[Idle-scan contention regression](idle-scan-contention-review.md) checks that
+large sources still resume after memory release and context restoration, with
+both ASTC block sizes and both simultaneous scene orders on the host GPU.
+
+[Bounded UV tile traversal](bounded-tiles-review.md) fixes a demand-loop hang
+when a repeating coordinate is too large for adding one to advance its tile
+index, with two additional renderer lines and measured ordinary-demand cost.
+
+[Coarsest fallback overflow](coarsest-overflow-review.md) stops malformed-UV
+fallback traversal when demand capacity is exhausted, including authored mip
+chains whose coarsest level still contains many pages.
+
+[Indeterminate derivative fallback](derivative-overflow-review.md) preserves
+coarse coverage when finite UVs overflow derivative arithmetic, with isolated
+CPU/allocation checks and a matched headless host-GPU profile.
+
+[Shared raster cancellation](shared-raster-cancellation-review.md) verifies that
+cancelling a pending page read leaves another consumer of the same lazy image
+usable and allocates no canvas for the cancelled request.
+
+[Rejected lazy compressed-atlas set](lazy-compressed-review.md) records a small
+sampled allocation reduction that did not justify code and bundle growth; the
+original runtime remains in place.
+
+[First texture presentation](first-presentation-review.md) measures small native
+previews against full PNG loading, separating first visibility from later raster
+refinement and repeating the comparison in a fresh headless browser.
+
+[First-presentation decode audit](first-presentation-decode-review.md) records
+the different bitmap sizes and resize costs behind those timings, preventing
+an equal-output decoder-speed interpretation.
+
+[Direct versus staged PNG resizing](bitmap-resize-review.md) isolates that resize
+cost with matching output sizes and quality settings. Staging was slower and
+held an additional returned bitmap, so the production path remains unchanged.
+
+[ETC2 unsupported-device parity](etc2-unsupported-review.md) extends the native
+VT regression matrix to the root-supplied ETC capability path, with no page
+downloads, allocations or frame exceptions when unavailable.
+
+[Rejected admission request loop](admission-loop-review.md) records a
+filter/map-to-loop experiment that increased isolated CPU cost and allocation
+attributed to the browser frame update. The original code remains in place.
+
+[Material-role sharing](preview-role-sharing-review.md) checks one glTF texture
+index reused across preview-enabled and ordinary roles, preserving decoded-pixel
+sharing where appropriate while keeping preview recipes separate.
+
+[Large rectangular authorities](rectangular-raster-review.md) exercises portrait
+and landscape PNG/JPEG fitting and refinement with both ASTC preview sizes,
+including atlas resizing and context restoration without repeated source reads.
+
+[Rectangular page crops](rectangular-page-crops-review.md) adds spatial checks
+with coordinate-coded artwork across wrap modes, mips and gutters. An isolated
+wrong-axis mutation confirms that the check detects scale errors.
+
+[Viewport-origin demand reuse](viewport-origin-review.md) removes origin-only
+invalidation and shrinks view scratch while retaining matrix and size changes,
+with runtime regressions, an independent cache oracle and host profiles.
+
+[Native color-space rollback](native-color-rollback-review.md) checks that an
+incompatible storage interpretation releases its attempted allocation while
+preserving an existing valid native texture across all supported ASTC/BC formats.
+
+[Retained code cost](retained-code-cost-review.md) records the current source-line
+delta and size ceilings separately from research code and already-committed
+native-format support.
+
+[Native color-space sharing review](native-color-sharing-review.md) records a
+confirmed first-claim failure-isolation limitation using the real decoder and
+source owner; it remains unresolved and is not covered by GPU rollback tests.
+
+[Pool finalization review](pool-finalization-review.md) retains a one-line
+aggregation change: repeated isolated CPU savings, 10,000 equivalence cases,
+full regression checks, and no general frame-time or GC improvement claim.
+
+[Mixed native/image pool review](mixed-pools-review.md) verifies both insertion
+orders at 256 MiB and reproduces existing RGBA-pool starvation at 16 MiB before
+and after pool finalization. Initial fixed native allocation remains a concrete
+unresolved budget-fairness issue.
+
+[Rejected initial native-pool sharing](mixed-fairness-candidate-review.md) passed
+synchronous format tests but failed the real mixed-source GPU fixture; pending
+SVG preparation is not covered by sharing only currently known pool requests.
+
+[Pending automatic-source reservation](pending-reservation-review.md) resolves
+the 16 MiB mixed SVG/ASTC starvation with coarse coverage in both GPU insertion
+orders. It adds one runtime line, passes 1,305 tests and existing size ceilings,
+and leaves fixed-native migration and sources added later as explicit limits.
+
+[Pending-reservation lifecycle review](pending-reservation-lifecycle-review.md)
+checks removal, ineligibility and actual GPU context restoration. Both mixed-pool
+insertion orders recover at 16 MiB; 104 relevant runtime tests pass.
+
+[Terminal-failure reservation release](failed-reservation-review.md) fixes
+failed decodes retaining pending VT space. Both GPU insertion orders and the
+44-case matrix pass; full suite 1,309 tests. The three-line correctness fix has
+named 160-byte package and 8-byte total gzip allowances.
+
+[Rejected native-minimum accounting change](native-minimum-review.md) reduced
+isolated native aggregation cost but did not improve image aggregation
+consistently. The retained runtime was restored; no size allowances changed.
+
+[Native KTX2 container review](native-container-review.md) adds subview boundary,
+zero-copy mip ownership and duplicate-metadata regressions for ASTC and BC.
+A weakened-bound mutation is detected; all 59 relevant tests pass after restore.
+
+[Malformed native-page lifetime](malformed-native-page-review.md) checks six
+formats for bounded failure, no invalid upload, version recovery and scene
+cleanup. Full suite passes 1,325 tests; allocated-but-unused atlases remain an
+explicit policy limitation while failed authored sources stay in the scene.
+
+[Empty failed-atlas reclamation](empty-failed-atlas-review.md) releases unusable
+storage without discarding healthy neighbors. The 16 MiB GPU fixture frees
+about 10.9 MiB of accounted atlas storage and restores healthy detail; 1,329
+tests and the 44-case GPU matrix pass. The fix adds 14 runtime lines.
+
+[Wrapped UV division experiment](wrap-divisions-review.md) rejects explicitly cached divisions after equivalent demand results but no consistent CPU improvement.
+
+[Native page color-space failure containment](native-color-failure-review.md) prevents incompatible page storage from escaping into frame upload and retrying indefinitely.
+
+[Failed native page retention](native-failure-retention-review.md) records stable backing storage and request counts; a twelve-window follow-up reaches a plateau and attributes most growth to engine code/metadata.
+
+[Native page CPU preparation](native-page-read-review.md) measures fresh in-memory page reads for all six native formats in headless Chromium, including validation and GC.
+
+[Native container retention gap](native-container-retention-review.md) records the original padded-container retention finding, now addressed by exact block compaction.
+
+[Exact native page backing storage](native-page-compaction-review.md) fixes padded-container retention with one net production line; includes browser retention evidence, normal-read timing tradeoffs, and GPU restoration.
+
+[Constructor-copy experiment](native-copy-review.md) keeps the existing block copy after isolated gains failed to yield a consistent full-read benefit.
+
+[Early zero-demand allocation skip](zero-demand-review.md) is not retained after mixed CPU screening across absent and existing pools.
+
+## Three adversarial-review fixes
+
+[Review and validation](three-review-fixes.md): constant-time removal of interior
+cancelled jobs, ordinary texture budget recovery after unsupported authored VT,
+and coarse intermediate migration to resolve blocked atlas growth. Both delayed
+ASTC sizes now recover all 336 pages before and after context loss. Changes remain
+uncommitted.
+
+The [final pre-commit review](precommit-review.md) fixes a reentrant scene-budget
+reservation race and records the 1,505-test validation checkpoint.

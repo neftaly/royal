@@ -1,0 +1,146 @@
+{
+  "cases": [
+    {
+      "file": "research/vt-comparison/planned-reserve-64.json",
+      "sha256": "9ce1b356dc7157c23a39e39d3f519935361fa5affad9e35c8c9ef07689f28b5b",
+      "budgetMiB": 64,
+      "nativeFirst": false,
+      "astc": "8x8",
+      "residentPages": 336,
+      "uploadedPages": 672,
+      "atlasBytes": 50307280,
+      "automaticDecodedBytes": 4194304,
+      "submissionMs": {
+        "median": 0.6000000238418579,
+        "p95": 1,
+        "max": 1.2000000476837158
+      },
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "file": "research/vt-comparison/planned-reserve-128.json",
+      "sha256": "7505757b45268e10b3512105d5f372130197b15485b5360a66b978f6b289e5ac",
+      "budgetMiB": 128,
+      "nativeFirst": false,
+      "astc": "8x8",
+      "residentPages": 336,
+      "uploadedPages": 672,
+      "atlasBytes": 51384672,
+      "automaticDecodedBytes": 4194304,
+      "submissionMs": {
+        "median": 0.7000000476837158,
+        "p95": 1,
+        "max": 1.100000023841858
+      },
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "file": "research/vt-comparison/planned-reserve-128-6x6-native-first.json",
+      "sha256": "52487b6ca1c4b7e5ee676becf575c10cced800a77952ac3862293fcd59df7fe5",
+      "budgetMiB": 128,
+      "nativeFirst": true,
+      "astc": "6x6",
+      "residentPages": 336,
+      "uploadedPages": 672,
+      "atlasBytes": 51389184,
+      "automaticDecodedBytes": 4194304,
+      "submissionMs": {
+        "median": 0.7000000476837158,
+        "p95": 1,
+        "max": 1.2000000476837158
+      },
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "file": "research/vt-comparison/planned-reserve-128-6x6-svg-first.json",
+      "sha256": "202b93961b792162b6f732191a066eadeb7b7d03bccada4f1f4185b9a60fd99b",
+      "budgetMiB": 128,
+      "nativeFirst": false,
+      "astc": "6x6",
+      "residentPages": 336,
+      "uploadedPages": 672,
+      "atlasBytes": 51389184,
+      "automaticDecodedBytes": 4194304,
+      "submissionMs": {
+        "median": 0.6999999284744263,
+        "p95": 1,
+        "max": 1.3000000715255737
+      },
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "file": "research/vt-comparison/planned-reserve-128-8x8-native-first.json",
+      "sha256": "1bfd3af65b77867b606375a7d70be542fd0dcc6faa4abf7e0705f4ea8fc4e3c0",
+      "budgetMiB": 128,
+      "nativeFirst": true,
+      "astc": "8x8",
+      "residentPages": 336,
+      "uploadedPages": 672,
+      "atlasBytes": 51384672,
+      "automaticDecodedBytes": 4194304,
+      "submissionMs": {
+        "median": 0.6000000238418579,
+        "p95": 1,
+        "max": 1.2000000476837158
+      },
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "file": "research/vt-comparison/planned-reserve-64-6x6-native-first.json",
+      "sha256": "3361e5b8563386eb99d908e9f770ed877601f011abc0412708341f86dcab6ca4",
+      "budgetMiB": 64,
+      "nativeFirst": true,
+      "astc": "6x6",
+      "residentPages": 336,
+      "uploadedPages": 672,
+      "atlasBytes": 50281792,
+      "automaticDecodedBytes": 4194304,
+      "submissionMs": {
+        "median": 0.6999999284744263,
+        "p95": 1,
+        "max": 1.2000000476837158
+      },
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "file": "research/vt-comparison/planned-reserve-64-6x6-svg-first.json",
+      "sha256": "c3d4733e34bae79673cc378412f79292a525fdca4fbda29deb35704ad4a0246c",
+      "budgetMiB": 64,
+      "nativeFirst": false,
+      "astc": "6x6",
+      "residentPages": 336,
+      "uploadedPages": 672,
+      "atlasBytes": 50281792,
+      "automaticDecodedBytes": 4194304,
+      "submissionMs": {
+        "median": 0.6999999284744263,
+        "p95": 1,
+        "max": 1.2999999523162842
+      },
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "file": "research/vt-comparison/planned-reserve-64-8x8-native-first.json",
+      "sha256": "19ad24f3e83ffbcbf13f18b5102c1da4280626faf59404ec7878c42a27686a5a",
+      "budgetMiB": 64,
+      "nativeFirst": true,
+      "astc": "8x8",
+      "residentPages": 336,
+      "uploadedPages": 672,
+      "atlasBytes": 50307280,
+      "automaticDecodedBytes": 4194304,
+      "submissionMs": {
+        "median": 0.6999999284744263,
+        "p95": 1,
+        "max": 1.3000000715255737
+      },
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    }
+  ],
+  "scope": "Sequential headless Intel GPU runs. 16 mixed SVG/native sources, 120 measured moving frames after warm-up and real context restoration. No baseline speedup established; original baseline did not settle.",
+  "sourceHashes": {
+    "packages/renderer-webgl/src/surface/surface-gpu-owner.ts": "e8c63fd06887c3f0be5204e83ba529ca6c99142fe1d6251edae45e593a1dcd2b",
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "b6573774a9ac93f9bd6eff1c9a113faab2e1b392a1e1a2061d604dd1f2337ec1",
+    "research/vt-comparison/steady.ts": "19e70ca57444547036f655a4a85cd1b06e1ec21425d0e39c65c62bd6b831d417"
+  }
+}

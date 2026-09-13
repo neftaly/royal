@@ -1,0 +1,9 @@
+Renderer: ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)
+file:///home/neftaly/dev/royal/research/vt-comparison/run-host.mjs:75
+  if (prepared.exceptionDetails) throw new Error(JSON.stringify(prepared.exceptionDetails));
+                                       ^
+
+Error: {"exceptionId":1,"text":"Uncaught (in promise) Error: Failed automatic sources retained pending reservations","lineNumber":1,"columnNumber":3185,"scriptId":"7","stackTrace":{"callFrames":[{"functionName":"F","scriptId":"7","url":"http://127.0.0.1:5185/assets/steady-Dz5d0GTw.js","lineNumber":0,"columnNumber":3184}]},"exception":{"type":"object","subtype":"error","className":"Error","description":"Error: Failed automatic sources retained pending reservations\n    at F (http://127.0.0.1:5185/assets/steady-Dz5d0GTw.js:1:3185)\n    at async <anonymous>:1:63","objectId":"-5546037641747697721.2.1"}}
+    at file:///home/neftaly/dev/royal/research/vt-comparison/run-host.mjs:75:40
+
+Node.js v24.12.0

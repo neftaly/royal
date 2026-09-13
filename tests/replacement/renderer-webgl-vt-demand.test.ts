@@ -72,12 +72,46 @@ describe("VT2 clipped projected demand", () => {
     collectVirtualTextureDemand(expected, manifest, [compact], [view()], sampler);
     collectVirtualTextureDemand(actual, manifest, [colliding], [view()], sampler);
     expect([...actual.keys]).toEqual([...expected.keys]);
+    // The colliding vertices now carry different outside-plane flags.
+    positions.set([2, -.5, 0, 3, -.5, 0, 3, .5, 0], 9);
+    paddedPositions.set(positions.subarray(9), 256 * 3);
+    resetVirtualTextureDemand(actual); resetVirtualTextureDemand(expected);
+    collectVirtualTextureDemand(actual, manifest, [colliding], [view()], sampler);
+    collectVirtualTextureDemand(expected, manifest, [compact], [view()], sampler);
+    expect([...actual.keys]).toEqual([...expected.keys]);
+
     resetVirtualTextureDemand(actual);
     collectVirtualTextureDemand(actual, manifest, [surface], [view()], sampler);
     resetVirtualTextureDemand(expected);
     collectVirtualTextureDemand(expected, manifest, [surface], [view()], sampler);
     expect([...actual.keys]).toEqual([...expected.keys]);
   });
+  it("refreshes cached clipping and finite flags across views and UV changes", () => {
+    const workspace = createVirtualTextureDemandWorkspace(64);
+    const broadBounds = { min: [-8, -8, -8] as const, max: [8, 8, 8] as const };
+    const item = { ...surface, worldBounds: broadBounds };
+    const visible = createVirtualTextureDemandWorkspace(64);
+    collectVirtualTextureDemand(visible, manifest, [item], [view()], sampler);
+    for (let axis = 0; axis < 3; axis++) for (const direction of [-1, 1]) {
+      const outside = identityMat4(); outside[12 + axis] = direction * 3;
+      resetVirtualTextureDemand(workspace);
+      collectVirtualTextureDemand(workspace, manifest, [item], [view(outside)], sampler);
+      expect(workspace.count).toBe(0);
+      resetVirtualTextureDemand(workspace);
+      collectVirtualTextureDemand(workspace, manifest, [item], [view()], sampler);
+      expect([...workspace.keys]).toEqual([...visible.keys]);
+    }
+    resetVirtualTextureDemand(workspace);
+    collectVirtualTextureDemand(workspace, manifest, [{ ...item, textureCoordinates: {
+      row0: [Number.NaN, 0, 0, 0], row1: [0, 1, 0, 0],
+    } }], [view()], sampler);
+    expect(workspace.count).toBe(1);
+    expect(workspace.mips[0]).toBe(manifest.mipCount - 1);
+    resetVirtualTextureDemand(workspace);
+    collectVirtualTextureDemand(workspace, manifest, [item], [view()], sampler);
+    expect([...workspace.keys]).toEqual([...visible.keys]);
+  });
+
   it.each(["all", "coarsest"] as const)("keeps repeated %s demand idempotent after capacity truncation", (ancestors) => {
     const workspace = createVirtualTextureDemandWorkspace(64, ancestors);
     const surfaces = [surface];
@@ -154,6 +188,99 @@ describe("VT2 clipped projected demand", () => {
     collectVirtualTextureDemand(stereo, manifest, [surface], [view(left), view(right)], sampler);
     expect(stereo.count).toBeGreaterThanOrEqual(monoCount);
     expect(stereo.mips[0]).toBe(manifest.mipCount - 1);
+  });
+
+  it.each([false, true])("keeps full-axis repetition independent of the other axis (swap: %s)", (swap) => {
+    const cases = [
+      { wrap: "clamp-to-edge", offset: 1.5, scale: .1, pages: [3] },
+      { wrap: "clamp-to-edge", offset: -.5, scale: .1, pages: [0] },
+      { wrap: "repeat", offset: .9, scale: .2, pages: [0, 3] },
+      { wrap: "mirrored-repeat", offset: 1.1, scale: .1, pages: [3] },
+      { wrap: "mirrored-repeat", offset: -.9, scale: .1, pages: [3] },
+    ] as const;
+    for (const { wrap, offset, scale, pages } of cases) {
+      const workspace = createVirtualTextureDemandWorkspace(64);
+      const coordinates = { row0: [swap ? scale : 2, 0, swap ? offset : 0, 0],
+        row1: [0, swap ? 2 : scale, swap ? 0 : offset, 0] } as const;
+      collectVirtualTextureDemand(workspace, manifest, [{ ...surface, textureCoordinates: coordinates }],
+        [{ ...view(), viewport: { height: 8192, width: 8192, x: 0, y: 0 } }],
+        { ...sampler, wrapS: swap ? wrap : "repeat", wrapT: swap ? "repeat" : wrap });
+      const full = new Set<number>(), narrow = new Set<number>();
+      for (let index = 0; index < workspace.count; index++) if (workspace.mips[index] === 0) {
+        full.add((swap ? workspace.ys : workspace.xs)[index]!);
+        narrow.add((swap ? workspace.xs : workspace.ys)[index]!);
+      }
+      expect([...full].sort()).toEqual([0, 1, 2, 3]);
+      expect([...narrow].sort(), `${wrap} at ${offset}`).toEqual(pages);
+    }
+  });
+
+  it.each([2 ** 53, -(2 ** 54), 1e30, -1e30])("bounds tile traversal for enormous repeating coordinates (%s)", (offset) => {
+    for (const wrap of ["repeat", "mirrored-repeat"] as const) for (const swap of [false, true]) {
+      const actual = createVirtualTextureDemandWorkspace(64);
+      const expected = createVirtualTextureDemandWorkspace(64);
+      const coordinates = (translation: number) => ({
+        row0: [swap ? 0 : 1, 0, swap ? translation : 0, 0],
+        row1: [0, swap ? 1 : 0, swap ? 0 : translation, 0],
+      } as const);
+      const repeatSampler = { ...sampler, wrapS: wrap, wrapT: wrap };
+      collectVirtualTextureDemand(actual, manifest, [{ ...surface, textureCoordinates: coordinates(offset) }], [view()], repeatSampler);
+      collectVirtualTextureDemand(expected, manifest, [{ ...surface, textureCoordinates: coordinates(0) }], [view()], repeatSampler);
+      expect(actual.count).toBeGreaterThan(0);
+      expect([...actual.keys]).toEqual([...expected.keys]);
+      expect(actual.overflow).toBe(false);
+    }
+  });
+
+  it("covers sampled UVs across independent clamp, repeat and mirror combinations", () => {
+    let seed = 0x3915;
+    const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32);
+    const wraps = ["clamp-to-edge", "repeat", "mirrored-repeat"] as const;
+    const wrapped = (value: number, wrap: typeof wraps[number]) => {
+      if (wrap === "clamp-to-edge") return Math.max(0, Math.min(1, value));
+      const tile = Math.floor(value), fraction = value - tile;
+      return wrap === "mirrored-repeat" && Math.abs(tile) % 2 === 1 ? 1 - fraction : fraction;
+    };
+    for (const wrapS of wraps) for (const wrapT of wraps) for (let trial = 0; trial < 30; trial++) {
+      const u = random() * 10 - 5, v = random() * 10 - 5;
+      const du = random() * 6 - 3, dv = random() * 6 - 3;
+      const workspace = createVirtualTextureDemandWorkspace(64);
+      collectVirtualTextureDemand(workspace, manifest, [{ ...surface, textureCoordinates: {
+        row0: [du, 0, u, 0], row1: [0, dv, v, 0],
+      } }], [{ ...view(), viewport: { height: 16384, width: 16384, x: 0, y: 0 } }],
+      { ...sampler, wrapS, wrapT });
+      const pages = new Set<string>();
+      for (let index = 0; index < workspace.count; index++) if (workspace.mips[index] === 0) {
+        pages.add(`${workspace.xs[index]}:${workspace.ys[index]}`);
+      }
+      for (let y = 0; y < 7; y++) for (let x = 0; x < 7; x++) {
+        const px = Math.min(3, Math.floor(wrapped(u + du * (x + .5) / 7, wrapS) * 4));
+        const py = Math.min(3, Math.floor(wrapped(v + dv * (y + .5) / 7, wrapT) * 4));
+        expect(pages.has(`${px}:${py}`), `${wrapS}/${wrapT}, UV ${u},${v} + ${du},${dv}`).toBe(true);
+      }
+    }
+  });
+
+  it("preserves demand under whole-period translations on both wrapped axes", () => {
+    const workspace = createVirtualTextureDemandWorkspace(64);
+    for (const wrapS of ["repeat", "mirrored-repeat"] as const)
+      for (const wrapT of ["repeat", "mirrored-repeat"] as const)
+        for (const scale of [0.125, -0.375, 1.5]) {
+          const collect = (u: number, v: number) => {
+            resetVirtualTextureDemand(workspace);
+            collectVirtualTextureDemand(workspace, manifest, [{ ...surface, textureCoordinates: {
+              row0: [scale, 0, 1.125 + u, 0], row1: [0, -scale, 0.375 + v, 0],
+            } }], [view()], { ...sampler, wrapS, wrapT });
+            expect(workspace.overflow).toBe(false);
+            return [...workspace.keys].sort();
+          };
+          const expected = collect(0, 0);
+          expect(expected.length).toBeGreaterThan(0);
+          for (const u of [-1024, -3, 5, 1024]) for (const v of [-1024, -3, 5, 1024]) {
+            expect(collect(u * (wrapS === "mirrored-repeat" ? 2 : 1),
+              v * (wrapT === "mirrored-repeat" ? 2 : 1))).toEqual(expected);
+          }
+        }
   });
 
   it("bounds close and repeated demand without losing the coarsest fallback", () => {
@@ -284,6 +411,40 @@ describe("VT2 clipped projected demand", () => {
     expect(workspace.mips[0]).toBe(manifest.mipCount - 1);
     expect(workspace.xs[0]).toBe(0);
     expect(workspace.ys[0]).toBe(0);
+  });
+
+  it.each([1e308, -1e308])("keeps fallback coverage when finite UV derivatives overflow (%s)", (scale) => {
+    for (let triangle = 0; triangle < 2; triangle++) {
+      const workspace = createVirtualTextureDemandWorkspace(8);
+      collectVirtualTextureDemand(workspace, manifest, [{
+        ...surface,
+        geometry: { ...surface.geometry, indices: surface.geometry.indices.slice(triangle * 3, triangle * 3 + 3) },
+        textureCoordinates: { row0: [scale, 0, 0, 0], row1: [0, 1, 0, 0] },
+      }], [view()], { ...sampler, wrapS: "repeat" });
+      expect(workspace.count).toBe(1);
+      expect(workspace.mips[0]).toBe(manifest.mipCount - 1);
+      expect(workspace.xs[0]).toBe(0);
+      expect(workspace.ys[0]).toBe(0);
+    }
+  });
+
+  it("bounds malformed coverage work when the coarsest authored mip is still large", () => {
+    let lookups = 0;
+    class CountingKeys extends Set<number | string> {
+      override has(key: number | string): boolean { lookups++; return super.has(key); }
+    }
+    const workspace = { ...createVirtualTextureDemandWorkspace(4), keys: new CountingKeys() };
+    const partial = parseVirtualTextureManifest({ contractVersion: 2, pageSize: 256,
+      borderTexels: 1, mipCount: 1, virtualSize: [262144, 262144],
+      pages: { uriTemplate: "{mip}/{x}/{y}.png" } });
+    collectVirtualTextureDemand(workspace, partial, [{ ...surface, textureCoordinates: {
+      row0: [Number.NaN, 0, 0, 0], row1: [0, 1, 0, 0],
+    } }], [view()], sampler);
+    expect(workspace.count).toBe(4);
+    expect(workspace.overflow).toBe(true);
+    expect([...workspace.xs]).toEqual([0, 1, 2, 3]);
+    expect([...workspace.ys]).toEqual([0, 0, 0, 0]);
+    expect(lookups).toBeLessThanOrEqual(5);
   });
 
   it("rejects offscreen surfaces before visiting malformed triangle channels", () => {

@@ -1,0 +1,63 @@
+{
+  "windows": 6,
+  "interior": true,
+  "cancelledJobs": 6000,
+  "elapsedMs": 41.60000002384186,
+  "snapshot": {
+    "activeJobs": 1,
+    "jobLimit": 1,
+    "queuedDetailJobs": 0,
+    "queuedForegroundJobs": 0,
+    "queuedJobs": 0
+  },
+  "note": "One held active job; 1000 alternating foreground/detail enqueues and cancellations per window. Forced-GC heaps measured by runner with owner alive. No texture decode, upload or frame-time measurement.",
+  "retention": {
+    "windows": 6,
+    "heaps": [
+      {
+        "usedSize": 680308,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 315680,
+        "backingStorageSize": 5217
+      },
+      {
+        "usedSize": 1134400,
+        "totalSize": 2097152,
+        "embedderHeapUsedSize": 728048,
+        "backingStorageSize": 5250
+      },
+      {
+        "usedSize": 1548820,
+        "totalSize": 2359296,
+        "embedderHeapUsedSize": 1108384,
+        "backingStorageSize": 5250
+      },
+      {
+        "usedSize": 1958712,
+        "totalSize": 2883584,
+        "embedderHeapUsedSize": 1522400,
+        "backingStorageSize": 5250
+      },
+      {
+        "usedSize": 732692,
+        "totalSize": 1835008,
+        "embedderHeapUsedSize": 397128,
+        "backingStorageSize": 5250
+      },
+      {
+        "usedSize": 734940,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 352408,
+        "backingStorageSize": 5250
+      },
+      {
+        "usedSize": 734940,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 352408,
+        "backingStorageSize": 5250
+      }
+    ],
+    "note": "One preparation across all windows; per-window behavior belongs to the fixture. Forced GC between windows, without tracing or sampling. Finish-hook diagnostics run after the last heap sample."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

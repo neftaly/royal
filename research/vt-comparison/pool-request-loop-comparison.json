@@ -1,0 +1,56 @@
+{
+  "runs": [
+    {
+      "label": "before",
+      "artifact": "current-mixed-profile.json",
+      "sampledBytes": 16583156,
+      "gcEvents": 7,
+      "gcMs": 9.277,
+      "submissionMs": {
+        "median": 0.6000000238418579,
+        "p95": 1,
+        "max": 2.600000023841858
+      }
+    },
+    {
+      "label": "candidate",
+      "artifact": "pool-request-loop-profile.json",
+      "sampledBytes": 15473780,
+      "gcEvents": 7,
+      "gcMs": 10.354,
+      "submissionMs": {
+        "median": 0.6999999284744263,
+        "p95": 1.0999999046325684,
+        "max": 3.700000047683716
+      }
+    },
+    {
+      "label": "candidate-repeat",
+      "artifact": "pool-request-loop-profile-repeat.json",
+      "sampledBytes": 16235308,
+      "gcEvents": 7,
+      "gcMs": 11.045,
+      "submissionMs": {
+        "median": 0.7000000476837158,
+        "p95": 1.100000023841858,
+        "max": 4
+      }
+    },
+    {
+      "label": "before-repeat",
+      "artifact": "pool-request-loop-baseline-repeat.json",
+      "sampledBytes": 14119836,
+      "gcEvents": 7,
+      "gcMs": 9.904,
+      "submissionMs": {
+        "median": 0.6999999284744263,
+        "p95": 1.100000023841858,
+        "max": 2.5
+      }
+    }
+  ],
+  "beforeSha256": "e4e94e2ab212d037b057549142493b17e45135fe2b1be92f4c95fbdd271742fa",
+  "candidateSha256": "1bdee8b01bb03b3e9cd3a5c6c9768ee1bc3667b026e7ff6debcb968eae52df5d",
+  "retained": false,
+  "committed": false
+}

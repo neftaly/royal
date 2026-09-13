@@ -1,0 +1,25 @@
+{
+  "gpuRuns": 4,
+  "measuredEvictionsPerRun": 128,
+  "renderedFramesPerRun": 257,
+  "totalUploadsPerRun": 163,
+  "identicalFinalStates": true,
+  "researchTypecheckExitCode": 0,
+  "buildExitCode": 0,
+  "sources": {
+    "research/vt-comparison/resident-eviction.ts": "545de729c756a61246c15ad7a9fd831eb3cdbf80d44f9934d7f53f595bfb0d35",
+    "research/vt-comparison/resident-eviction.html": "5e9e966fe1bdc3a2b39b3099edeaa1d625c9b5e4da1eec01eaa5aece8e6d3620",
+    "research/vt-comparison/build-client.mjs": "fb5a34c10f5c0874c9942ff0c60238d33bc6346aa41e7e22badc7d435f2f6921",
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "b6573774a9ac93f9bd6eff1c9a113faab2e1b392a1e1a2061d604dd1f2337ec1",
+    "packages/renderer-webgl/src/virtual-texture/runtime-contract.ts": "3f595e6437a129b93ad9fad5106518652dc77fcb43559c5c3f334293d79e8fd1"
+  },
+  "logs": {
+    "/tmp/royal-vt-eviction-diagnostics-full.log": "6173ee71c35ce20872bf5848d4fc3a74ab4a48c3742775c809416c324dad5da5",
+    "/tmp/royal-vt-eviction-diagnostics-light.log": "002f972de7445f6e42764a0552cd0aac97d84d506f0c5917f5654b0546966875",
+    "/tmp/royal-vt-eviction-diagnostics-light-repeat.log": "5ee8953c85b7d207b53e75e11a41fea2b1a5cc67cbb6d2d344fd3d21c2533715",
+    "/tmp/royal-vt-eviction-diagnostics-full-repeat.log": "a4cedb0d28dba694a1b9331fb0049b4721fd80f18201b0992b34181e701fef87",
+    "/tmp/royal-vt-eviction-light-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/tmp/royal-vt-eviction-light-build.log": "91bb20d1dd63ebb7f112301e5e0a2f18d58a57d722cfe7503dad7de5b0ea9d85"
+  },
+  "note": "Sequential profiles in full/light/light/full order. Sampling estimates include shared harness overhead. No production changes or commits."
+}

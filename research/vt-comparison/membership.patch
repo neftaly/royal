@@ -1,0 +1,27 @@
+--- a/packages/renderer-webgl/src/virtual-texture/runtime.ts
++++ b/packages/renderer-webgl/src/virtual-texture/runtime.ts
+@@ -792,14 +792,17 @@
+       webGlStateChanged ||= growth.changed;
+     }
+ 
+-    // Share each physical pool among its visible logical textures as well.
+-    // Otherwise an earlier texture can protect every slot from later arrivals.
++    // Share pool slots so earlier textures cannot protect every slot.
+     for (const atlas of this.#atlases.values()) {
+-      const resources = [...this.#resources.values()].filter((resource) =>
+-        resource.manifest !== undefined && resource.manifestFailure === undefined
+-          && virtualTextureAtlasKey(resource.asset, resource.manifest) === atlas.key);
+-      if (!resources.some((resource) => resource.demandNeedsFit || resource.admittedPageLimit === undefined
+-        || resource.demandRevision !== this.#viewRevision)) continue;
++      const resources = [];
++      let needsFit = false;
++      for (const resource of this.#resources.values()) {
++        if (resource.manifest === undefined || resource.manifestFailure !== undefined
++          || virtualTextureAtlasKey(resource.asset, resource.manifest) !== atlas.key) continue;
++        resources.push(resource);
++        needsFit ||= resource.demandNeedsFit || resource.admittedPageLimit === undefined || resource.demandRevision !== this.#viewRevision;
++      }
++      if (!needsFit) continue;
+       const requests = resources.filter((resource) => (resource.desiredPageCount ?? 0) > 0).map((resource) => {
+         const manifest = resource.manifest!;
+         return { key: resource.key, minimumBytes: 1,

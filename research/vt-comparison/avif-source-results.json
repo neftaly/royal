@@ -1,0 +1,1370 @@
+{
+  "results": [
+    {
+      "name": "svg-166",
+      "minFilter": "astc",
+      "frames": 31,
+      "phases": [],
+      "reads": [
+        "astc",
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/svg-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 366164,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 5,
+        "admittedPages": 5,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 262976,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "svg-166",
+      "minFilter": "unsupported",
+      "frames": 10,
+      "phases": [],
+      "reads": [
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/svg-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-166",
+      "minFilter": "astc",
+      "frames": 7,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/webp-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-166",
+      "minFilter": "unsupported",
+      "frames": 9,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/webp-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-166",
+      "minFilter": "astc",
+      "frames": 8,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/avif-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-166",
+      "minFilter": "unsupported",
+      "frames": 11,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        1,
+        253,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/avif-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-166",
+      "minFilter": "astc",
+      "frames": 9,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/png-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-166",
+      "minFilter": "unsupported",
+      "frames": 6,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/png-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-svg-166",
+      "minFilter": "astc",
+      "frames": 21,
+      "phases": [],
+      "reads": [
+        "astc",
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/png-svg-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 366164,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 5,
+        "admittedPages": 5,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 262976,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-svg-166",
+      "minFilter": "unsupported",
+      "frames": 17,
+      "phases": [],
+      "reads": [
+        "raster",
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/png-svg-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 366164,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 5,
+        "admittedPages": 5,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 311428,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-preview-166",
+      "minFilter": "astc",
+      "frames": 4,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/png-preview-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 1049408,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-preview-166",
+      "minFilter": "unsupported",
+      "frames": 8,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/png-preview-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-preview-166",
+      "minFilter": "astc",
+      "frames": 5,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/webp-preview-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4195136,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-preview-166",
+      "minFilter": "unsupported",
+      "frames": 10,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/webp-preview-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-preview-166",
+      "minFilter": "astc",
+      "frames": 6,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        1,
+        253,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/avif-preview-166-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4195136,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-preview-166",
+      "minFilter": "unsupported",
+      "frames": 7,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        1,
+        253,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/avif-preview-166-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "svg-172",
+      "minFilter": "astc",
+      "frames": 11,
+      "phases": [],
+      "reads": [
+        "astc",
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/svg-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 366164,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 5,
+        "admittedPages": 5,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 262528,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "svg-172",
+      "minFilter": "unsupported",
+      "frames": 5,
+      "phases": [],
+      "reads": [
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/svg-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-172",
+      "minFilter": "astc",
+      "frames": 5,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/webp-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-172",
+      "minFilter": "unsupported",
+      "frames": 7,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/webp-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-172",
+      "minFilter": "astc",
+      "frames": 6,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/avif-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-172",
+      "minFilter": "unsupported",
+      "frames": 8,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        1,
+        253,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/avif-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-172",
+      "minFilter": "astc",
+      "frames": 5,
+      "phases": [],
+      "reads": [
+        "astc"
+      ],
+      "pixel": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/png-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-172",
+      "minFilter": "unsupported",
+      "frames": 6,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/png-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-svg-172",
+      "minFilter": "astc",
+      "frames": 13,
+      "phases": [],
+      "reads": [
+        "astc",
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/png-svg-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 366164,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 5,
+        "admittedPages": 5,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 262528,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-svg-172",
+      "minFilter": "unsupported",
+      "frames": 16,
+      "phases": [],
+      "reads": [
+        "raster",
+        "svg"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/png-svg-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 366164,
+        "atlasBytes": 557568,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 5,
+        "admittedPages": 5,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 311428,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 5,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 5,
+        "uploadedPages": 5,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-preview-172",
+      "minFilter": "astc",
+      "frames": 10,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/png-preview-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 69780,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 1048960,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "png-preview-172",
+      "minFilter": "unsupported",
+      "frames": 5,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/png-preview-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-preview-172",
+      "minFilter": "astc",
+      "frames": 7,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/webp-preview-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 70036,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4194688,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "webp-preview-172",
+      "minFilter": "unsupported",
+      "frames": 5,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        0,
+        255,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/webp-preview-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-preview-172",
+      "minFilter": "astc",
+      "frames": 3,
+      "phases": [
+        {
+          "name": "coarse-authority",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "grown",
+          "atlasBytes": 627264
+        },
+        {
+          "name": "shrunk",
+          "atlasBytes": 69696
+        },
+        {
+          "name": "restored",
+          "atlasBytes": 69696
+        }
+      ],
+      "reads": [
+        "astc",
+        "raster"
+      ],
+      "pixel": [
+        0,
+        1,
+        253,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/avif-preview-172-astc.png",
+      "final": {
+        "admittedUploadBytes": 70036,
+        "atlasBytes": 69696,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 1,
+        "admittedPages": 1,
+        "unresidentPages": 0,
+        "automaticCandidates": 1,
+        "automaticDecodedBytes": 4194688,
+        "automaticIneligible": 0,
+        "automaticResources": 1,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 2,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 1,
+        "uploadedPages": 2,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    {
+      "name": "avif-preview-172",
+      "minFilter": "unsupported",
+      "frames": 5,
+      "phases": [],
+      "reads": [
+        "raster"
+      ],
+      "pixel": [
+        0,
+        1,
+        253,
+        255
+      ],
+      "screenshot": "research/vt-comparison/avif-source-results-images/avif-preview-172-unsupported.png",
+      "final": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 0,
+        "atlasPools": 0,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 0,
+        "admittedPages": 0,
+        "unresidentPages": 0,
+        "automaticCandidates": 0,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 0,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 0,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 0,
+        "uploadedPages": 0,
+        "uploadBudgetBytes": 33554432
+      }
+    }
+  ],
+  "note": "ASTC 6x6/8x8 complete mip pyramids; forced unsupported capability uses the same host GPU. SVG/PNG/WebP authority is blue; native alternative is red to expose unintended substitution.",
+  "gc": {
+    "events": 15,
+    "totalMs": 181.80299999999997,
+    "maxMs": 49.27,
+    "heapBefore": {
+      "usedSize": 926184,
+      "totalSize": 1835008,
+      "embedderHeapUsedSize": 333648,
+      "backingStorageSize": 311291
+    },
+    "heapAfter": {
+      "usedSize": 4124344,
+      "totalSize": 4718592,
+      "embedderHeapUsedSize": 461872,
+      "backingStorageSize": 478961
+    },
+    "note": "Aggregate renderer-process trace includes benchmark setup and diagnostic allocations; heaps measured after forced GC before/after the complete run."
+  },
+  "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+}

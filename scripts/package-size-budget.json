@@ -6,7 +6,7 @@
   },
   "@royal/react": 131072,
   "@royal/renderer-core": 524288,
-  "@royal/renderer-webgl": 744960,
+  "@royal/renderer-webgl": 755968,
   "_allowance": {
     "optionalCaptureModuleAndDeclarationsBytes": 8192,
     "lazyLargeLightRuntimeAndDeclarationsBytes": 8192,
@@ -14,6 +14,20 @@
     "nativeCompressedFormatsAndDeclarationsBytes": 6144,
     "astcGltfPreviewAndDeclarationsBytes": 2048,
     "vtMipFilteringAndDemandCacheBytes": 1024,
-    "requiredSourceAlternativesBytes": 512
+    "requiredSourceAlternativesBytes": 512,
+    "rasterPreviewAndDeclarationsBytes": 4608,
+    "failedNativeAuthorityReleaseBytes": 128,
+    "residentAtlasKeyReuseBytes": 32,
+    "sharedPoolRequestReuseBytes": 128,
+    "coarsestDemandOverflowBytes": 16,
+    "indeterminateDerivativeFallbackBytes": 32,
+    "terminalAutomaticFailureBytes": 160,
+    "emptyFailedAtlasReleaseBytes": 256,
+    "nativePageColorFailureBytes": 64,
+    "nativePageCompactionBytes": 16,
+    "authoredResidentLimitBytes": 256,
+    "dirtyPageTableMipBytes": 64,
+    "manifestTransportLaneBytes": 1152,
+    "vtCancellationBudgetRecoveryAndMigrationBytes": 4096
   }
 }

@@ -1,0 +1,26 @@
+{
+  "relatedTests": 243,
+  "nativeAdmissionCases": 6,
+  "candidateTestFailures": 6,
+  "gpuCases": 8,
+  "gpuSettledViews": 48,
+  "gpuPixelChecks": 144,
+  "rootTypecheckExitCode": 0,
+  "researchTypecheckExitCode": 0,
+  "candidateGpuExitCode": 1,
+  "sources": {
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "b6573774a9ac93f9bd6eff1c9a113faab2e1b392a1e1a2061d604dd1f2337ec1",
+    "tests/replacement/renderer-webgl-vt-runtime.test.ts": "cc65f5b5032a2760847cd4cd19e26d793288fb6f1e71a2a25a123b290ab8e096",
+    "research/vt-comparison/resident-limit-gpu.ts": "a8080bfb1981d47ff6cd9453bf129cd3276fdf7f3a2d4331e96d1c686223dc3f",
+    "research/vt-comparison/build-client.mjs": "e233bee01b630911488ee8a45ebdd2011e1ace0d0aac35e061485793517883bc"
+  },
+  "logs": {
+    "/tmp/royal-vt-native-late-admission-final.log": "490d0f973515c8d0babdcca12477d6396daff02b1e6b0ed672d720d02ee2de81",
+    "/tmp/royal-vt-native-late-admission-types.log": "5ac71a99decf5b92dbfe798066cbe8ea317395f8f764f5a8879fd3511ca99454",
+    "/tmp/royal-vt-native-late-gpu-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/tmp/royal-vt-native-demand-sized-mutation.log": "e6c45bf5cf16b5145de388711624cf809f474ff6aa4584f1c6b4939e2cfed540",
+    "/tmp/royal-vt-native-late-admission-gpu.log": "8ae35423515db01e6b47e82a1f3f221e1191f79c8354c598ccb5ceb471f03216",
+    "/tmp/royal-vt-native-demand-sized-gpu-control.log": "db9cc9e2e93c49d917fae048eed74ed9ba5933e23450f1560f66ab88e158e745"
+  },
+  "note": "Candidate rejected and production runtime restored byte-for-byte. Tests and GPU diagnostics retained. Headless host-GPU correctness runs only; no new timing claims or commits."
+}

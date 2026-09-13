@@ -1,0 +1,377 @@
+{
+  "summaries": [
+    {
+      "file": "research/vt-comparison/flat-asset-key-eviction-after.json",
+      "sampledBytes": 4196220,
+      "allocations": [
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:53",
+          "bytes": 393276
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-visibility.ts:93",
+          "bytes": 360516
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:748",
+          "bytes": 327888
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:158",
+          "bytes": 196644
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:230",
+          "bytes": 163872
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/pool-budget.ts:8",
+          "bytes": 131124
+        },
+        {
+          "source": "packages/renderer-webgl/src/texture/ktx2-native.ts:87",
+          "bytes": 131124
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:335",
+          "bytes": 131100
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:441",
+          "bytes": 131100
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:93",
+          "bytes": 131100
+        },
+        {
+          "source": "research/vt-comparison/resident-eviction.ts:31",
+          "bytes": 98408
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/browser-page-source.ts:137",
+          "bytes": 98396
+        },
+        {
+          "source": "(unattributed)",
+          "bytes": 98384
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/manifest.ts:289",
+          "bytes": 98356
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/render-object-scene-update.ts:118",
+          "bytes": 98348
+        },
+        {
+          "source": "packages/renderer-webgl/src/frame/frame-clock-owner.ts:118",
+          "bytes": 98340
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1367",
+          "bytes": 98340
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-depth-prepass.ts:26",
+          "bytes": 98332
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-depth-order.ts:15",
+          "bytes": 98316
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:140",
+          "bytes": 98316
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime-contract.ts:12",
+          "bytes": 65664
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1669",
+          "bytes": 65664
+        },
+        {
+          "source": "research/vt-comparison/resident-eviction.ts:76",
+          "bytes": 65632
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1595",
+          "bytes": 65572
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/lod-selection.ts:285",
+          "bytes": 65564
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/render-object-scene-update.ts:91",
+          "bytes": 65564
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-program-owner.ts:565",
+          "bytes": 65560
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/scene-lowering.ts:319",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/texture/ktx2-native.ts:218",
+          "bytes": 65544
+        },
+        {
+          "source": "research/vt-comparison/resident-eviction.ts:60",
+          "bytes": 32832
+        },
+        {
+          "source": "research/vt-comparison/resident-eviction.ts:20",
+          "bytes": 32832
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/browser-page-source.ts:121",
+          "bytes": 32816
+        },
+        {
+          "source": "research/vt-comparison/resident-eviction.ts:42",
+          "bytes": 32800
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:807",
+          "bytes": 32800
+        },
+        {
+          "source": "packages/renderer-core/src/render-object.ts:147",
+          "bytes": 32800
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:698",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1383",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:317",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-webgl/src/resource/async-preparation-owner.ts:159",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-gpu-owner.ts:1386",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:376",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-visibility.ts:77",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:324",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-core/src/render-object.ts:84",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-visibility.ts:33",
+          "bytes": 32772
+        }
+      ]
+    },
+    {
+      "file": "research/vt-comparison/flat-asset-key-eviction-after-repeat.json",
+      "sampledBytes": 3868692,
+      "allocations": [
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:53",
+          "bytes": 393288
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:748",
+          "bytes": 360812
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/pool-budget.ts:8",
+          "bytes": 262396
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-visibility.ts:93",
+          "bytes": 262188
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:441",
+          "bytes": 229416
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:335",
+          "bytes": 163872
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:93",
+          "bytes": 163872
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-visibility.ts:33",
+          "bytes": 131100
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:140",
+          "bytes": 131088
+        },
+        {
+          "source": "research/vt-comparison/resident-eviction.ts:20",
+          "bytes": 98356
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:158",
+          "bytes": 98328
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/scene-lowering.ts:319",
+          "bytes": 98328
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-depth-order.ts:15",
+          "bytes": 98316
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/browser-page-source.ts:121",
+          "bytes": 65700
+        },
+        {
+          "source": "packages/renderer-webgl/src/texture/ktx2-native.ts:87",
+          "bytes": 65652
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/browser-page-source.ts:137",
+          "bytes": 65628
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1595",
+          "bytes": 65580
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1508",
+          "bytes": 65568
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/manifest.ts:289",
+          "bytes": 65568
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:698",
+          "bytes": 65564
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-gpu-owner.ts:846",
+          "bytes": 65560
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:376",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:230",
+          "bytes": 65544
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1669",
+          "bytes": 32832
+        },
+        {
+          "source": "packages/renderer-core/src/render-object.ts:358",
+          "bytes": 32832
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1655",
+          "bytes": 32832
+        },
+        {
+          "source": "packages/renderer-webgl/src/resource/retained-fifo.ts:33",
+          "bytes": 32832
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/demand.ts:100",
+          "bytes": 32820
+        },
+        {
+          "source": "research/vt-comparison/resident-eviction.ts:48",
+          "bytes": 32800
+        },
+        {
+          "source": "packages/renderer-core/src/render-object.ts:89",
+          "bytes": 32800
+        },
+        {
+          "source": "packages/renderer-core/src/render-object.ts:259",
+          "bytes": 32796
+        },
+        {
+          "source": "packages/renderer-webgl/src/texture/sampler.ts:18",
+          "bytes": 32788
+        },
+        {
+          "source": "(unattributed)",
+          "bytes": 32784
+        },
+        {
+          "source": "packages/renderer-webgl/src/resource/async-preparation-owner.ts:125",
+          "bytes": 32784
+        },
+        {
+          "source": "packages/renderer-webgl/src/resource/async-preparation-owner.ts:159",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1367",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1383",
+          "bytes": 32780
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/render-object-scene-update.ts:91",
+          "bytes": 32780
+        },
+        {
+          "source": "research/vt-comparison/resident-eviction.ts:76",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:1391",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/math/mat4.ts:408",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/virtual-texture/runtime.ts:807",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-core/src/render-object.ts:162",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/surface/surface-depth-prepass.ts:26",
+          "bytes": 32772
+        },
+        {
+          "source": "packages/renderer-webgl/src/texture/ktx2-native.ts:11",
+          "bytes": 32772
+        }
+      ]
+    }
+  ],
+  "note": "Sampling estimates, not exact allocation counts. Native allocation frames inherit the nearest source-mapped JavaScript ancestor. Source maps must match the captured build."
+}

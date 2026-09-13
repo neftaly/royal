@@ -1,0 +1,10 @@
+{
+  "revision": "56130d3438cc30860dd87b4df26500117f35e9f3",
+  "productionSources": {
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "4135d5a61099ef0bd7a4aadfd66d8d0c1adb2152ad95ac3d4bd7a6c41f8bfd64",
+    "packages/renderer-webgl/src/virtual-texture/pool-budget.ts": "4499a479c5aa78aca5e9ddcc3150d82b5a095ce8ba6ede5cff82e358c3714d79",
+    "packages/renderer-webgl/src/virtual-texture/demand.ts": "98a2a174013f3bd6363c0d36232a136d9c6ab4ae5312cd87bb3ea8c9e5d3f4b3",
+    "packages/renderer-core/src/camera-resource.ts": "33a763c81760a8d47f503cce31d7acd20e90e7843c6f85b9d626f0a3c43d1ac3"
+  },
+  "note": "Uncommitted production source checkpoint for steady-state profiling; no production code changed in the profiling pass."
+}

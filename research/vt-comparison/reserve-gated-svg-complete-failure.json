@@ -1,0 +1,258 @@
+{
+  "excludedFixtureFailure": "An exact gated-read-count assertion incorrectly rejected legitimate rereads after context restoration; VT had settled with all 336 pages. Replaced with a minimum-count assertion.",
+  "diagnostic": {
+    "resources": {
+      "asyncPreparation": {
+        "activeJobs": 0,
+        "jobLimit": 8,
+        "queuedDetailJobs": 0,
+        "queuedForegroundJobs": 0,
+        "queuedJobs": 0
+      },
+      "geometryUploads": {
+        "admittedBytes": 0,
+        "budgetBytes": 4194304,
+        "deferredUploads": 0,
+        "pendingSurfaces": 0
+      },
+      "gltfSharedGeometry": {
+        "pendingPreparationTasks": 0,
+        "preparedTaskBytes": 0,
+        "preparedTasks": 0,
+        "preparationTaskClaims": 0,
+        "primitiveClaims": 0,
+        "retainedBytes": 0,
+        "reusedClaims": 0,
+        "reusedPreparationClaims": 0,
+        "taskProducerPreparationDurationMs": 0,
+        "uniqueGeometries": 0
+      },
+      "gltfSourceReads": {
+        "activeReads": 0,
+        "queuedReads": 0,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0,
+        "stagedBytes": 0,
+        "stagedByteThreshold": 33554432
+      },
+      "imageTexturePreparation": {
+        "activePreparations": 0,
+        "browserStageTimings": {
+          "sourceCount": 7,
+          "totals": {
+            "decodeDurationMs": 337.60000014305115,
+            "decodeQueueDurationMs": 0.2999999523162842,
+            "transportDurationMs": 350.3000000715256,
+            "transportQueueDurationMs": 0
+          }
+        },
+        "decodedHandoffBytes": 0,
+        "decodedHandoffThresholdBytes": 67108864,
+        "encodedSourceReads": {
+          "activeReads": 0,
+          "queuedReads": 0,
+          "sourceReservationLimit": 128,
+          "sourceReservations": 0,
+          "stagedBytes": 0,
+          "stagedByteThreshold": 33554432
+        },
+        "pendingStorageRepresentations": 0,
+        "retainedEncodedSourceBytes": 3122,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0
+      },
+      "imageTextureUploads": {
+        "admittedBytes": 0,
+        "budgetBytes": 33554432,
+        "deferredUploads": 0
+      },
+      "imageTextures": {
+        "compressedBytes": 0,
+        "compressedTextures": 0,
+        "fittedTextures": 7,
+        "residentBytes": 14658056,
+        "residentTextures": 7
+      },
+      "persistentGpu": {
+        "budgetBytes": 67108864,
+        "deniedClaims": 1,
+        "retainedBytes": 65667182
+      },
+      "virtualTextures": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 50307280,
+        "atlasPools": 2,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 336,
+        "admittedPages": 336,
+        "unresidentPages": 0,
+        "automaticCandidates": 8,
+        "automaticDecodedBytes": 4194304,
+        "automaticIneligible": 0,
+        "automaticResources": 8,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 672,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 336,
+        "uploadedPages": 672,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    "assets": [
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 52.300000071525574,
+          "decodeQueueDurationMs": 0.10000002384185791,
+          "firstReadyAfterMs": 2138.5,
+          "preparationDurationMs": 105.40000009536743,
+          "preparationQueueDurationMs": 0.09999990463256836,
+          "transportDurationMs": 49.299999952316284,
+          "transportQueueDurationMs": 0
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 50,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 2161.3000000715256,
+          "preparationDurationMs": 129.40000009536743,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 50.09999990463257,
+          "transportQueueDurationMs": 0
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 50.700000047683716,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 2162.7000000476837,
+          "preparationDurationMs": 130.80000007152557,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 50.10000002384186,
+          "transportQueueDurationMs": 0
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 45,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 2164.2999999523163,
+          "preparationDurationMs": 132.39999997615814,
+          "preparationQueueDurationMs": 0.10000002384185791,
+          "transportDurationMs": 50.200000047683716,
+          "transportQueueDurationMs": 0
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 45.200000047683716,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 2165.5,
+          "preparationDurationMs": 133.5,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 50.200000047683716,
+          "transportQueueDurationMs": 0
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 46.700000047683716,
+          "decodeQueueDurationMs": 0.09999990463256836,
+          "firstReadyAfterMs": 2165.7999999523163,
+          "preparationDurationMs": 135.5,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 50.200000047683716,
+          "transportQueueDurationMs": 0
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "height": 627,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 47.699999928474426,
+          "decodeQueueDurationMs": 0.10000002384185791,
+          "firstReadyAfterMs": 2167.1999999284744,
+          "preparationDurationMs": 136.89999997615814,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 50.200000047683716,
+          "transportQueueDurationMs": 0
+        },
+        "width": 627
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "error": "Royal decoded texture completed without an active reservation",
+        "status": "error"
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      }
+    ]
+  }
+}

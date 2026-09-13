@@ -1,0 +1,25 @@
+{
+  "nativeCases": 12,
+  "mutationFailures": 12,
+  "relatedTests": 265,
+  "integrationTests": 1462,
+  "integrationFiles": 149,
+  "gltfManifestCases": 65,
+  "typecheckExitCode": 0,
+  "lintExitCode": 0,
+  "sources": {
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "b6573774a9ac93f9bd6eff1c9a113faab2e1b392a1e1a2061d604dd1f2337ec1",
+    "packages/renderer-webgl/src/virtual-texture/residency.ts": "78b501474b674366564d1223e6386602c714cb2feaa27e7ddf677f04d1a8a49a",
+    "packages/renderer-webgl/src/virtual-texture/browser-page-source.ts": "4edc82953596b419bed400b8e1a27c850899caa0564285b5f264a1daf7480057",
+    "tests/replacement/renderer-webgl-vt-runtime.test.ts": "46b2517321621a4b6d3c241c424208473fc6bc7007f705493f9b0105ad259ced"
+  },
+  "logs": {
+    "/tmp/royal-vt-capped-deferral.log": "82bf490852b1ea11931fa3194f50dd807c019415b9bc5a3c4c8a798e3e507154",
+    "/tmp/royal-vt-capped-deferral-discard.log": "fceba9502733da66621e51bde581e0ce52313552ba215d1f5e168e2fa17377b0",
+    "/tmp/royal-vt-capped-deferral-final.log": "f47d0361f35f092e20fe68405ddff820dc83259ca452e9855ce67a83e6e54639",
+    "/tmp/royal-vt-capped-deferral-types.log": "5ac71a99decf5b92dbfe798066cbe8ea317395f8f764f5a8879fd3511ca99454",
+    "/tmp/royal-vt-capped-deferral-integration.log": "21d9b24e4334be4919d98264a20cb01363ee3e7074adc4e57d0cd7d5a0c808e9",
+    "/tmp/royal-vt-capped-deferral-lint.log": "376ca9de1f8e26ecd64fd86c2273f9d623325fc0ba64edbb31155195702aa149"
+  },
+  "note": "Upload deferral preserves queued replacement; cancellation releases it. Production runtime restored byte-for-byte after discard-on-denial mutation. No production changes or commits."
+}

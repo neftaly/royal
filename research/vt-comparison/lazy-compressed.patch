@@ -1,0 +1,19 @@
+--- before/runtime.ts
++++ after/runtime.ts
+@@ -757,7 +757,7 @@
+     this.#atlasMinimumSlots.clear();
+     const poolRequests = new Map<string, { key: string; minimumBytes: number; wantedBytes: number }>();
+     let compressedBytes = 0;
+-    const compressedKeys = new Set<string>();
++    let compressedKeys: Set<string> | undefined;
+     for (const resource of this.#resources.values()) {
+       this.#refreshFrameDemand(resource, views);
+       const manifest = resource.manifest;
+@@ -771,6 +771,7 @@
+       this.#atlasMinimumSlots.set(key, (this.#atlasMinimumSlots.get(key) ?? 0) + (count > 0 ? 1 : 0));
+       if (count === 0 && !this.#atlases.has(key)) continue;
+       if (manifest.pageEncoding !== "image") {
++        compressedKeys ??= new Set<string>();
+         if (!compressedKeys.has(key)) compressedBytes += this.#atlases.get(key)?.allocationBytes ?? 32 * 1024 * 1024;
+         compressedKeys.add(key);
+       } else {

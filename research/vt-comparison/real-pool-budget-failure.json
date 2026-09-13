@@ -1,0 +1,272 @@
+{
+  "diagnostic": {
+    "resources": {
+      "asyncPreparation": {
+        "activeJobs": 0,
+        "jobLimit": 8,
+        "queuedDetailJobs": 0,
+        "queuedForegroundJobs": 0,
+        "queuedJobs": 0
+      },
+      "geometryUploads": {
+        "admittedBytes": 0,
+        "budgetBytes": 4194304,
+        "deferredUploads": 0,
+        "pendingSurfaces": 0
+      },
+      "gltfSharedGeometry": {
+        "pendingPreparationTasks": 0,
+        "preparedTaskBytes": 0,
+        "preparedTasks": 0,
+        "preparationTaskClaims": 0,
+        "primitiveClaims": 0,
+        "retainedBytes": 0,
+        "reusedClaims": 0,
+        "reusedPreparationClaims": 0,
+        "taskProducerPreparationDurationMs": 0,
+        "uniqueGeometries": 0
+      },
+      "gltfSourceReads": {
+        "activeReads": 0,
+        "queuedReads": 0,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0,
+        "stagedBytes": 0,
+        "stagedByteThreshold": 33554432
+      },
+      "imageTexturePreparation": {
+        "activePreparations": 0,
+        "browserStageTimings": {
+          "sourceCount": 8,
+          "totals": {
+            "decodeDurationMs": 819.7999999523163,
+            "decodeQueueDurationMs": 0,
+            "transportDurationMs": 480.39999997615814,
+            "transportQueueDurationMs": 0.5
+          }
+        },
+        "decodedHandoffBytes": 0,
+        "decodedHandoffThresholdBytes": 67108864,
+        "encodedSourceReads": {
+          "activeReads": 0,
+          "queuedReads": 0,
+          "sourceReservationLimit": 128,
+          "sourceReservations": 0,
+          "stagedBytes": 0,
+          "stagedByteThreshold": 33554432
+        },
+        "pendingStorageRepresentations": 0,
+        "retainedEncodedSourceBytes": 3568,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0
+      },
+      "imageTextureUploads": {
+        "admittedBytes": 0,
+        "budgetBytes": 33554432,
+        "deferredUploads": 0
+      },
+      "imageTextures": {
+        "compressedBytes": 0,
+        "compressedTextures": 0,
+        "fittedTextures": 8,
+        "residentBytes": 100663232,
+        "residentTextures": 8
+      },
+      "persistentGpu": {
+        "budgetBytes": 134217728,
+        "deniedClaims": 0,
+        "retainedBytes": 134208534
+      },
+      "virtualTextures": {
+        "admittedUploadBytes": 0,
+        "atlasBytes": 33542496,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 336,
+        "admittedPages": 336,
+        "unresidentPages": 168,
+        "automaticCandidates": 8,
+        "automaticDecodedBytes": 0,
+        "automaticIneligible": 0,
+        "automaticResources": 8,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 168,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 168,
+        "uploadedPages": 168,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    "assets": [
+      {
+        "height": 1536,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 55,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 220.30000007152557,
+          "preparationDurationMs": 219.30000007152557,
+          "preparationQueueDurationMs": 0.2999999523162842,
+          "transportDurationMs": 56.10000002384186,
+          "transportQueueDurationMs": 0.19999992847442627
+        },
+        "width": 1536
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "height": 1536,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 73.69999992847443,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 239.79999995231628,
+          "preparationDurationMs": 239.69999992847443,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 57.09999990463257,
+          "transportQueueDurationMs": 0.10000002384185791
+        },
+        "width": 1536
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "height": 1536,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 87,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 253.69999992847443,
+          "preparationDurationMs": 253.69999992847443,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 57.10000002384186,
+          "transportQueueDurationMs": 0
+        },
+        "width": 1536
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "height": 1536,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 65,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 230.39999997615814,
+          "preparationDurationMs": 230.39999997615814,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 38.89999997615814,
+          "transportQueueDurationMs": 0.10000002384185791
+        },
+        "width": 1536
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "height": 1536,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 147.60000002384186,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 323.39999997615814,
+          "preparationDurationMs": 323.39999997615814,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 68.20000004768372,
+          "transportQueueDurationMs": 0.10000002384185791
+        },
+        "width": 1536
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "height": 1536,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 122,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 295,
+          "preparationDurationMs": 295,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 67.79999995231628,
+          "transportQueueDurationMs": 0
+        },
+        "width": 1536
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "height": 1536,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 138.79999995231628,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 313,
+          "preparationDurationMs": 312.89999997615814,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 67.70000004768372,
+          "transportQueueDurationMs": 0
+        },
+        "width": 1536
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      },
+      {
+        "height": 1536,
+        "status": "ready",
+        "timings": {
+          "decodeDurationMs": 130.70000004768372,
+          "decodeQueueDurationMs": 0,
+          "firstReadyAfterMs": 304.3000000715256,
+          "preparationDurationMs": 304.3000000715256,
+          "preparationQueueDurationMs": 0,
+          "transportDurationMs": 67.5,
+          "transportQueueDurationMs": 0
+        },
+        "width": 1536
+      },
+      {
+        "failedPages": 0,
+        "pendingPages": 0,
+        "residentPages": 21,
+        "status": "ready"
+      }
+    ]
+  },
+  "sourceSha256": "5e4d8d9c37c6930ca1b781d2bd7bc0b234bcd79ce51fbe18fcaacd9e7e01ab65",
+  "restoredSha256": "b6573774a9ac93f9bd6eff1c9a113faab2e1b392a1e1a2061d604dd1f2337ec1",
+  "candidateRetained": false,
+  "runtimeTests": "183 passed with candidate",
+  "scope": "Headless Intel GPU, 16 mixed sources, 128 MiB. Warm-up failure; no measured frames."
+}

@@ -1,0 +1,492 @@
+{
+  "sourceHashes": {
+    "before": "2352bae9904868aaa2108fdb5ae7bafc3324fde8f2a1312d0da708664608e888",
+    "after": "eed6e97230590ecc3b32f35b3937fff10086e619d34fab2519e7a8ac0ef02bd8"
+  },
+  "equivalentCases": 10000,
+  "measuredIterations": 250000,
+  "warmupIterations": 50000,
+  "results": [
+    {
+      "version": "before",
+      "encoding": "image",
+      "count": 1,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 164.71546499999988,
+      "cpuMs": 212.866,
+      "checksum": 250000
+    },
+    {
+      "version": "after",
+      "encoding": "image",
+      "count": 1,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 121.42114900000001,
+      "cpuMs": 173.011,
+      "checksum": 250000
+    },
+    {
+      "version": "after",
+      "encoding": "image",
+      "count": 1,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 132.39314000000013,
+      "cpuMs": 238.307,
+      "checksum": 250000
+    },
+    {
+      "version": "before",
+      "encoding": "image",
+      "count": 1,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 125.33142699999985,
+      "cpuMs": 183.89,
+      "checksum": 250000
+    },
+    {
+      "version": "before",
+      "encoding": "image",
+      "count": 1,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 106.62674199999992,
+      "cpuMs": 146.738,
+      "checksum": 250000
+    },
+    {
+      "version": "after",
+      "encoding": "image",
+      "count": 1,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 112.79046999999991,
+      "cpuMs": 158.691,
+      "checksum": 250000
+    },
+    {
+      "version": "after",
+      "encoding": "image",
+      "count": 1,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 116.42182100000014,
+      "cpuMs": 194.299,
+      "checksum": 250000
+    },
+    {
+      "version": "before",
+      "encoding": "image",
+      "count": 1,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 130.10526000000004,
+      "cpuMs": 229.857,
+      "checksum": 250000
+    },
+    {
+      "version": "before",
+      "encoding": "image",
+      "count": 16,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 338.95804999999973,
+      "cpuMs": 375.106,
+      "checksum": 250000
+    },
+    {
+      "version": "after",
+      "encoding": "image",
+      "count": 16,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 339.80846599999995,
+      "cpuMs": 375.874,
+      "checksum": 250000
+    },
+    {
+      "version": "after",
+      "encoding": "image",
+      "count": 16,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 356.8216090000001,
+      "cpuMs": 456.191,
+      "checksum": 250000
+    },
+    {
+      "version": "before",
+      "encoding": "image",
+      "count": 16,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 366.3726139999999,
+      "cpuMs": 414.474,
+      "checksum": 250000
+    },
+    {
+      "version": "before",
+      "encoding": "image",
+      "count": 16,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 333.958627,
+      "cpuMs": 366.651,
+      "checksum": 250000
+    },
+    {
+      "version": "after",
+      "encoding": "image",
+      "count": 16,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 347.5322040000001,
+      "cpuMs": 447.191,
+      "checksum": 250000
+    },
+    {
+      "version": "after",
+      "encoding": "image",
+      "count": 16,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 338.88786900000014,
+      "cpuMs": 375.253,
+      "checksum": 250000
+    },
+    {
+      "version": "before",
+      "encoding": "image",
+      "count": 16,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 343.3687810000001,
+      "cpuMs": 393.362,
+      "checksum": 250000
+    },
+    {
+      "version": "before",
+      "encoding": "image",
+      "count": 128,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 1855.1783699999996,
+      "cpuMs": 1951.041,
+      "checksum": 250000
+    },
+    {
+      "version": "after",
+      "encoding": "image",
+      "count": 128,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 1872.4984780000004,
+      "cpuMs": 1923.192,
+      "checksum": 250000
+    },
+    {
+      "version": "after",
+      "encoding": "image",
+      "count": 128,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 1831.2768469999992,
+      "cpuMs": 1862.882,
+      "checksum": 250000
+    },
+    {
+      "version": "before",
+      "encoding": "image",
+      "count": 128,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 1849.9970859999994,
+      "cpuMs": 1950.93,
+      "checksum": 250000
+    },
+    {
+      "version": "before",
+      "encoding": "image",
+      "count": 128,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 1851.4102430000003,
+      "cpuMs": 1886.023,
+      "checksum": 250000
+    },
+    {
+      "version": "after",
+      "encoding": "image",
+      "count": 128,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 1843.5923969999985,
+      "cpuMs": 1889.635,
+      "checksum": 250000
+    },
+    {
+      "version": "after",
+      "encoding": "image",
+      "count": 128,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 1838.200417,
+      "cpuMs": 1872.47,
+      "checksum": 250000
+    },
+    {
+      "version": "before",
+      "encoding": "image",
+      "count": 128,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 1846.1602790000034,
+      "cpuMs": 1880.09,
+      "checksum": 250000
+    },
+    {
+      "version": "before",
+      "encoding": "ktx2-native",
+      "count": 1,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 98.3987530000013,
+      "cpuMs": 133.628,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "encoding": "ktx2-native",
+      "count": 1,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 93.28719700000147,
+      "cpuMs": 127.248,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "encoding": "ktx2-native",
+      "count": 1,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 93.4414919999981,
+      "cpuMs": 126.54,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "encoding": "ktx2-native",
+      "count": 1,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 97.31924100000106,
+      "cpuMs": 130.127,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "encoding": "ktx2-native",
+      "count": 1,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 99.65186399999948,
+      "cpuMs": 138.094,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "encoding": "ktx2-native",
+      "count": 1,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 97.860940999999,
+      "cpuMs": 133.358,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "encoding": "ktx2-native",
+      "count": 1,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 93.09345699999903,
+      "cpuMs": 132.615,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "encoding": "ktx2-native",
+      "count": 1,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 97.38906900000075,
+      "cpuMs": 133.806,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "encoding": "ktx2-native",
+      "count": 16,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 396.67283999999927,
+      "cpuMs": 493.217,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "encoding": "ktx2-native",
+      "count": 16,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 311.3219319999989,
+      "cpuMs": 356.216,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "encoding": "ktx2-native",
+      "count": 16,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 294.9834979999978,
+      "cpuMs": 330.392,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "encoding": "ktx2-native",
+      "count": 16,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 365.8399539999991,
+      "cpuMs": 470.923,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "encoding": "ktx2-native",
+      "count": 16,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 349.97938700000304,
+      "cpuMs": 381.393,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "encoding": "ktx2-native",
+      "count": 16,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 327.105943999999,
+      "cpuMs": 379.349,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "encoding": "ktx2-native",
+      "count": 16,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 325.89785199999824,
+      "cpuMs": 414.812,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "encoding": "ktx2-native",
+      "count": 16,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 358.5406030000013,
+      "cpuMs": 407.216,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "encoding": "ktx2-native",
+      "count": 128,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 2030.5099339999979,
+      "cpuMs": 2094.354,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "encoding": "ktx2-native",
+      "count": 128,
+      "pools": 1,
+      "round": 0,
+      "elapsedMs": 1711.9586490000002,
+      "cpuMs": 1746.101,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "encoding": "ktx2-native",
+      "count": 128,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 1702.3441379999967,
+      "cpuMs": 1736.105,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "encoding": "ktx2-native",
+      "count": 128,
+      "pools": 1,
+      "round": 1,
+      "elapsedMs": 2101.4986359999966,
+      "cpuMs": 2194.028,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "encoding": "ktx2-native",
+      "count": 128,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 2038.2794649999996,
+      "cpuMs": 2071.193,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "encoding": "ktx2-native",
+      "count": 128,
+      "pools": 1,
+      "round": 2,
+      "elapsedMs": 1716.5447579999964,
+      "cpuMs": 1762.625,
+      "checksum": 0
+    },
+    {
+      "version": "after",
+      "encoding": "ktx2-native",
+      "count": 128,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 1699.986355000001,
+      "cpuMs": 1735.883,
+      "checksum": 0
+    },
+    {
+      "version": "before",
+      "encoding": "ktx2-native",
+      "count": 128,
+      "pools": 1,
+      "round": 3,
+      "elapsedMs": 2115.225035999996,
+      "cpuMs": 2202.76,
+      "checksum": 0
+    }
+  ],
+  "note": "Extracted runtime aggregation blocks, TypeScript transpiled. Refresh, atlas key and page-byte functions stubbed equally; allocator returns requests and budget. Excludes rendering, asynchronous work and GPU execution."
+}

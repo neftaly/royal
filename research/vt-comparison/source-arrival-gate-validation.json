@@ -1,0 +1,16 @@
+{
+  "sha256": {
+    "research/vt-comparison/steady.ts": "26906940c7c4cffb20f10ac33135f6122f7e7986cc90f21ad2ecb31e4ef8f93f",
+    "packages/renderer-webgl/src/virtual-texture/runtime.ts": "ac809cb036df45aaf1e0742b8d8a443274f1d7b7ea239aab9ad5a3a54519184a",
+    "research/vt-comparison/reserve-gated-svg-admitted.json": "083347f84a5e20c73434e3d4baee52f044c4020246e57a74496e3558a02440a9",
+    "research/vt-comparison/reserve-gated-native-failure.json": "3780979807c090f3a520b7376bf87281b99effd31a0b06eb03d78f414c617082"
+  },
+  "checks": {
+    "researchTypes": "pass",
+    "researchBuild": "pass",
+    "svgGate": "168 opposite-class residents before release; final run 336 residents before/after restoration, 672 uploads",
+    "nativeGate": "8 occupied preparation jobs and 4 queued page jobs; starvation unresolved"
+  },
+  "productionChanged": false,
+  "committed": false
+}
