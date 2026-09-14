@@ -25,6 +25,27 @@ it("grows through one bounded copy per step and retains both allocations until p
     expect(budget.snapshot().retainedBytes).toBe(before * 2);
   } finally { storage.dispose(); }
   expect(budget.snapshot().retainedBytes).toBe(0);
+  expect(storage.byteLength).toBe(0);
+  expect(storage.cpuBytes).toBe(0);
+});
+
+it.each([true, false])("clears published and pending storage on disposal (delete GPU: %s)", deleteGpu => {
+  const gl = fakeGl(), budget = new PersistentGpuBudgetOwner();
+  gl.compressedTexSubImage2D = vi.fn();
+  const storage = new IdleAstcStorage(gl, budget, 132);
+  const step = () => storage.ensureCapacity(() => true, 4096, budget.availableBytes, () => true);
+  step(); step();
+  for (let i = 0; i < 8; i++) storage.append(new Uint8Array(7744));
+  step();
+  vi.mocked(gl.deleteTexture).mockClear(); vi.mocked(gl.deleteSync).mockClear();
+  storage.dispose(deleteGpu); storage.dispose(deleteGpu);
+  expect(storage.byteLength).toBe(0);
+  expect(storage.cpuBytes).toBe(0);
+  expect(storage.growing).toBe(false);
+  expect(storage.texture).toBeUndefined();
+  expect(budget.snapshot().retainedBytes).toBe(0);
+  expect(gl.deleteTexture).toHaveBeenCalledTimes(deleteGpu ? 2 : 0);
+  expect(gl.deleteSync).toHaveBeenCalledTimes(deleteGpu ? 1 : 0);
 });
 
 it("releases unfinished growth immediately when foreground work resumes", () => {

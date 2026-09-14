@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.resetModules(); });
 
-it("encodes one block row per grant and cancels asynchronous startup without duplicating the codec", async () => {
+it.each(["cancel", "replace"])("encodes one block row per grant and handles %s during startup without duplicating the codec", async mode => {
   let initialize!: (value: unknown) => void;
   const memory = new WebAssembly.Memory({ initial: 1 });
   const encode = vi.fn((_context: number, _input: number, _width: number, height: number, output: number, bytes: number) => {
@@ -21,8 +21,14 @@ it("encodes one block row per grant and cancels asynchronous startup without dup
   await import("../../packages/renderer-webgl/src/virtual-texture/astc/idle-astc-worker");
   const first = { close: vi.fn() }, second = { close: vi.fn() };
   const obsolete = target.onmessage({ data: { type: "start", id: 1, bitmap: first, size: 12 } });
-  await target.onmessage({ data: { type: "cancel", id: 1 } });
+  if (mode === "cancel") {
+    await target.onmessage({ data: { type: "cancel", id: 1 } });
+    // Cancellation must release transferred pixels even if the WASM fetch hangs.
+    expect(first.close).toHaveBeenCalledOnce();
+  }
   const active = target.onmessage({ data: { type: "start", id: 2, bitmap: second, size: 12 } });
+  expect(first.close).toHaveBeenCalledOnce();
+  expect(second.close).not.toHaveBeenCalled();
   initialize({ instance: { exports: codec } });
   await Promise.all([obsolete, active]);
   expect(instantiate).toHaveBeenCalledTimes(1);

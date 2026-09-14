@@ -234,6 +234,11 @@ to a power of two from one quarter of current working demand and capped by
 existing capacity. Competing pool pressure takes precedence over this reserve;
 it has no expiry timer. Encoding or upload failure retains existing usable coverage.
 Context loss discards compressed residency and reconstructs from the source.
+Cancellation or replacement during encoder startup closes transferred pixels
+immediately, even while the codec is loading. Encoder disposal settles pending
+jobs, removes worker handlers, and rejects further input while closing it.
+Repeated disposal is harmless. Disposed ASTC storage reports zero capacity and
+releases pending and published budget claims, including on context loss.
 
 The initial encoder is limited to automatic 132×132 sRGB pages, at most 512
 compressed pages per resource and 8 MiB of retained compressed CPU blocks per

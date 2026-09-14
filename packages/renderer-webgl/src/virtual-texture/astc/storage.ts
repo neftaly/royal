@@ -94,5 +94,6 @@ export class IdleAstcStorage {
     if (deleteGpu && this.texture !== undefined) this.gl.deleteTexture(this.texture);
     this.budget.release(this.#identity);
     this.texture = undefined; this.blocks.length = 0;
+    this.columns = this.rows = 0;
   }
 }

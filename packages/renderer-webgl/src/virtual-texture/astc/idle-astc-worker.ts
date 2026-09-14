@@ -9,6 +9,10 @@ interface Codec {
 }
 let codec: Codec | undefined;
 let generation = 0;
+let startingBitmap: ImageBitmap | undefined;
+const releaseStartingBitmap = (): void => {
+  startingBitmap?.close(); startingBitmap = undefined;
+};
 let context = 0, scratch = 0, capacity = 0;
 let current: { id: number; size: number; row: number; rgba: Uint8ClampedArray; blocks: Uint8Array } | undefined;
 let initialization: Promise<Codec> | undefined;
@@ -29,10 +33,11 @@ const initializeCodec = async (): Promise<Codec> => {
 // the owner grants another row only while foreground preparation is idle.
 self.onmessage = async ({ data }: MessageEvent<{ type: string; id: number; bitmap?: ImageBitmap; size?: number }>) => {
   try {
-    if (data.type === "cancel") { generation++; current = undefined; return; }
+    if (data.type === "cancel") { generation++; current = undefined; releaseStartingBitmap(); return; }
     if (data.type === "start") {
       const token = ++generation;
       const bitmap = data.bitmap!;
+      releaseStartingBitmap(); startingBitmap = bitmap;
       try {
         const c = await initialize();
         if (token !== generation) return;
@@ -51,7 +56,7 @@ self.onmessage = async ({ data }: MessageEvent<{ type: string; id: number; bitma
         }
         current = { id: data.id, size, rgba, row: 0, blocks: new Uint8Array((size / 6) * rowBytes) };
         self.postMessage({ id: data.id, type: "yield" });
-      } finally { bitmap.close(); }
+      } finally { if (startingBitmap === bitmap) releaseStartingBitmap(); }
     } else if (data.type === "step" && current?.id === data.id) {
       const { size, row, rgba, blocks } = current;
       const c = codec!;

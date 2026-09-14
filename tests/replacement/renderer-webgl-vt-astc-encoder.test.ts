@@ -46,3 +46,21 @@ it.each(["cancel", "step", "messageerror"])("settles the outstanding job after %
   } finally { encoder.dispose(); }
   expect(worker.terminate).toHaveBeenCalledOnce();
 });
+
+it("makes disposal terminal and idempotent without leaking later input", async () => {
+  const { encoder, bitmap, worker } = setup();
+  const pending = encoder.start(bitmap, 132);
+  encoder.dispose();
+  await expect(pending).resolves.toBeUndefined();
+  encoder.dispose();
+  expect(worker.terminate).toHaveBeenCalledOnce();
+  const later = { close: vi.fn() } as unknown as ImageBitmap;
+  const sent = worker.postMessage.mock.calls.length;
+  const ignored = encoder.start(later, 132);
+  expect(later.close).toHaveBeenCalledOnce();
+  await expect(ignored).resolves.toBeUndefined();
+  expect(worker.postMessage).toHaveBeenCalledTimes(sent);
+  expect(worker.onmessage).toBeNull();
+  expect(worker.onerror).toBeNull();
+  expect(worker.onmessageerror).toBeNull();
+});

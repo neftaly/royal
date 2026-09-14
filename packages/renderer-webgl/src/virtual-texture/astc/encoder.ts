@@ -2,6 +2,7 @@
 export class IdleAstcEncoder {
   readonly #worker: Worker;
   #nextId = 0;
+  #disposed = false;
   #job: { id: number; grant: boolean; finish: (blocks: Uint8Array | undefined) => void } | undefined;
   failed = false;
   readonly changed: () => void;
@@ -22,7 +23,7 @@ export class IdleAstcEncoder {
     this.#worker.onerror = this.#worker.onmessageerror = () => { this.failed = true; this.cancel(); this.changed(); };
   }
   start(bitmap: ImageBitmap, size: number): Promise<Uint8Array | undefined> {
-    if (this.failed || this.#job !== undefined) { bitmap.close(); return Promise.resolve(undefined); }
+    if (this.#disposed || this.failed || this.#job !== undefined) { bitmap.close(); return Promise.resolve(undefined); }
     return new Promise(resolve => {
       const id = ++this.#nextId;
       this.#job = { id, grant: false, finish: resolve };
@@ -49,5 +50,11 @@ export class IdleAstcEncoder {
       job.finish(undefined);
     }
   }
-  dispose(): void { this.cancel(); this.#worker.terminate(); }
+  dispose(): void {
+    if (this.#disposed) return;
+    this.#disposed = true;
+    this.cancel();
+    this.#worker.onmessage = this.#worker.onerror = this.#worker.onmessageerror = null;
+    this.#worker.terminate();
+  }
 }
