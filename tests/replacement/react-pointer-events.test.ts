@@ -1,5 +1,7 @@
 import {
   boxGeometry,
+  createGltfInstanceTransforms,
+  gltfInstances,
   mesh,
   perspectiveCamera,
   scene,
@@ -13,7 +15,10 @@ import {
   reduceCanvasPointerInteraction,
   type CanvasPickedPointerTarget,
 } from "../../packages/react/src/interaction/canvas-pointer-interaction";
-import { attachCanvasPointerEventHandlers } from "../../packages/react/src/interaction/canvas-pointer-events";
+import {
+  attachCanvasPointerEventHandlers,
+  reconcileCanvasPointerInteractionScene,
+} from "../../packages/react/src/interaction/canvas-pointer-events";
 import {
   createScenePickingIndex,
   createScenePointerEventRegistry,
@@ -183,4 +188,140 @@ describe("React scene pointer events", () => {
       "pointermove",
     ]);
   });
+});
+
+
+it("dispatches instance-specific handlers and retains identity when its collection id changes", () => {
+  const make = (ids: string[]) => gltfInstances({src: "/pieces.glb", pickingId: ids[0]!, instances: createGltfInstanceTransforms({count: ids.length, logicalIds: ids})});
+  const original = make(["a", "b"]);
+  const index = createScenePickingIndex(scene({camera, nodes: [original]}));
+  expect(index.count("a")).toBe(1);
+  expect(index.count("b")).toBe(1);
+  const calls: string[] = [];
+  const registry = createScenePointerEventRegistry(index, {
+    a: {onClick: () => calls.push("a")},
+    b: {onPointerDown: () => calls.push("b-down"), onClick: () => calls.push("b-click")},
+  });
+  let node = original;
+  const hit = (): PickResult => ({clientX: 10, clientY: 10, distance: 1, point: [0, 0, 0], target: {kind: "gltf-instances", node, pickingId: node.pickingId!, instanceId: "b", instanceIndex: node.instances.logicalIds!.indexOf("b")}});
+  const canvas = new EventTarget();
+  const sceneInteractionsRef = { current: registry };
+  const release = attachCanvasPointerEventHandlers({canvas: canvas as HTMLCanvasElement, lastPointerEventRef: {current: undefined}, pointerInteractionStateRef: {current: createCanvasPointerInteractionState()}, root: {pick: hit}, sceneInteractionsRef});
+  canvas.dispatchEvent(new TestPointerEvent("pointerdown", {buttons: 1, clientX: 10, clientY: 10, pointerId: 1}));
+  node = make(["b", "a"]);
+  canvas.dispatchEvent(new TestPointerEvent("pointerup", {clientX: 10, clientY: 10, pointerId: 1}));
+  expect(calls).toEqual(["b-down", "b-click"]);
+  // A collection binding remains the fallback for an unbound logical instance.
+  node = make(["a", "b"]);
+  const fallbackRegistry = createScenePointerEventRegistry(index, {
+    a: { onClick: () => calls.push("collection") },
+  });
+  sceneInteractionsRef.current = fallbackRegistry;
+  canvas.dispatchEvent(new TestPointerEvent("pointerdown", { buttons: 1, clientX: 10, clientY: 10, pointerId: 1 }));
+  canvas.dispatchEvent(new TestPointerEvent("pointerup", { clientX: 10, clientY: 10, pointerId: 1 }));
+  expect(calls).toEqual(["b-down", "b-click", "collection"]);
+  release();
+  expect(() => createScenePointerEventRegistry(createScenePickingIndex(scene({camera, nodes: [original, make(["b"])]})), {b: {onClick: () => undefined}})).toThrow("ambiguous");
+});
+
+it.each([false, true])("keeps clicks when instance handlers change between down and up (initial override: %s)", (initialOverride) => {
+  const node = gltfInstances({
+    src: "/pieces.glb",
+    pickingId: "collection",
+    instances: createGltfInstanceTransforms({ count: 1, logicalIds: ["piece"] }),
+  });
+  const index = createScenePickingIndex(scene({ camera, nodes: [node] }));
+  const calls: string[] = [];
+  const leaves: string[] = [];
+  const registry = (override: boolean) => createScenePointerEventRegistry(index, {
+    collection: { onClick: () => calls.push("collection"), onPointerLeave: () => leaves.push("collection") },
+    ...(override ? { piece: { onClick: () => calls.push("piece"), onPointerLeave: () => leaves.push("piece") } } : {}),
+  });
+  const sceneInteractionsRef = { current: registry(initialOverride) };
+  const hit: PickResult = {
+    clientX: 10, clientY: 10, distance: 1, point: [0, 0, 0],
+    target: { kind: "gltf-instances", node, pickingId: "collection", instanceId: "piece", instanceIndex: 0 },
+  };
+  const canvas = new EventTarget();
+  const lastPointerEventRef = { current: undefined as PointerEvent | undefined };
+  const pointerInteractionStateRef = { current: createCanvasPointerInteractionState() };
+  const release = attachCanvasPointerEventHandlers({
+    canvas: canvas as HTMLCanvasElement,
+    lastPointerEventRef,
+    pointerInteractionStateRef,
+    root: { pick: () => hit },
+    sceneInteractionsRef,
+  });
+  canvas.dispatchEvent(new TestPointerEvent("pointermove", { buttons: 1, clientX: 10, clientY: 10, pointerId: 1 }));
+  canvas.dispatchEvent(new TestPointerEvent("pointerdown", { buttons: 1, clientX: 10, clientY: 10, pointerId: 1 }));
+  reconcileCanvasPointerInteractionScene({
+    lastPointerEventRef, pointerInteractionStateRef, sceneInteractionsRef,
+    sceneInteractions: registry(!initialOverride),
+  });
+  expect(leaves).toEqual([]);
+  expect(pointerInteractionStateRef.current.hoveredTarget?.target).toBe(
+    sceneInteractionsRef.current.pointerEventTarget(initialOverride ? "collection" : "piece"),
+  );
+  canvas.dispatchEvent(new TestPointerEvent("pointerup", { clientX: 10, clientY: 10, pointerId: 1 }));
+  expect(calls).toEqual([initialOverride ? "collection" : "piece"]);
+  release();
+});
+
+it("keeps repeated logical IDs in separate collections distinct", () => {
+  const nodes = ["first", "second"].map((pickingId) => gltfInstances({
+    src: "/pieces.glb", pickingId,
+    instances: createGltfInstanceTransforms({ count: 1, logicalIds: ["piece"] }),
+  }));
+  const registry = createScenePointerEventRegistry(createScenePickingIndex(scene({ camera, nodes })), {
+    first: { onClick: () => undefined }, second: { onClick: () => undefined },
+  });
+  const picked = nodes.map((node): CanvasPickedPointerTarget => {
+    const hit: PickResult = {
+      clientX: 10, clientY: 10, distance: 1, point: [0, 0, 0],
+      target: { kind: "gltf-instances", node, pickingId: node.pickingId!, instanceId: "piece", instanceIndex: 0 },
+    };
+    const target = registry.pointerEventTarget(node.pickingId)!;
+    return {
+      hit, node, target,
+      identity: createCanvasPointerInteractionIdentity(hit, target, registry.uniqueInstanceId("piece")),
+    };
+  });
+  const down = reduceCanvasPointerInteraction(createCanvasPointerInteractionState(), {
+    type: "pointerdown", picked: picked[0], pointerId: 1,
+  });
+  const up = reduceCanvasPointerInteraction(down.state, {
+    type: "pointerup", picked: picked[1], pointerId: 1, button: 0,
+  });
+  expect(up.dispatches.map(({ type }) => type)).toEqual(["pointerup"]);
+});
+
+it.each([false, true])("keeps a collection's click when another collection changes logical ID uniqueness (initial duplicate: %s)", (initialDuplicate) => {
+  const make = (pickingId: string) => gltfInstances({
+    src: "/pieces.glb", pickingId,
+    instances: createGltfInstanceTransforms({ count: 1, logicalIds: ["piece"] }),
+  });
+  const node = make("collection");
+  const other = make("other");
+  const calls: string[] = [];
+  const registry = (duplicate: boolean) => createScenePointerEventRegistry(
+    createScenePickingIndex(scene({ camera, nodes: duplicate ? [node, other] : [node] })),
+    { collection: { onClick: () => calls.push("click") } },
+  );
+  const sceneInteractionsRef = { current: registry(initialDuplicate) };
+  const hit: PickResult = {
+    clientX: 10, clientY: 10, distance: 1, point: [0, 0, 0],
+    target: { kind: "gltf-instances", node, pickingId: "collection", instanceId: "piece", instanceIndex: 0 },
+  };
+  const canvas = new EventTarget();
+  const release = attachCanvasPointerEventHandlers({
+    canvas: canvas as HTMLCanvasElement,
+    lastPointerEventRef: { current: undefined },
+    pointerInteractionStateRef: { current: createCanvasPointerInteractionState() },
+    root: { pick: () => hit }, sceneInteractionsRef,
+  });
+  canvas.dispatchEvent(new TestPointerEvent("pointerdown", { buttons: 1, clientX: 10, clientY: 10, pointerId: 1 }));
+  sceneInteractionsRef.current = registry(!initialDuplicate);
+  canvas.dispatchEvent(new TestPointerEvent("pointerup", { clientX: 10, clientY: 10, pointerId: 1 }));
+  expect(calls).toEqual(["click"]);
+  release();
 });

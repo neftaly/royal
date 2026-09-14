@@ -41,7 +41,9 @@ export const benchmarkVirtualTextureDiagnostics = (
 
 const benchmarkAutomaticVirtualTextureDiagnostics = (
   snapshot: RendererRootSnapshot['resources']['virtualTextures'],
-): Record<string, number> => ({ ...snapshot });
+): Record<string, number> => Object.fromEntries(
+  Object.entries(snapshot).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+);
 
 /** @internal Pure projection from the public cold snapshot to benchmark counters. */
 export const benchmarkTextureResidency = (

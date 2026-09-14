@@ -63,9 +63,12 @@ describe("automatic virtual texture page source", () => {
     expect(close).not.toHaveBeenCalled();
   });
 
-  it("shares bounded regions of a large target and releases them when demand leaves", async () => {
+  it.each([
+    { level: 4, xs: [0, 1, 4, 5], rasters: 2 },
+    { level: 2, xs: [0, 1], rasters: 1 },
+  ])("retains bounded SVG rasters at level $level across zoom reversals until cache pressure or disposal", async ({ level, xs, rasters }) => {
     const attributes = new Map<string, string>();
-    const context = { drawImage: vi.fn(), getImageData: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
+    const context = { clearRect: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
     const closed = vi.fn();
     const decode = vi.fn(async () => ({
       width: Number(attributes.get("width")), height: Number(attributes.get("height")), close: closed,
@@ -79,26 +82,41 @@ describe("automatic virtual texture page source", () => {
       document: svgDocument(attributes),
       viewBox: [0, 0, 16, 8],
     } }, 16, 8, { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb", cache);
-    const mip = source.manifest.mipCount - 4;
-    const pages = [0, 1, 4, 5].map((x) => ({ mip, x, y: 0 }));
+    const mip = source.manifest.mipCount - level;
+    const pages = xs.map((x) => ({ mip, x, y: 0 }));
     source.setDemand!(pages);
     try {
       expect(source.hasCachedPage!(pages[1]!)).toBe(false);
       (await source.read(pages[0]!, new AbortController().signal))!.close();
       expect(source.hasCachedPage!(pages[1]!)).toBe(true);
-      expect(source.hasCachedPage!(pages[2]!)).toBe(false);
+      if (pages[2] !== undefined) expect(source.hasCachedPage!(pages[2])).toBe(false);
       for (const page of pages.slice(1)) (await source.read(page, new AbortController().signal))!.close();
-      expect(decode).toHaveBeenCalledTimes(2);
+      expect(decode).toHaveBeenCalledTimes(rasters);
       expect(source.manifest.pageSize).toBe(128);
       expect(Number(attributes.get("width"))).toBeLessThanOrEqual(1028);
       expect(Number(attributes.get("height"))).toBeLessThanOrEqual(516);
       expect(cache.byteLength).toBeLessThanOrEqual(4 * 1024 * 1024);
       expect(closed).not.toHaveBeenCalled();
       source.setDemand!([]);
-      expect(cache.byteLength).toBe(0);
-      expect(closed).toHaveBeenCalledTimes(2);
+      expect(cache.byteLength).toBeGreaterThan(0);
+      expect(closed).not.toHaveBeenCalled();
+      source.setDemand!(pages);
+      for (const page of pages) (await source.read(page, new AbortController().signal))!.close();
+      expect(decode).toHaveBeenCalledTimes(rasters);
+      // Another source may reclaim the entire cache; old demand must not pin it.
+      const pressure = {};
+      await cache.use(pressure, 4 * 1024 * 1024,
+        async () => ({ width: 1024, height: 1024, source: {} as ImageBitmap }), () => undefined);
+      expect(closed).toHaveBeenCalledTimes(rasters);
       expect(source.hasCachedPage!(pages[1]!)).toBe(false);
+      cache.delete(pressure);
+      source.setDemand!([]);
+      source.setDemand!(pages);
+      (await source.read(pages[0]!, new AbortController().signal))!.close();
+      expect(decode).toHaveBeenCalledTimes(rasters + 1);
     } finally { source.close!(); }
+    expect(cache.byteLength).toBe(0);
+    expect(closed).toHaveBeenCalledTimes(rasters + 1);
   });
 
   it("recognizes explicit retained SVG authority instead of guessing from a URL", () => {

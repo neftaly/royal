@@ -160,6 +160,13 @@ drawable after one or more image failures. Texture progress never stalls
 geometry publication. Loading and content errors stay on that asset lifecycle;
 they are not reported as scheduled-frame failures.
 
+Usable snapshots include `instanceBatching: true` when the selected asset has
+opaque or masked primitives, no lights, and no geometry or material LOD, including
+all material variants. This is asset eligibility for caller-created
+`gltfInstances`, not a report that mounts were batched. Callers must group
+compatible mount settings (including material variant and tint), exclude
+translucent tint, and preserve logical picking IDs.
+
 `setGltfAssetClaims(assets)` supplies the root's complete render-ready glTF
 preload set. Claims use the same bounded preparation, cancellation, exact
 identity, status, geometry, metadata, and material-image lifecycle as visible

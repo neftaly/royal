@@ -12,6 +12,9 @@ export interface CanvasPointerInteractionIdentity {
   readonly targetKind: PickResult["target"]["kind"];
   readonly instanceIndex?: number;
   readonly instanceId?: string;
+  /** Additional identity across collections; collection identity remains valid
+   * when unrelated scene edits make this logical ID non-unique. */
+  readonly uniqueInstanceId?: string;
 }
 
 export interface CanvasPickedPointerTarget {
@@ -72,6 +75,7 @@ export const createCanvasPointerInteractionState = (): CanvasPointerInteractionS
 export const createCanvasPointerInteractionIdentity = (
   hit: PickResult,
   fallbackTarget: object,
+  uniqueInstanceId?: string,
 ): CanvasPointerInteractionIdentity => {
   const { target } = hit;
 
@@ -80,6 +84,7 @@ export const createCanvasPointerInteractionIdentity = (
     targetKind: target.kind,
     ...(target.kind === "gltf-instances"
       ? {
+        ...(uniqueInstanceId === undefined ? {} : { uniqueInstanceId }),
         ...(target.instanceId === undefined ? {} : { instanceId: target.instanceId }),
         ...(target.instanceId === undefined ? { instanceIndex: target.instanceIndex } : {}),
       }
@@ -94,7 +99,8 @@ const samePointerInteractionIdentity = (
   left === right || (
     left !== undefined
     && right !== undefined
-    && left.target === right.target
+    && (left.target === right.target
+      || (left.uniqueInstanceId !== undefined && left.uniqueInstanceId === right.uniqueInstanceId))
     && left.targetKind === right.targetKind
     && left.instanceIndex === right.instanceIndex
     && left.instanceId === right.instanceId

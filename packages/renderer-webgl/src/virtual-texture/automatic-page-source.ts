@@ -435,7 +435,9 @@ export const createAutomaticSvgPageSource = (
       const counts = new Map<number, number>();
       for (const page of pages) counts.set(page.mip, (counts.get(page.mip) ?? 0) + 1);
       for (const [mip, key] of sharedMips) {
-        if ((counts.get(mip) ?? 0) <= 1) {
+        // Keep completed rasters warm across zoom reversals. The root-local LRU
+        // already bounds their storage; prune identities once it evicts them.
+        if ((counts.get(mip) ?? 0) <= 1 && !rasterCache.has(key)) {
           rasterCache.delete(key);
           sharedMips.delete(mip);
         }
@@ -456,7 +458,7 @@ export const createAutomaticSvgPageSource = (
         }
       }
       for (const [key, region] of sharedRegions) {
-        if ((groups.get(key)?.count ?? 0) <= 1) {
+        if ((groups.get(key)?.count ?? 0) <= 1 && !rasterCache.has(region)) {
           rasterCache.delete(region);
           sharedRegions.delete(key);
         }

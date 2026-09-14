@@ -949,6 +949,7 @@ describe("canvas root asset publication", () => {
     await waitFor(() => {
       expect(root.getGltfAssetSnapshot(node.asset)).toEqual({
         bounds: { max: [1, 1, 0], min: [-1, -1, 0] },
+        instanceBatching: true,
         lightCount: 0,
         nodeCount: 1,
         primitiveCount: 1,

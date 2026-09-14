@@ -199,6 +199,21 @@ resource. A denied page remains decoded and ready for the next demanded frame;
 one oversize first transaction still makes progress. Residency chooses a slot
 through an allocation-free pure core and does not remove the old mapping unless
 replacement validation and atlas upload succeed.
+Atlas migration copies already-resident GPU pages under a separate 1 MiB
+per-frame allowance and a 64-copy ceiling (one larger page may progress alone), while still charging
+the shared transfer budget. These copies do not consume the four-page source
+upload ceiling. Both atlases remain budgeted and the old binding remains live
+until fence and error validation permit publication.
+Lower demand alone does not compact an atlas or expire cached pages. Pools retain
+zoom detail within the GPU budget until competing demand requires reclamation
+or their capacity must be reduced. Ordinary compaction requires at least a
+twofold capacity reduction to avoid resize churn; budget-limited pools may
+compact sooner. Visible pages and coarse coverage take priority over unused
+pages, which are retained in recency order. Both old and replacement storage
+remain charged until migration commits.
+Completed SVG mip and region rasters stay in the existing bounded root-local
+LRU across demand changes, so reversing a zoom can reuse them. Cache pressure
+may evict them, and releasing the page source releases its retained rasters.
 Render-target `texStorage`/allocation is persistent or transient capacity, not
 source upload traffic, and MUST NOT be added to these transfer counters.
 

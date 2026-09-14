@@ -5,13 +5,17 @@ import {
   type ScenePointerEventTarget,
 } from "./picking-events";
 
-/** React-owned pointer handlers keyed by stable `pickingId` values declared in the scene. */
+/** React-owned handlers keyed by scene `pickingId` or glTF instance `logicalIds`.
+ * Instance handlers take precedence over their collection's handler. Each bound
+ * ID must belong to exactly one node; a node may reuse its own logical ID. */
 export type ScenePointerEvents = Readonly<Record<PickingId, ScenePointerEventHandlers>>;
 
 export interface ScenePointerEventRegistry {
   readonly hasHoverEventTargets: boolean;
   readonly hasPointerEventTargets: boolean;
   pointerEventTarget(pickingId: string | undefined): ScenePointerEventTarget | undefined;
+  /** Allows a logical instance to retain identity when it moves between collections. */
+  uniqueInstanceId(instanceId: string | undefined): string | undefined;
 }
 
 export interface ScenePickingIndex {
@@ -22,8 +26,9 @@ export const createScenePickingIndex = (scene: Scene): ScenePickingIndex => {
   const counts = new Map<string, number>();
   for (const node of scene.nodes) {
     if (node.kind !== "mesh" && node.kind !== "gltf" && node.kind !== "gltf-instances") continue;
-    if (node.pickingId === undefined) continue;
-    counts.set(node.pickingId, (counts.get(node.pickingId) ?? 0) + 1);
+    const ids = new Set(node.kind === "gltf-instances" ? node.instances.logicalIds : undefined);
+    if (node.pickingId !== undefined) ids.add(node.pickingId);
+    for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
   }
   return { count: (pickingId) => counts.get(pickingId) ?? 0 };
 };
@@ -75,5 +80,7 @@ export const createScenePointerEventRegistry = (
     hasHoverEventTargets,
     hasPointerEventTargets: targets.size > 0,
     pointerEventTarget: (pickingId) => pickingId === undefined ? undefined : targets.get(pickingId),
+    uniqueInstanceId: (instanceId) =>
+      instanceId !== undefined && pickingIndex.count(instanceId) === 1 ? instanceId : undefined,
   };
 };

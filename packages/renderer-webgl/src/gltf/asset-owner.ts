@@ -1,3 +1,4 @@
+import { supportsInstanceBatching } from "./instance-batching";
 import type {
   GltfAssetBounds,
   GltfAssetRef,
@@ -83,6 +84,9 @@ export type GltfAssetSnapshot =
     nodeCount: number;
     /** Number of prepared draw primitives, including authored LOD levels. */
     primitiveCount: number;
+    /** Opaque/masked, light-free asset without per-instance LOD. Safe to batch
+     * whole mounts while preserving logical IDs; translucent tint opts out. */
+    instanceBatching?: true;
     /** Actual zero-based selected scene after resolving the document default. */
     sceneIndex: number;
     /** Complete document scene inventory without preparing unselected content. */
@@ -244,15 +248,35 @@ const validateAsset = (asset: GltfAssetRef): void => {
   }
 };
 
-const gltfSourceKey = (asset: GltfAssetRef): string => {
+type AssetIdentity = {
+  src: string;
+  version: GltfAssetRef["version"];
+  sceneIndex: GltfAssetRef["sceneIndex"];
+  sourceKey: string;
+  viewKey: string;
+};
+const assetIdentities = new WeakMap<GltfAssetRef, AssetIdentity>();
+const assetIdentity = (asset: GltfAssetRef): AssetIdentity => {
+  const cached = assetIdentities.get(asset);
+  // Refs normally remain unchanged across scene lowering and status reads.
+  // Check every identity field so caller mutation still validates and rekeys.
+  if (cached !== undefined && cached.src === asset.src
+    && cached.version === asset.version && cached.sceneIndex === asset.sceneIndex) return cached;
   validateAsset(asset);
-  const version = asset.version;
-  return JSON.stringify([
-    asset.src,
+  const { src, version, sceneIndex } = asset;
+  const sourceKey = JSON.stringify([
+    src,
     version === undefined ? "unversioned" : typeof version,
     version ?? null,
   ]);
+  const identity = {
+    src, version, sceneIndex, sourceKey,
+    viewKey: JSON.stringify([sourceKey, sceneIndex ?? "default"]),
+  };
+  assetIdentities.set(asset, identity);
+  return identity;
 };
+const gltfSourceKey = (asset: GltfAssetRef): string => assetIdentity(asset).sourceKey;
 
 const resourceReadKey = (
   asset: GltfAssetRef,
@@ -265,10 +289,7 @@ const resourceReadKey = (
 ]);
 
 /** Exact prepared-view identity; source-derived resources deliberately exclude scene selection. */
-export const gltfAssetKey = (asset: GltfAssetRef): string => JSON.stringify([
-  gltfSourceKey(asset),
-  asset.sceneIndex ?? "default",
-]);
+export const gltfAssetKey = (asset: GltfAssetRef): string => assetIdentity(asset).viewKey;
 
 const diagnosticLabel = (asset: GltfAssetRef): string => {
   const source = asset.src.length <= 120 ? asset.src : `${asset.src.slice(0, 119)}…`;
@@ -693,6 +714,7 @@ export class GltfAssetOwner {
         lightCount: prepared.lights.length,
         nodeCount: prepared.nodeCount,
         primitiveCount: prepared.primitives.length,
+        ...(supportsInstanceBatching(prepared) ? { instanceBatching: true as const } : {}),
         ...(prepared.rootExtras === undefined
           ? {}
           : { rootExtras: structuredClone(prepared.rootExtras) }),

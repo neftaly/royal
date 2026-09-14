@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { waitFor } from "./support/wait-for";
 import {
   GltfAssetOwner,
+  gltfAssetKey,
   type GltfAssetOwnerPlatform,
 } from "../../packages/renderer-webgl/src/gltf/asset-owner";
 import { prepareStaticGltfSource } from "../../packages/renderer-webgl/src/gltf/static-asset";
@@ -586,6 +587,7 @@ describe("glTF asset lifecycle owner", () => {
     await waitFor(() => {
       expect(owner.getSnapshot(first.asset)).toEqual({
         bounds: { max: [2, 3, 0], min: [0, 1, 0] },
+        instanceBatching: true,
         lightCount: 0,
         nodeCount: 2,
         primitiveCount: 1,
@@ -750,4 +752,27 @@ describe("glTF asset lifecycle owner", () => {
     owner.reconcile([node]);
     expect(read).toHaveBeenCalledTimes(1);
   });
+});
+
+
+it("rekeys mutated references and still rejects invalid identity fields", () => {
+  const asset = { src: "/one.gltf", version: 1 as string | number, sceneIndex: 0 };
+  const original = gltfAssetKey(asset);
+  expect(gltfAssetKey({ ...asset })).toBe(original);
+  for (const change of [
+    { src: "/two.gltf" }, { version: "1" }, { sceneIndex: 1 },
+  ]) {
+    const before = gltfAssetKey(asset);
+    Object.assign(asset, change);
+    expect(gltfAssetKey(asset)).not.toBe(before);
+    expect(gltfAssetKey(asset)).toBe(gltfAssetKey({ ...asset }));
+  }
+  asset.sceneIndex = -1;
+  expect(() => gltfAssetKey(asset)).toThrow("non-negative safe integer");
+  asset.sceneIndex = 0;
+  asset.version = NaN;
+  expect(() => gltfAssetKey(asset)).toThrow("finite number");
+  asset.version = 1;
+  asset.src = "";
+  expect(() => gltfAssetKey(asset)).toThrow("non-empty string");
 });

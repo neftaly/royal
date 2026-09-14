@@ -357,12 +357,14 @@ describe("browser virtual texture runtime", () => {
     const view = { view: matrix, viewProjection: matrix, viewport: { width: viewportSize, height: viewportSize, x: 0, y: 0 } };
     try {
       runtime.setScene(prepared);
-      await waitFor(() => {
+      // Hundreds of pages need over 120 update turns at four uploads per turn.
+      // Allow scheduler contention in the full suite without changing admission.
+      await vi.waitFor(() => {
         const uploaded = runtime.runtimeSnapshot().uploadedPages;
         runtime.update([view]);
         expect(runtime.runtimeSnapshot().uploadedPages - uploaded).toBeLessThanOrEqual(4);
         expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: viewportSize === 512 ? 126 : 486, unresidentPages: 0, pendingPages: 0 });
-      });
+      }, { interval: 1, timeout: 3000 });
       expect(decode).toHaveBeenCalledTimes(viewportSize === 512 ? 12 : 54);
       expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(4 * 1024 * 1024 + 6 * 64 * 64 * 4);
       const probes = vi.spyOn(SvgRasterCache.prototype, "has");
@@ -446,7 +448,8 @@ describe("browser virtual texture runtime", () => {
       });
       expect(runtime.automaticBinding(asset)).toBeDefined();
       expect(runtime.runtimeSnapshot().pageRequests).toBe(82);
-      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBe(64 * 64 * 4);
+      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeGreaterThan(64 * 64 * 4);
+      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(64 * 64 * 4 + 4 * 1024 * 1024);
     } finally {
       runtime.dispose();
     }
@@ -675,7 +678,8 @@ describe("browser virtual texture runtime", () => {
       });
       expect(runtime.automaticBinding(asset)).toBeDefined();
       expect(runtime.runtimeSnapshot().pageRequests).toBe(81);
-      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBe(1024);
+      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeGreaterThan(1024);
+      expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(1024 + 4 * 1024 * 1024);
     } finally {
       runtime.dispose();
     }

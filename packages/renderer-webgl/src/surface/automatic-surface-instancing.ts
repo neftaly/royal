@@ -207,9 +207,17 @@ const surfaceGeometriesEqual = (
     && numericArraysEqual(leftGeometry.colors, rightGeometry.colors);
 };
 
+type CandidateKeys = {
+  materialKeys: WeakMap<CanonicalSurfaceMaterial, string>;
+  geometryKeys: WeakMap<CanonicalDrawSurface["geometry"], {
+    bucket: string;
+    materials: WeakMap<CanonicalSurfaceMaterial, Map<string, string>>;
+  }>;
+};
+
 const automaticInstanceCandidateKey = (
   surface: CanonicalDrawSurface,
-  materialKeys: WeakMap<CanonicalSurfaceMaterial, string>,
+  { materialKeys, geometryKeys }: CandidateKeys,
 ): string | undefined => {
   const node = surface.node;
   if (
@@ -223,17 +231,33 @@ const automaticInstanceCandidateKey = (
     || surface.material.alphaBlend === true
     || canonicalMaterialHasTransmission(surface.material)
   ) return undefined;
+  let geometry = geometryKeys.get(surface.geometry);
+  if (geometry === undefined) {
+    geometry = { bucket: geometryBucketKey(surface), materials: new WeakMap() };
+    geometryKeys.set(surface.geometry, geometry);
+  }
+  const layout = surfaceGeometryLayoutKey(surface);
+  const variant = `${layout}:${surface.modelHandedness}`;
+  let variants = geometry.materials.get(surface.materialSource);
+  const retained = variants?.get(variant);
+  if (retained !== undefined) return retained;
   let materialKey = materialKeys.get(surface.materialSource);
   if (materialKey === undefined) {
     materialKey = canonicalMaterialInstanceIdentityKey(surface.materialSource);
     materialKeys.set(surface.materialSource, materialKey);
   }
-  return JSON.stringify([
-    surfaceGeometryLayoutKey(surface),
-    geometryBucketKey(surface),
+  const key = JSON.stringify([
+    layout,
+    geometry.bucket,
     materialKey,
     surface.modelHandedness,
   ]);
+  if (variants === undefined) {
+    variants = new Map();
+    geometry.materials.set(surface.materialSource, variants);
+  }
+  variants.set(variant, key);
+  return key;
 };
 
 type AutomaticInstanceCohort = {
@@ -300,12 +324,12 @@ export const automaticallyInstanceCanonicalSurfaces = (
 ): readonly CanonicalDrawSurface[] => {
   // One lowering pass shares material definitions across physical occurrences.
   // Keep the cache local so later scene edits always recompute their identity.
-  const materialKeys = new WeakMap<CanonicalSurfaceMaterial, string>();
+  const keys: CandidateKeys = { materialKeys: new WeakMap(), geometryKeys: new WeakMap() };
   const cohortsByKey = new Map<string, AutomaticInstanceCohort[]>();
   const cohortBySurfaceIndex = new Map<number, AutomaticInstanceCohort>();
   for (let index = 0; index < surfaces.length; index += 1) {
     const surface = surfaces[index]!;
-    const key = automaticInstanceCandidateKey(surface, materialKeys);
+    const key = automaticInstanceCandidateKey(surface, keys);
     if (key === undefined) continue;
     let cohorts = cohortsByKey.get(key);
     if (cohorts === undefined) {

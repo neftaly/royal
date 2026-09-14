@@ -50,11 +50,11 @@ it.each(["unlit", "standard"])("refreshes %s atlas dimensions after resizing wit
     clock = vi.spyOn(performance, "now").mockReturnValue(0);
     root.setSize({ cssWidth: 256, cssHeight: 256, pixelRatio: 1 });
     flushScheduledFrames();
-    clock.mockReturnValue(2001);
+    clock.mockReturnValue(3_600_000);
     root.invalidate();
     await waitFor(() => {
       flushScheduledFrames();
-      expect(root.getSnapshot().resources.virtualTextures.atlasBytes).toBeLessThan(grownBytes);
+      expect(root.getSnapshot().resources.virtualTextures.atlasBytes).toBe(grownBytes);
     });
     expectCurrentDimensions();
   } finally { root.dispose(); clock?.mockRestore(); }

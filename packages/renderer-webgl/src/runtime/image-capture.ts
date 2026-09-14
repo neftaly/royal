@@ -5,6 +5,11 @@ import type { RendererRoot } from "./canvas-root";
 export type RendererImageCaptureOptions = Readonly<{
   /** Wait for admitted VT detail, or capture current coverage after source preparation. @defaultValue "settled" */
   refinement?: "settled" | "current";
+  /** Optional image encoder. Snapshot the canvas synchronously before awaiting:
+   * its drawing buffer may clear when this task returns. A transferred bitmap
+   * lets callers encode off-thread without changing rendering or refinement.
+   */
+  encode?: (canvas: HTMLCanvasElement) => Promise<Blob>;
   /** Cancels waiting and ignores any late encoding result; does not dispose the root. */
   signal?: AbortSignal;
   /** Deadline including preparation and encoding. @defaultValue 60000 */
@@ -44,10 +49,14 @@ export const captureImageRequest = (
     return;
   }
   for (const key of Reflect.ownKeys(options)) {
-    if (key !== "signal" && key !== "timeoutMs" && key !== "refinement") {
+    if (key !== "signal" && key !== "timeoutMs" && key !== "refinement" && key !== "encode") {
       reject(new TypeError(`Royal capture options contain unsupported field ${String(key)}`));
       return;
     }
+  }
+  if (options.encode !== undefined && typeof options.encode !== "function") {
+    reject(new TypeError("Royal capture encode must be a function"));
+    return;
   }
   const timeoutMs = options.timeoutMs ?? 60_000;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2_147_483_647) {
@@ -201,7 +210,10 @@ const captureRootImage = (host: RootImageCaptureHost, options: RendererImageCapt
       if (root.getSnapshot().frame === frame) throw new Error("Royal image capture requires the canvas frame clock");
       return ready();
     },
-    encode: (callback) => root.canvas.toBlob(callback, "image/png"),
+    encode: (callback) => {
+      if (options.encode === undefined) root.canvas.toBlob(callback, "image/png");
+      else void options.encode(root.canvas).then(callback, () => callback(null));
+    },
     now: host.now,
     requestFrame: host.requestFrame,
     subscribeLifecycle: root.subscribeLifecycle,

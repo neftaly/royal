@@ -75,10 +75,12 @@ export const reconcileCanvasPointerInteractionScene = ({
 }): void => {
   sceneInteractionsRef.current = sceneInteractions;
   const hovered = pointerInteractionStateRef.current.hoveredTarget;
-  const pickingId = hovered?.identity.target;
-  if (hovered === undefined || typeof pickingId !== "string") return;
+  if (hovered === undefined) return;
 
-  const nextTarget = sceneInteractions.pointerEventTarget(pickingId);
+  const hitTarget = hovered.hit.target;
+  const instanceId = hitTarget.kind === "gltf-instances" ? hitTarget.instanceId : undefined;
+  const nextTarget = sceneInteractions.pointerEventTarget(instanceId)
+    ?? sceneInteractions.pointerEventTarget(hitTarget.pickingId);
   if (nextTarget !== undefined && hasHoverEventHandlers(nextTarget)) {
     if (nextTarget !== hovered.target) {
       pointerInteractionStateRef.current = {
@@ -116,12 +118,15 @@ export const attachCanvasPointerEventHandlers = ({
     const hit = root.pick({ clientX: event.clientX, clientY: event.clientY });
     if (hit === undefined) return undefined;
 
-    const target = sceneInteractions.pointerEventTarget(hit.target.pickingId);
+    const instanceId = hit.target.kind === "gltf-instances" ? hit.target.instanceId : undefined;
+    const instanceTarget = sceneInteractions.pointerEventTarget(instanceId);
+    const target = instanceTarget ?? sceneInteractions.pointerEventTarget(hit.target.pickingId);
+    const uniqueInstanceId = sceneInteractions.uniqueInstanceId(instanceId);
     return target === undefined
       ? undefined
       : {
         hit,
-        identity: createCanvasPointerInteractionIdentity(hit, target),
+        identity: createCanvasPointerInteractionIdentity(hit, target, uniqueInstanceId),
         node: hit.target.node,
         target,
       };

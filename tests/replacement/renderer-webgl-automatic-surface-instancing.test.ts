@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { prepareStaticGlb } from "../../packages/renderer-webgl/src/gltf/static-asset";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import {
+  automaticallyInstanceCanonicalSurfaces,
   canonicalMaterialInstanceIdentityKey,
 } from "../../packages/renderer-webgl/src/surface/automatic-surface-instancing";
 import type { CanonicalSurfaceMaterial } from "../../packages/renderer-webgl/src/surface/canonical-material";
@@ -209,4 +210,21 @@ describe("automatic canonical surface instancing", () => {
     expect(prepared.surfaces).toHaveLength(2);
     expect(prepared.surfaces.every(({ instances }) => instances === undefined)).toBe(true);
   });
+});
+
+it("does not retain candidate keys across material edits or handedness changes", () => {
+  const asset = prepareStaticGlb(staticTriangleGlb(), "shared");
+  const nodes = [gltf({ src: "/a.glb" }), gltf({ src: "/b.glb" })];
+  const { surfaces } = prepareCanonicalSurfaceScene(
+    scene({ camera: perspectiveCamera({}), nodes }), () => asset,
+    undefined, undefined, undefined, { automaticInstancing: false },
+  );
+  const right = { ...surfaces[1]!, materialSource: { ...surfaces[1]!.materialSource } };
+  const pair = [surfaces[0]!, right];
+  expect(automaticallyInstanceCanonicalSurfaces(pair)).toHaveLength(1);
+  right.materialSource.baseColor = [0.2, 0.4, 0.6, 1];
+  expect(automaticallyInstanceCanonicalSurfaces(pair)).toHaveLength(2);
+  expect(automaticallyInstanceCanonicalSurfaces([
+    surfaces[0]!, { ...surfaces[1]!, modelHandedness: -1 },
+  ])).toHaveLength(2);
 });

@@ -163,7 +163,10 @@ Place `<OrbitControls orbit={orbit} />` under the same `Canvas` to attach orbit,
 pan, wheel, and pinch gestures. `useOrbitCameraView(orbit)` is opt-in UI
 observation; rendering itself does not subscribe React to camera motion.
 `scenePointerEvents` binds typed React handlers to unique scene `pickingId`
-values. Handler changes update the event registry without rebuilding the scene;
+values or `gltfInstances` logical IDs. An instance handler takes precedence over
+the collection handler; instances without their own binding use the collection's
+`pickingId`. A bound ID must occur on exactly one scene node (a collection may
+reuse one of its own logical IDs). Handler changes update the event registry without rebuilding the scene;
 pointer, imperative, and future XR inputs share the root's exact query.
 Use `ScenePointerEvent` to annotate one callback or `ScenePointerEventHandlers`
 for the handler object stored under an ID; these are scene events, not canvas

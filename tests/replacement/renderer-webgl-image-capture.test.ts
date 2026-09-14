@@ -156,6 +156,31 @@ describe("bounded renderer image capture", () => {
     expect(h.host.draw).not.toHaveBeenCalled();
   });
 
+  it("starts a custom encoder in the draw task and preserves its lossless result", async () => {
+    const { root, canvas } = canvasRootHarness();
+    root.setSize({ cssWidth: 60, cssHeight: 60, pixelRatio: 1 });
+    root.setScene(emptyScene());
+    const blob = new Blob(["png"], { type: "image/png" });
+    let finish!: (blob: Blob) => void;
+    const encode = vi.fn(() => new Promise<Blob>(resolve => { finish = resolve; }));
+    try {
+      const result = captureImage(root, { encode });
+      expect(encode).toHaveBeenCalledWith(canvas);
+      finish(blob);
+      await expect(result).resolves.toHaveProperty("blob", blob);
+    } finally { root.dispose(); }
+  });
+
+  it("rejects invalid custom encoders and asynchronous encoding failures", async () => {
+    await expect(captureImageRequest(hostHarness().host, { encode: true } as never)).rejects.toThrow(/encode/);
+    const { root } = canvasRootHarness();
+    root.setSize({ cssWidth: 60, cssHeight: 60, pixelRatio: 1 });
+    root.setScene(emptyScene());
+    try {
+      await expect(captureImage(root, { encode: () => Promise.reject(new Error("worker failed")) })).rejects.toThrow(/encode/);
+    } finally { root.dispose(); }
+  });
+
   it("rejects an external clock immediately, then permits capture after release", async () => {
     const { root, canvas } = canvasRootHarness();
     Object.assign(canvas, { toBlob: (callback: BlobCallback) => callback(new Blob()) });

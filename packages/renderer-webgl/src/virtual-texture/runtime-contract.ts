@@ -71,6 +71,8 @@ export type VirtualTextureRuntimeSnapshot = Readonly<{
   atlasBytes: number;
   /** Failed growth attempts; existing atlas coverage is retained. */
   atlasGrowthFailures: number;
+  /** Most recent failed migration stage and cause, without an additional GL query. */
+  lastAtlasGrowthFailure?: string;
   /** Bounded requested count after workspace coarsening, before capacity fitting. */
   desiredPages: number;
   /** Page count after fitting demand to current per-texture capacity. */

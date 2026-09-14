@@ -79,8 +79,12 @@ const automaticSourceBytes = (source: DecodedTextureSource): number => (source.k
 const MAX_DECODE_JOBS = 4;
 const MAX_PENDING_PAGE_BYTES = 16 * 1024 * 1024;
 const MAX_UPLOADS_PER_FRAME = 4;
+// Already-resident GPU copies need no decoding. Bound their bytes separately so
+// atlas growth does not spend one presentation per four small pages before
+// zoomed-in detail can even start loading. The shared upload budget still applies.
+const MAX_ATLAS_COPY_BYTES_PER_FRAME = 1024 * 1024;
+const MAX_ATLAS_COPIES_PER_FRAME = 64;
 const MAX_DEMAND_PAGES = 512;
-const ATLAS_SHRINK_DELAY_MS = 2000;
 const MAX_AUTOMATIC_DECODED_BYTES = 64 * 1024 * 1024;
 const IDLE_VIRTUAL_TEXTURE_SNAPSHOT: VirtualTextureAssetSnapshot = {
   failedPages: 0,
@@ -111,7 +115,6 @@ type GpuVirtualTextureAtlas = VirtualTextureAtlasStoragePlan & {
   validationFence?: WebGLSync;
   validationWaitFrames?: number;
   growth?: { replacement: GpuVirtualTextureAtlas; nextSlot: number; retainedSlots?: number[]; capacityLimited?: boolean; targetSlots: number };
-  shrinkAfter?: number;
   blockedGrowth?: string;
   atlasTexture: WebGLTexture;
   budgetIdentity: object;
@@ -405,7 +408,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #atlasShares = new Map<string, number>();
   readonly #atlasMinimumSlots = new Map<string, number>();
   #atlasGrowthFailures = 0;
-  #shrinkTimer: ReturnType<typeof setTimeout> | undefined;
+  #lastAtlasGrowthFailure: string | undefined;
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #svgRasterCache = new SvgRasterCache();
   readonly #automatic: AutomaticVirtualTextureRuntimeOptions;
@@ -468,7 +471,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
-    clearTimeout(this.#shrinkTimer);
     this.#manifestReads.dispose();
     for (const resource of this.#resources.values()) this.#destroyResource(resource, true);
     this.#resources.clear();
@@ -479,8 +481,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
 
   invalidate(): void {
     this.#maxTextureSize = undefined;
-    clearTimeout(this.#shrinkTimer);
-    this.#shrinkTimer = undefined;
     for (const resource of this.#resources.values()) {
       if (resource.gpu !== undefined) {
         this.#budget.release(resource.gpu.budgetIdentity);
@@ -532,6 +532,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       atlasBytes,
       atlasPools: this.#atlases.size,
       atlasGrowthFailures: this.#atlasGrowthFailures,
+      ...(this.#lastAtlasGrowthFailure === undefined ? {} : { lastAtlasGrowthFailure: this.#lastAtlasGrowthFailure }),
       desiredPages,
       admittedPages,
       unresidentPages,
@@ -822,9 +823,16 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     this.#atlasShares = allocateVirtualTexturePoolBytes([...poolRequests.values()],
       Math.max(0, Math.floor(this.#budget.budgetBytes * 0.75) - compressedBytes
         - this.#automaticWaiting * (AUTOMATIC_VT_PAGE_SIZE + AUTOMATIC_VT_BORDER_TEXELS * 2) ** 2 * 4));
+    let copyBytesRemaining = MAX_ATLAS_COPY_BYTES_PER_FRAME;
+    let copiesRemaining = MAX_ATLAS_COPIES_PER_FRAME;
     for (const atlas of this.#atlases.values()) {
-      const growth = this.#resizeAtlas(atlas, uploadsRemaining);
-      uploadsRemaining -= growth.copied;
+      const pageBytes = atlas.storedPageSize ** 2 * 4;
+      const copyLimit = Math.min(copiesRemaining,
+        Math.max(copyBytesRemaining === MAX_ATLAS_COPY_BYTES_PER_FRAME ? 1 : 0,
+          Math.floor(copyBytesRemaining / pageBytes)));
+      const growth = this.#resizeAtlas(atlas, copyLimit);
+      copyBytesRemaining = Math.max(0, copyBytesRemaining - growth.copied * pageBytes);
+      copiesRemaining -= growth.copied;
       pending ||= growth.pending;
       webGlStateChanged ||= growth.changed;
     }
@@ -1107,23 +1115,16 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       Math.max(0, Math.floor(this.#budget.budgetBytes * 0.75) - otherBytes));
   }
 
-  #scheduleShrink(delay: number): void {
-    if (this.#shrinkTimer !== undefined) return;
-    this.#shrinkTimer = setTimeout(() => {
-      this.#shrinkTimer = undefined;
-      if (this.#disposed) return;
-      const resource = this.#resources.values().next().value;
-      if (resource !== undefined) this.#changed(resource);
-    }, delay);
-  }
-
   #resizeAtlas(atlas: GpuVirtualTextureAtlas, copyLimit: number) {
     if (atlas.compressed) return UNCHANGED_ATLAS;
     const demand = this.#atlasDemand.get(atlas.key) ?? 0;
     const targetSlots = this.#targetAtlasSlots(atlas.key);
     let capacityLimited = demand > targetSlots && targetSlots < atlas.slotCount;
-    let shrinking = capacityLimited || targetSlots <= atlas.slotCount / 2;
-    if (!shrinking) delete atlas.shrinkAfter;
+    // A reduced fair share may still cover demand but require less than a
+    // twofold shrink. Do not let resize hysteresis starve a competing pool.
+    const shareLimited = targetSlots < Math.min(atlas.slotCount,
+      2 ** Math.ceil(Math.log2(Math.max(1, demand))));
+    let shrinking = capacityLimited || shareLimited || targetSlots <= atlas.slotCount / 2;
     if (atlas.growth === undefined && !shrinking && targetSlots <= atlas.slotCount) return UNCHANGED_ATLAS;
     let copied = 0, changed = false;
     const result = (pending: boolean) => ({ copied, pending, changed });
@@ -1140,7 +1141,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       || replacementBytes > this.#budget.availableBytes;
     if (atlas.growth !== undefined && (
       atlas.growth.retainedSlots === undefined ? targetSlots <= atlas.slotCount
-        : (atlas.growth.capacityLimited ? targetSlots > atlas.growth.targetSlots : demand > atlas.growth.replacement.slotCount)
+        : (!atlas.growth.capacityLimited && !pressure && !shareLimited)
+          || (atlas.growth.capacityLimited ? targetSlots > atlas.growth.targetSlots : demand > atlas.growth.replacement.slotCount)
           || atlas.growth.retainedSlots.some((slot) => atlas.slots[slot] === undefined)
     )) {
       destroyGpuVirtualTextureAtlas(this.#gl, atlas.growth.replacement, this.#budget);
@@ -1151,14 +1153,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     const fingerprint = `${demand}:${this.#budget.availableBytes}:${this.#atlasAllowance(atlas)}:${this.#uploadedPages}`;
     if (atlas.growth === undefined) {
       if (atlas.blockedGrowth === fingerprint) return result(false);
-      if (shrinking && !pressure && !capacityLimited) {
-        atlas.shrinkAfter ??= performance.now() + ATLAS_SHRINK_DELAY_MS;
-        const delay = atlas.shrinkAfter - performance.now();
-        if (delay > 0) {
-          this.#scheduleShrink(delay);
-          return result(false);
-        }
-      }
+      // Low demand alone is not a reason to discard reusable resident pages.
+      // Compact only to make room for competing demand or a reduced pool share.
+      if (shrinking && !pressure && !capacityLimited && !shareLimited) return result(false);
       const resource = Array.from(this.#resources.values()).find((value) => value.gpu?.atlas === atlas);
       if (resource === undefined) return result(false);
       let plan: VirtualTextureAtlasStoragePlan;
@@ -1227,7 +1224,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         // Never query allocation errors in the submitting frame: that query
         // can synchronously wait for the entire replacement's initialization.
         return result(true);
-      } catch {
+      } catch (error) {
+        this.#lastAtlasGrowthFailure = `allocate: ${String(error)}`;
         this.#atlasGrowthFailures += 1;
         atlas.blockedGrowth = fingerprint;
         return result(false);
@@ -1258,8 +1256,12 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         }
         this.#gl.deleteSync(replacement.validationFence!);
         delete replacement.validationFence;
-        if (this.#gl.getError() !== this.#gl.NO_ERROR) throw new Error("Royal VT atlas allocation failed");
-      } catch {
+        const glError = this.#gl.getError();
+        if (glError !== this.#gl.NO_ERROR) {
+          throw new Error(`Royal VT atlas validation failed (WebGL 0x${glError.toString(16)})`);
+        }
+      } catch (error) {
+        this.#lastAtlasGrowthFailure = `validate: ${String(error)}`;
         destroyGpuVirtualTextureAtlas(this.#gl, replacement, this.#budget);
         delete atlas.growth;
         atlas.blockedGrowth = `${demand}:${this.#budget.availableBytes}:${this.#atlasAllowance(atlas)}:${this.#uploadedPages}`;
@@ -1301,7 +1303,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         this.#gl.flush();
         return result(true);
       }
-    } catch {
+    } catch (error) {
+      this.#lastAtlasGrowthFailure = `copy: ${String(error)}`;
       destroyGpuVirtualTextureAtlas(this.#gl, growth.replacement, this.#budget);
       delete atlas.growth;
       atlas.blockedGrowth = `${demand}:${this.#budget.availableBytes}:${this.#atlasAllowance(atlas)}:${this.#uploadedPages}`;
