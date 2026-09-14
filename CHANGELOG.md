@@ -3,6 +3,22 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.30 - 2026-09-15
+
+- Upload automatic virtual-texture pages as RGBA first, then progressively
+  compress eligible sRGB pages to ASTC 6x6 during idle work on supported devices.
+  Prioritize visible pages, yield to foreground preparation, and validate GPU
+  uploads before switching residency.
+- Improve zoom refinement with demand-aware SVG raster regions, cached-read
+  scheduling, bounded preparation during atlas growth, and coalesced GPU copies.
+  Record paired iPad and Quest measurements and region-sizing literature.
+- Preserve reusable SVG rasters when individual pages are cancelled, and avoid
+  regenerating obsolete shared regions or mips after demand changes and eviction.
+- Close transferred ASTC pixels promptly on startup cancellation; make encoder
+  disposal terminal and idempotent, and clear disposed atlas capacity accounting.
+- Add regression coverage for cancellation, disposal, cache pressure, context
+  recovery, and mixed RGBA/ASTC ownership, plus refinement diagnostics.
+
 ## 0.0.29 - 2026-09-14
 
 - Preserve required SVG/WebP/AVIF sources alongside optional ASTC and support
