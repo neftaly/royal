@@ -357,15 +357,15 @@ describe("browser virtual texture runtime", () => {
     const view = { view: matrix, viewProjection: matrix, viewport: { width: viewportSize, height: viewportSize, x: 0, y: 0 } };
     try {
       runtime.setScene(prepared);
-      // Hundreds of pages need over 120 update turns at four uploads per turn.
+      // Hundreds of pages still require many bounded upload turns.
       // Allow scheduler contention in the full suite without changing admission.
       await vi.waitFor(() => {
         const uploaded = runtime.runtimeSnapshot().uploadedPages;
         runtime.update([view]);
-        expect(runtime.runtimeSnapshot().uploadedPages - uploaded).toBeLessThanOrEqual(4);
+        expect(runtime.runtimeSnapshot().uploadedPages - uploaded).toBeLessThanOrEqual(8);
         expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: viewportSize === 512 ? 126 : 486, unresidentPages: 0, pendingPages: 0 });
       }, { interval: 1, timeout: 3000 });
-      expect(decode).toHaveBeenCalledTimes(viewportSize === 512 ? 12 : 54);
+      expect(decode).toHaveBeenCalledTimes(viewportSize === 512 ? 12 : 30);
       expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(4 * 1024 * 1024 + 6 * 64 * 64 * 4);
       const probes = vi.spyOn(SvgRasterCache.prototype, "has");
       try {
@@ -434,15 +434,15 @@ describe("browser virtual texture runtime", () => {
         runtime.update([view]);
         expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 81, pendingPages: 0 });
       });
-      expect(sizes).toHaveLength(9);
-      expect(sizes.every(size => size <= 1028)).toBe(true);
+      expect(sizes).toHaveLength(5);
+      expect(sizes.every(size => size <= 516)).toBe(true);
       expect(runtime.runtimeSnapshot().pageRequests).toBe(81);
       expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(64 * 64 * 4 + 4 * 1024 * 1024);
       view.viewport.width = 64;
       view.viewport.height = 64;
       await waitFor(() => {
         runtime.update([view]);
-        expect(sizes).toHaveLength(10);
+        expect(sizes).toHaveLength(6);
         expect(sizes.at(-1)).toBe(128);
         expect(runtime.runtimeSnapshot().pendingPages).toBe(0);
       });
@@ -453,7 +453,7 @@ describe("browser virtual texture runtime", () => {
     } finally {
       runtime.dispose();
     }
-    expect(close).toHaveBeenCalledTimes(10);
+    expect(close).toHaveBeenCalledTimes(6);
   });
 
   it("uses fractional demand when a native preview has a non-power-of-two size", () => {
@@ -665,15 +665,15 @@ describe("browser virtual texture runtime", () => {
         runtime.update([view]);
         expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 81, pendingPages: 0 });
       });
-      expect(sizes).toHaveLength(10);
-      expect(sizes.every(size => size <= 1028)).toBe(true);
+      expect(sizes).toHaveLength(6);
+      expect(sizes.every(size => size <= 516)).toBe(true);
       expect(runtime.runtimeSnapshot().pageRequests).toBe(81);
       expect(runtime.runtimeSnapshot().automaticDecodedBytes).toBeLessThanOrEqual(1024 + 4 * 1024 * 1024);
       view.viewport.width = 64;
       view.viewport.height = 64;
       await waitFor(() => {
         runtime.update([view]);
-        expect(sizes).toHaveLength(10);
+        expect(sizes).toHaveLength(6);
         expect(runtime.runtimeSnapshot().pendingPages).toBe(0);
       });
       expect(runtime.automaticBinding(asset)).toBeDefined();
@@ -683,7 +683,7 @@ describe("browser virtual texture runtime", () => {
     } finally {
       runtime.dispose();
     }
-    expect(close).toHaveBeenCalledTimes(10);
+    expect(close).toHaveBeenCalledTimes(6);
   });
 
   it.each([false, true])("restores coarse preview coverage after vector failure (already failed: %s)", async (alreadyFailed) => {

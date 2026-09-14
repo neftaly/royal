@@ -64,9 +64,10 @@ describe("automatic virtual texture page source", () => {
   });
 
   it.each([
-    { level: 4, xs: [0, 1, 4, 5], rasters: 2 },
-    { level: 2, xs: [0, 1], rasters: 1 },
-  ])("retains bounded SVG rasters at level $level across zoom reversals until cache pressure or disposal", async ({ level, xs, rasters }) => {
+    { level: 4, xs: [0, 1, 4, 5], ys: [0, 0, 0, 0], rasters: 2 },
+    { level: 4, xs: [0, 1, 2, 3, 0, 1, 2, 3], ys: [0, 0, 0, 0, 1, 1, 1, 1], rasters: 1 },
+    { level: 2, xs: [0, 1], ys: [0, 0], rasters: 1 },
+  ])("retains bounded SVG rasters at level $level across zoom reversals until cache pressure or disposal", async ({ level, xs, ys, rasters }) => {
     const attributes = new Map<string, string>();
     const context = { clearRect: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
     const closed = vi.fn();
@@ -83,7 +84,7 @@ describe("automatic virtual texture page source", () => {
       viewBox: [0, 0, 16, 8],
     } }, 16, 8, { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb", cache);
     const mip = source.manifest.mipCount - level;
-    const pages = xs.map((x) => ({ mip, x, y: 0 }));
+    const pages = xs.map((x, index) => ({ mip, x, y: ys[index]! }));
     source.setDemand!(pages);
     try {
       expect(source.hasCachedPage!(pages[1]!)).toBe(false);
@@ -92,11 +93,11 @@ describe("automatic virtual texture page source", () => {
       (await source.read(pages[0]!, new AbortController().signal))!.close();
       expect(source.hasCachedPage!(pages[1]!)).toBe(true);
       (await source.readCached!(pages[1]!, new AbortController().signal))!.close();
-      if (pages[2] !== undefined) expect(source.hasCachedPage!(pages[2])).toBe(false);
+      if (pages[2] !== undefined && rasters > 1) expect(source.hasCachedPage!(pages[2])).toBe(false);
       for (const page of pages.slice(1)) (await source.read(page, new AbortController().signal))!.close();
       expect(decode).toHaveBeenCalledTimes(rasters);
       expect(source.manifest.pageSize).toBe(128);
-      expect(Number(attributes.get("width"))).toBeLessThanOrEqual(1028);
+      expect(Number(attributes.get("width"))).toBeLessThanOrEqual(516);
       expect(Number(attributes.get("height"))).toBeLessThanOrEqual(516);
       expect(cache.byteLength).toBeLessThanOrEqual(4 * 1024 * 1024);
       expect(closed).not.toHaveBeenCalled();
@@ -106,6 +107,13 @@ describe("automatic virtual texture page source", () => {
       source.setDemand!(pages);
       for (const page of pages) (await source.read(page, new AbortController().signal))!.close();
       expect(decode).toHaveBeenCalledTimes(rasters);
+      if (pages.length === 8) {
+        source.setDemand!(pages.slice(0, 2));
+        // A sparse view can reuse an already completed wide region.
+        (await source.readCached!(pages[1]!, new AbortController().signal))!.close();
+        expect(decode).toHaveBeenCalledTimes(rasters);
+        source.setDemand!(pages);
+      }
       // Another source may reclaim the entire cache; old demand must not pin it.
       const pressure = {};
       await cache.use(pressure, 4 * 1024 * 1024,
@@ -116,12 +124,56 @@ describe("automatic virtual texture page source", () => {
       expect(decode).toHaveBeenCalledTimes(rasters);
       cache.delete(pressure);
       source.setDemand!([]);
-      source.setDemand!(pages);
+      source.setDemand!(pages.length === 8 ? pages.slice(0, 2) : pages);
       (await source.read(pages[0]!, new AbortController().signal))!.close();
       expect(decode).toHaveBeenCalledTimes(rasters + 1);
+      if (pages.length === 8) {
+        source.setDemand!(pages);
+        // Dense demand must prefer the completed narrow raster over a new,
+        // unprepared wide region, without launching a cached-lane decode.
+        (await source.readCached!(pages[1]!, new AbortController().signal))!.close();
+        expect(await source.readCached!(pages[2]!, new AbortController().signal)).toBeUndefined();
+        expect(decode).toHaveBeenCalledTimes(rasters + 1);
+        (await source.read(pages[2]!, new AbortController().signal))!.close();
+        expect(decode).toHaveBeenCalledTimes(rasters + 2);
+      }
     } finally { source.close!(); }
     expect(cache.byteLength).toBe(0);
-    expect(closed).toHaveBeenCalledTimes(rasters + 1);
+    expect(closed).toHaveBeenCalledTimes(rasters + (pages.length === 8 ? 2 : 1));
+  });
+
+  it.each([2, 4])("does not regenerate an obsolete shared raster after eviction in a sparse view at level %i", async level => {
+    const attributes = new Map<string, string>();
+    const context = { clearRect: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
+    const widths: number[] = [];
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => {
+      const width = Number(attributes.get("width")); widths.push(width);
+      return { width, height: Number(attributes.get("height")), close: vi.fn() };
+    }));
+    vi.stubGlobal("XMLSerializer", class { serializeToString = () => "<svg/>"; });
+    vi.stubGlobal("document", { createElement: () => ({ getContext: () => context, width: 0, height: 0 }) });
+    const cache = new SvgRasterCache(), blob = new Blob(["<svg/>"]);
+    const source = createAutomaticSvgPageSource({ blob, byteLength: blob.size, parsed: {
+      document: svgDocument(attributes), viewBox: [0, 0, 16, 8],
+    } }, 16, 8, { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb", cache);
+    const mip = source.manifest.mipCount - level;
+    const pages = Array.from({ length: level === 2 ? 2 : 8 }, (_, i) => ({ mip, x: i % 4, y: Math.floor(i / 4) }));
+    const signal = new AbortController().signal;
+    try {
+      source.setDemand!(pages);
+      (await source.read(pages[0]!, signal))!.close();
+      expect(widths[0]).toBeGreaterThan(level === 2 ? 132 : 260);
+      source.setDemand!(pages.slice(0, 2));
+      cache.clear();
+      expect(await source.readCached!(pages[0]!, signal)).toBeUndefined();
+      (await source.read(pages[0]!, signal))!.close();
+      expect(widths[1]).toBeLessThanOrEqual(260);
+      source.setDemand!(pages.slice(0, 1));
+      cache.clear();
+      (await source.read(pages[0]!, signal))!.close();
+      expect(widths[2]).toBeLessThanOrEqual(132);
+      expect(cache.byteLength).toBe(0);
+    } finally { source.close!(); }
   });
 
   it("recognizes explicit retained SVG authority instead of guessing from a URL", () => {

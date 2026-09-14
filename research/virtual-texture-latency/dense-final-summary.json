@@ -1,0 +1,162 @@
+{
+  "ipad": {
+    "trials": 24,
+    "pairs": 12,
+    "metrics": {
+      "firstRequestMs": {
+        "offMedianMs": 7.000000000000227,
+        "onMedianMs": 7.0,
+        "pairedMedianDeltaMs": -2.2737367544323206e-13,
+        "pairedMedianDelta95IntervalMs": [
+          -2.0,
+          0.0
+        ],
+        "onFasterPairs": 8
+      },
+      "firstUploadMs": {
+        "offMedianMs": 111.5,
+        "onMedianMs": 109.49999999999977,
+        "pairedMedianDeltaMs": 1.4999999999998863,
+        "pairedMedianDelta95IntervalMs": [
+          -13.5,
+          14.500000000000114
+        ],
+        "onFasterPairs": 6
+      },
+      "detail50Ms": {
+        "offMedianMs": 431.4999999999999,
+        "onMedianMs": 432.4999999999999,
+        "pairedMedianDeltaMs": 9.0,
+        "pairedMedianDelta95IntervalMs": [
+          -30.0,
+          23.0
+        ],
+        "onFasterPairs": 6
+      },
+      "detail90Ms": {
+        "offMedianMs": 902.5000000000001,
+        "onMedianMs": 932.0,
+        "pairedMedianDeltaMs": 20.999999999999773,
+        "pairedMedianDelta95IntervalMs": [
+          -41.5,
+          61.49999999999977
+        ],
+        "onFasterPairs": 4
+      },
+      "settledMs": {
+        "offMedianMs": 1158.5,
+        "onMedianMs": 1172.0,
+        "pairedMedianDeltaMs": 14.499999999999886,
+        "pairedMedianDelta95IntervalMs": [
+          -47.50000000000023,
+          55.500000000000114
+        ],
+        "onFasterPairs": 4
+      },
+      "maxFrameGapMs": {
+        "offMedianMs": 31.999999999999886,
+        "onMedianMs": 31.5,
+        "pairedMedianDeltaMs": 1.9999999999998863,
+        "pairedMedianDelta95IntervalMs": [
+          -5.999999999999886,
+          9.000000000000114
+        ],
+        "onFasterPairs": 6
+      },
+      "p95FrameGapMs": {
+        "offMedianMs": 24.5,
+        "onMedianMs": 23.0,
+        "pairedMedianDeltaMs": -1.1368683772161603e-13,
+        "pairedMedianDelta95IntervalMs": [
+          -2.9999999999998863,
+          1.0
+        ],
+        "onFasterPairs": 6
+      }
+    },
+    "newPageCounts": [
+      213
+    ],
+    "cachedReturnNewReads": 0
+  },
+  "quest": {
+    "trials": 24,
+    "pairs": 12,
+    "metrics": {
+      "firstRequestMs": {
+        "offMedianMs": 28.150000005960464,
+        "onMedianMs": 27.500000029802322,
+        "pairedMedianDeltaMs": 0.5499999821186066,
+        "pairedMedianDelta95IntervalMs": [
+          -0.8499999940395355,
+          2.4500000178813934
+        ],
+        "onFasterPairs": 4
+      },
+      "firstUploadMs": {
+        "offMedianMs": 90.2000000178814,
+        "onMedianMs": 86.40000003576279,
+        "pairedMedianDeltaMs": -4.199999988079071,
+        "pairedMedianDelta95IntervalMs": [
+          -8.149999976158142,
+          0.050000011920928955
+        ],
+        "onFasterPairs": 9
+      },
+      "detail50Ms": {
+        "offMedianMs": 224.90000000596046,
+        "onMedianMs": 187.35000002384186,
+        "pairedMedianDeltaMs": -42.89999997615814,
+        "pairedMedianDelta95IntervalMs": [
+          -49.54999998211861,
+          -28.799999982118607
+        ],
+        "onFasterPairs": 12
+      },
+      "detail90Ms": {
+        "offMedianMs": 352.75,
+        "onMedianMs": 266.15000000596046,
+        "pairedMedianDeltaMs": -91.65000000596046,
+        "pairedMedianDelta95IntervalMs": [
+          -99.09999996423721,
+          -76.2000000178814
+        ],
+        "onFasterPairs": 12
+      },
+      "settledMs": {
+        "offMedianMs": 536.5999999940395,
+        "onMedianMs": 420.84999999403954,
+        "pairedMedianDeltaMs": -117.94999998807907,
+        "pairedMedianDelta95IntervalMs": [
+          -138.69999995827675,
+          -97.90000000596046
+        ],
+        "onFasterPairs": 12
+      },
+      "maxFrameGapMs": {
+        "offMedianMs": 29.19999998807907,
+        "onMedianMs": 27.500000029802322,
+        "pairedMedianDeltaMs": 0.4000000059604645,
+        "pairedMedianDelta95IntervalMs": [
+          -6.550000011920929,
+          2.4500000178813934
+        ],
+        "onFasterPairs": 5
+      },
+      "p95FrameGapMs": {
+        "offMedianMs": 21.5,
+        "onMedianMs": 22.599999994039536,
+        "pairedMedianDeltaMs": 0.30000001192092896,
+        "pairedMedianDelta95IntervalMs": [
+          -1.699999988079071,
+          3.0499999821186066
+        ],
+        "onFasterPairs": 5
+      }
+    },
+    "newPageCounts": [
+      75
+    ],
+    "cachedReturnNewReads": 0
+  }
+}

@@ -415,12 +415,25 @@ export const createAutomaticSvgPageSource = (
   };
   const abort = new AbortController();
   const sharedMips = new Map<number, object>();
-  const regionColumns = 2;
+  const plannedMips = new Set<number>();
+  const regionColumns = 4;
   // Keep each shared SVG region within the root-local raster cache while
   // small atlas pages avoid reserving a large tile for every tiny piece.
   const regionRows = Math.max(1, 512 / manifest.pageSize);
   const sharedRegions = new Map<string, { x: AxisSegment; y: AxisSegment }>();
-  const regionFor = (page: VirtualTexturePageId): string => `${page.mip}:${Math.floor(page.x / regionColumns)}:${Math.floor(page.y / regionRows)}`;
+  const plannedRegions = new Set<string>();
+  const regionFor = (page: VirtualTexturePageId, columns = regionColumns): string => `${columns}:${page.mip}:${Math.floor(page.x / columns)}:${Math.floor(page.y / regionRows)}`;
+  const regionForRead = (page: VirtualTexturePageId) => {
+    const wide = sharedRegions.get(regionFor(page));
+    const narrow = sharedRegions.get(regionFor(page, 2));
+    if (wide !== undefined && rasterCache.has(wide)) return wide;
+    if (narrow !== undefined && rasterCache.has(narrow)) return narrow;
+    // Reuse completed historical shapes, but only regenerate a shape that
+    // belongs to current demand after its raster has been evicted.
+    if (plannedRegions.has(regionFor(page))) return wide;
+    if (plannedRegions.has(regionFor(page, 2))) return narrow;
+    return undefined;
+  };
   const regionAxis = (size: number, startPage: number, pageCount: number, scale: number): AxisSegment => {
     const start = Math.max(0, (startPage * manifest.pageSize - manifest.borderTexels) * scale);
     const end = Math.min(size, ((startPage + pageCount) * manifest.pageSize + manifest.borderTexels) * scale);
@@ -429,7 +442,7 @@ export const createAutomaticSvgPageSource = (
   };
   const pages: VirtualTexturePageSource = {
     hasCachedPage: (page) => {
-      const key = sharedMips.get(page.mip) ?? sharedRegions.get(regionFor(page));
+      const key = sharedMips.get(page.mip) ?? regionForRead(page);
       return key !== undefined && rasterCache.has(key);
     },
     setDemand: (pages) => {
@@ -443,18 +456,28 @@ export const createAutomaticSvgPageSource = (
           sharedMips.delete(mip);
         }
       }
+      plannedMips.clear();
       for (const [mip, count] of counts) {
-        if (count > 1 && Math.ceil(Math.max(width, height) / 2 ** mip) <= 512 && !sharedMips.has(mip)) {
-          sharedMips.set(mip, {});
+        if (count > 1 && Math.ceil(Math.max(width, height) / 2 ** mip) <= 512) {
+          plannedMips.add(mip);
+          if (!sharedMips.has(mip)) sharedMips.set(mip, {});
         }
       }
-      const groups = new Map<string, { page: VirtualTexturePageId; count: number }>();
+      const groups = new Map<string, { page: VirtualTexturePageId; count: number; columns: number }>();
+      const wideCounts = new Map<string, number>();
+      for (const page of pages) {
+        const key = regionFor(page);
+        wideCounts.set(key, (wideCounts.get(key) ?? 0) + 1);
+      }
       if (sampler.wrapS === "clamp-to-edge" && sampler.wrapT === "clamp-to-edge") {
         for (const page of pages) {
           if (Math.ceil(Math.max(width, height) / 2 ** page.mip) <= 512) continue;
-          const key = regionFor(page);
+          // Amortize dense demand across sixteen cells; sparse views retain
+          // the smaller eight-cell raster instead of doubling speculative pixels.
+          const columns = (wideCounts.get(regionFor(page)) ?? 0) >= 8 ? regionColumns : 2;
+          const key = regionFor(page, columns);
           const group = groups.get(key);
-          if (group === undefined) groups.set(key, { page, count: 1 });
+          if (group === undefined) groups.set(key, { page, count: 1, columns });
           else group.count += 1;
         }
       }
@@ -464,11 +487,14 @@ export const createAutomaticSvgPageSource = (
           sharedRegions.delete(key);
         }
       }
-      for (const [key, { page, count }] of groups) {
-        if (count <= 1 || sharedRegions.has(key)) continue;
+      plannedRegions.clear();
+      for (const [key, { page, count, columns }] of groups) {
+        if (count <= 1) continue;
+        plannedRegions.add(key);
+        if (sharedRegions.has(key)) continue;
         const scale = 2 ** page.mip;
         const region = {
-          x: regionAxis(width, Math.floor(page.x / regionColumns) * regionColumns, regionColumns, scale),
+          x: regionAxis(width, Math.floor(page.x / columns) * columns, columns, scale),
           y: regionAxis(height, Math.floor(page.y / regionRows) * regionRows, regionRows, scale),
         };
         // Rounding a partial edge raster would stretch every page in its
@@ -484,8 +510,10 @@ export const createAutomaticSvgPageSource = (
       abort.abort();
       for (const key of sharedMips.values()) rasterCache.delete(key);
       sharedMips.clear();
+      plannedMips.clear();
       for (const key of sharedRegions.values()) rasterCache.delete(key);
       sharedRegions.clear();
+      plannedRegions.clear();
     },
     manifest,
     read: async (page, signal) => {
@@ -496,7 +524,7 @@ export const createAutomaticSvgPageSource = (
       const sourceTexelsPerMipTexel = 2 ** page.mip;
       const imageWidth = Math.max(1, Math.ceil(width / sourceTexelsPerMipTexel));
       const imageHeight = Math.max(1, Math.ceil(height / sourceTexelsPerMipTexel));
-      const region = sharedRegions.get(regionFor(page));
+      const region = regionForRead(page);
       if (region !== undefined) {
         const cached = await rasterCache.use(region, region.x.destinationExtent * region.y.destinationExtent * 4,
           () => rasterizeSvgRegion(source, width, height, region.x, region.y, abort.signal),
@@ -523,7 +551,7 @@ export const createAutomaticSvgPageSource = (
         if (cached !== undefined) return cached;
       }
       const rasterKey = sharedMips.get(page.mip);
-      if (rasterKey !== undefined) {
+      if (rasterKey !== undefined && (rasterCache.has(rasterKey) || plannedMips.has(page.mip))) {
         const cached = await rasterCache.use(rasterKey, imageWidth * imageHeight * 4,
           () => rasterizeSvgRegion(source, width, height,
             { sourceStart: 0, sourceExtent: width, destinationStart: 0, destinationExtent: imageWidth, reversed: false },

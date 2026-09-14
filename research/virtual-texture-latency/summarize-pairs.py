@@ -3,12 +3,14 @@ import json
 import math
 import random
 import statistics
+import sys
 from pathlib import Path
 
 root = Path(__file__).parent
+series = sys.argv[1] if len(sys.argv) > 1 else "paired"
 result = {}
 for device in ("ipad", "quest"):
-    reports = [json.loads(p.read_text()) for p in (root / "measurements").glob(f"royal-paired-{device}-*.json")]
+    reports = [json.loads(p.read_text()) for p in (root / "measurements").glob(f"royal-{series}-{device}-*.json")]
     pairs = {}
     for report in reports:
         assert not report.get("error"), report

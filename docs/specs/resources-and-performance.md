@@ -278,9 +278,19 @@ Parallel read durations overlap; their sum is not wall-clock latency.
 consumers measuring target-detail latency must also require desired and admitted
 page counts to match, since constrained admission temporarily uses coarser mips.
 
+SVG source generation groups at least eight demanded pages within a 4×4
+neighborhood into one shared raster. Sparser neighborhoods retain 2×4 groups.
+This changes preparation granularity, not the 128px physical page size. Wide and
+narrow completed rasters may coexist; cached reads select an already completed
+raster before any unprepared alternative. Both shapes share the existing 4 MiB
+root cache, including reservations and pinned users. A full wide raster is at
+most 516×516 pixels including gutters; partial edges keep exact source scaling.
+
 Completed SVG mip and region rasters stay in the existing bounded root-local
 LRU across demand changes, so reversing a zoom can reuse them. Cache pressure
-may evict them, and releasing the page source releases its retained rasters.
+may evict them; subsequent reads regenerate shared rasters only when current
+demand still justifies sharing. Releasing the page source releases its retained
+rasters.
 Render-target `texStorage`/allocation is persistent or transient capacity, not
 source upload traffic, and MUST NOT be added to these transfer counters.
 

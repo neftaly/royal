@@ -3,6 +3,8 @@
 Decision recorded 2026-09-14 after the cooperative ASTC acceptance tests.
 The assessment below preceded implementation. See [implementation results](implementation.md)
 for the retained changes, rejected experiment, device measurements, and validation.
+The subsequent [region-size decision](region-sizing.md) considers additional
+literature and compares demand-aware source rasterization on both devices.
 
 Prioritize fresh-page latency and visible refinement. Current paired tests put
 cold zoom-in at about 0.52 seconds on Quest and 1.22 seconds on iPad with ASTC;
