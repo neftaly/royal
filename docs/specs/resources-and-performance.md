@@ -291,6 +291,9 @@ LRU across demand changes, so reversing a zoom can reuse them. Cache pressure
 may evict them; subsequent reads regenerate shared rasters only when current
 demand still justifies sharing. Releasing the page source releases its retained
 rasters.
+Cancelling a page consumer preserves a successfully decoded shared SVG raster
+for other pages. Failed preparation, non-cancellation consumer errors, and
+explicit source disposal still release it once active users finish.
 Render-target `texStorage`/allocation is persistent or transient capacity, not
 source upload traffic, and MUST NOT be added to these transfer counters.
 

@@ -6,7 +6,7 @@
   },
   "@royal/react": 131072,
   "@royal/renderer-core": 524288,
-  "@royal/renderer-webgl": 871424,
+  "@royal/renderer-webgl": 871552,
   "_allowance": {
     "optionalCaptureModuleAndDeclarationsBytes": 8192,
     "lazyLargeLightRuntimeAndDeclarationsBytes": 8192,
@@ -34,6 +34,7 @@
     "vtLatencyRankingPixelHandoffAndDiagnosticsBytes": 1024,
     "vtContiguousAtlasCopyRunsBytes": 512,
     "vtBoundedGrowthPreparationBytes": 768,
-    "vtDemandSizedSvgRegionsBytes": 512
+    "vtDemandSizedSvgRegionsBytes": 512,
+    "vtCancelledSvgConsumerRetentionBytes": 128
   }
 }

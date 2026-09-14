@@ -66,7 +66,12 @@ export class SvgRasterCache {
       entry.image = await entry.pending;
       return await consume(entry.image);
     } catch (error) {
-      entry.discard = true;
+      // Cancelling one page does not invalidate a successfully decoded raster.
+      // Preparation failures and other consumer errors still discard it; an
+      // explicit delete/clear must also remain effective while users are pinned.
+      if (entry.image === undefined || !(error instanceof DOMException && error.name === "AbortError")) {
+        entry.discard = true;
+      }
       throw error;
     } finally {
       entry.users -= 1;

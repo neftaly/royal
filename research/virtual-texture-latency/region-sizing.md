@@ -103,3 +103,17 @@ temporary URL parameters selected the tested region width or upload allowance;
 those branches were removed from production source before final validation.
 The idle reports are `measurements/royal-dense-idle-*`. Raw JSON is compacted
 without changing its values; all three paired summaries reproduce exactly.
+
+## Follow-up cancellation review
+
+Review of the shared-cache path found an existing cancellation inefficiency:
+one page's `AbortError` discarded a successfully decoded raster after surviving
+readers finished, forcing subsequent pages to decode it again. A regression
+first failed because the cache no longer contained that raster. Page cancellation
+now preserves it under the same LRU budget. Decode aborts, other consumer errors,
+and explicit disposal still release storage; tests cover cancellation concurrent
+with another reader and with disposal. This is a correctness/ownership check,
+not new device timing evidence. The full suite passes 1,556 tests, type checking,
+lint, rebuilt packed-package consumer checks, and production bundle checks.
+The measured package needs a separate 128-byte cancellation allowance
+(871,552-byte ceiling).

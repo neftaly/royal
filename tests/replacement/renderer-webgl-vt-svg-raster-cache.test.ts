@@ -97,7 +97,7 @@ describe("bounded shared SVG raster storage", () => {
     expect(third.close).toHaveBeenCalledOnce();
   });
 
-  it("keeps a shared raster alive when one page is cancelled", async () => {
+  it("retains a shared raster for subsequent pages when one page is cancelled", async () => {
     const cache = new SvgRasterCache(256);
     const key = {};
     const image = bitmap();
@@ -113,7 +113,40 @@ describe("bounded shared SVG raster storage", () => {
     resolve(image);
     await rejected;
     expect(await second).toBe("page copied");
+    expect(cache.has(key)).toBe(true);
+    const prepareAgain = vi.fn(async () => bitmap());
+    expect(await cache.use(key, 256, prepareAgain, () => "next page")).toBe("next page");
+    expect(prepareAgain).not.toHaveBeenCalled();
+    expect(image.close).not.toHaveBeenCalled();
+    cache.clear();
     expect(image.close).toHaveBeenCalledOnce();
     expect(cache.byteLength).toBe(0);
+  });
+
+  it("releases reservations when shared preparation itself is aborted", async () => {
+    const cache = new SvgRasterCache(256), key = {};
+    await expect(cache.use(key, 256, async () => {
+      throw new DOMException("decode aborted", "AbortError");
+    }, () => 1)).rejects.toMatchObject({ name: "AbortError" });
+    expect(cache.byteLength).toBe(0);
+    expect(cache.has(key)).toBe(false);
+    expect(await cache.use(key, 256, async () => bitmap(), () => "retried")).toBe("retried");
+    cache.clear();
+  });
+
+  it("honors disposal while a decoded page consumer is being cancelled", async () => {
+    const cache = new SvgRasterCache(256), key = {}, image = bitmap();
+    let cancel!: (error: Error) => void;
+    const work = new Promise<void>((_resolve, reject) => { cancel = reject; });
+    const pending = cache.use(key, 256, async () => image, () => work);
+    const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    await vi.waitFor(() => expect(cache.has(key)).toBe(true));
+    cache.clear();
+    expect(image.close).not.toHaveBeenCalled();
+    cancel(new DOMException("page cancelled", "AbortError"));
+    await rejected;
+    expect(cache.has(key)).toBe(false);
+    expect(cache.byteLength).toBe(0);
+    expect(image.close).toHaveBeenCalledOnce();
   });
 });
