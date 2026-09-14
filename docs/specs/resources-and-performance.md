@@ -192,17 +192,22 @@ URI only when the extension graph proves every reference is compressed and the
 required-extension rule permits omission; compressed source identity, decoded
 extent, and the full decode/extraction declaration still distinguish tasks.
 
-Virtual-texture publication retains both a four-page count ceiling and a
-separate 4 MiB byte ceiling. A transaction accounts the exact compressed block
+Authored virtual-texture publication retains a four-page count ceiling.
+Automatic pages may use up to eight uploads per frame, stopping after at least
+four when measured upload work reaches 2 ms. The timer begins at the first
+upload, so demand traversal does not consume the upload allowance. Both paths
+retain the separate 4 MiB byte ceiling. A transaction accounts the exact compressed block
 bytes or canonical RGBA page bytes plus one page-table publication per affected
 resource. A denied page remains decoded and ready for the next demanded frame;
 one oversize first transaction still makes progress. Residency chooses a slot
 through an allocation-free pure core and does not remove the old mapping unless
 replacement validation and atlas upload succeed.
 Atlas migration copies already-resident GPU pages under a separate 1 MiB
-per-frame allowance and a 64-copy ceiling (one larger page may progress alone), while still charging
-the shared transfer budget. These copies do not consume the four-page source
-upload ceiling. Both atlases remain budgeted and the old binding remains live
+per-frame allowance and a 64-page ceiling (one larger page may progress alone), while still charging
+the shared transfer budget. These copies do not consume the source-page
+upload count ceiling. Adjacent source and destination cells within the same
+respective rows share one GPU copy call; gaps, reordered cells, and row
+boundaries split runs. Admission still charges every copied page. Both atlases remain budgeted and the old binding remains live
 until fence and error validation permit publication.
 Lower demand alone does not compact an atlas or expire cached pages. Pools retain
 zoom detail within the GPU budget until competing demand requires reclamation
@@ -211,6 +216,68 @@ twofold capacity reduction to avoid resize churn; budget-limited pools may
 compact sooner. Visible pages and coarse coverage take priority over unused
 pages, which are retained in recency order. Both old and replacement storage
 remain charged until migration commits.
+Automatic sRGB VT pages may progressively move from RGBA into an ASTC 6×6
+atlas on devices exposing ASTC LDR. Foreground demand is published as RGBA;
+compression begins after demand settles, with currently demanded pages selected
+before cached pages. One root-owned worker receives explicit grants for one
+six-pixel block row at a time. New page preparation pauses grants and compressed
+publication; a running row finishes before yielding. This is cooperative
+scheduling based on renderer work, not a measurement of system-wide idle CPU.
+
+Mixed residency uses a page-table selector and a separate compressed atlas.
+RGBA remains authoritative until compressed upload validation succeeds. Actual
+GPU savings require RGBA atlas compaction, preserving cached pages unless
+competing demand needs their capacity. Both old and replacement allocations
+remain charged; unfinished optional ASTC growth is released when foreground
+work resumes. Compaction retains at most eight warm RGBA slots, rounded down
+to a power of two from one quarter of current working demand and capped by
+existing capacity. Competing pool pressure takes precedence over this reserve;
+it has no expiry timer. Encoding or upload failure retains existing usable coverage.
+Context loss discards compressed residency and reconstructs from the source.
+
+The initial encoder is limited to automatic 132×132 sRGB pages, at most 512
+compressed pages per resource and 8 MiB of retained compressed CPU blocks per
+root. Unsupported formats and devices keep the existing RGBA path. Encoded
+blocks are retained for bounded atlas growth; the worker is released when its
+eligible queue drains. Its temporary WASM workspace (about 6 MiB in device
+probes) is separate from the retained block counter. `idleAstcBytes` is included
+in `atlasBytes`; retained compressed CPU blocks are included in
+`automaticDecodedBytes`. A root-local handoff retains at most eight existing
+132×132 foreground page images (557,568 bytes), without a foreground copy or
+GPU readback. Within each visible/cached priority class, idle compression takes
+these pixels before reading the source again. Eviction, resource removal,
+context loss, an unusable encoder, and exhaustion of eligible work close the
+retained images. These bytes are included in `automaticDecodedBytes` and
+reported separately as `retainedPagePixelBytes`; `idleAstcPixelHits` and
+`idleAstcSourceReads` distinguish handoffs from additional source work.
+ASTC is lossy and does not replace CPU alpha authority.
+
+Automatic page preparation permits four active reads and eight total active
+or ready pages; authored reads retain the four-total limit. The existing 16 MiB
+pending-page reservation applies to both. Cold automatic detail remains serial.
+During fully reserved expansion of an automatic-only atlas pool, up to two
+active/ready pages across all growing pools may prepare against replacement
+capacity. They remain inside the existing job and byte limits, leaving room
+for other pools even when migration validation stalls. Publication still waits
+for atlas validation. Shrinking and mixed authored pools keep their existing
+preparation rules. Starting, cancelling, or failing growth refits demand and
+releases obsolete reads and ready pixels. Admitted demand may therefore describe
+reserved replacement capacity before those GPU pages are published.
+A cached read atomically pins an already completed SVG raster before bypassing
+the detail lane; a cache miss starts no decode and retries through normal demand.
+Automatic demand is ordered by estimated projected contribution and the gap to
+resident ancestor detail. Coarse-coverage prerequisites, cached-raster locality,
+and resource round-robin scheduling still take precedence. Authored order is
+unchanged. This CPU estimate does not measure occlusion or presented pixels.
+
+Cumulative `pageQueueMs`, `pageReadMs`, and `pageReadyWaitMs` expose scheduler,
+source, and upload-admission waits with `pageTimedReads`/`pageTimedUploads`.
+Parallel read durations overlap; their sum is not wall-clock latency.
+`atlasGrowthFrames` counts pool updates with unfinished migration.
+`visibleDetailFraction` estimates resident contribution within admitted demand;
+consumers measuring target-detail latency must also require desired and admitted
+page counts to match, since constrained admission temporarily uses coarser mips.
+
 Completed SVG mip and region rasters stay in the existing bounded root-local
 LRU across demand changes, so reversing a zoom can reuse them. Cache pressure
 may evict them, and releasing the page source releases its retained rasters.

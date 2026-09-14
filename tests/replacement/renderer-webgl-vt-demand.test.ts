@@ -44,6 +44,21 @@ const view = (projection = identityMat4()) => ({
 });
 
 describe("VT2 clipped projected demand", () => {
+  it("accumulates bounded visible contribution and preserves it through coarsening", () => {
+    const workspace = createVirtualTextureDemandWorkspace(64, "coarsest");
+    collectVirtualTextureDemand(workspace, manifest, [surface], [view()], sampler);
+    const total = () => [...workspace.keys].reduce<number>((sum, key) => sum + (workspace.importance.get(key) ?? 0), 0);
+    const once = total();
+    expect(once).toBeGreaterThan(0);
+    collectVirtualTextureDemand(workspace, manifest, [surface], [view()], sampler);
+    expect(total()).toBeGreaterThan(once);
+    const before = total();
+    truncateVirtualTextureDemand(workspace, 1);
+    expect(total()).toBeCloseTo(before);
+    expect(workspace.importance.size).toBe(1);
+    resetVirtualTextureDemand(workspace);
+    expect(workspace.importance.size).toBe(0);
+  });
   it("stops a discarded overflow pass but visits every surface on the coarser retry", () => {
     let visits = 0;
     const later = { ...surface, get geometry() { visits += 1; return surfaceGeometry; } };

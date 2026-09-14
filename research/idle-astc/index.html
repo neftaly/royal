@@ -1,0 +1,30 @@
+<!doctype html><meta charset="utf-8"><title>ASTC idle encoding probe</title><canvas id="view" width="512" height="512"></canvas><pre id="status"></pre>
+<script>
+window.report={running:true,ua:navigator.userAgent,runs:[]};
+(async()=>{
+ const canvas=document.getElementById('view'),gl=canvas.getContext('webgl2');
+ const ext=gl.getExtension('WEBGL_compressed_texture_astc');
+ report.astc=!!ext;report.profiles=ext?.getSupportedProfiles();
+ const debug=gl.getExtension('WEBGL_debug_renderer_info');report.gpu=debug?gl.getParameter(debug.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER);
+ const img=new Image();img.src='/fixtures/gltf-svg-texture/ghostscript-tiger-fallback.png';await img.decode();
+ const worker=new Worker('./worker.js');
+ const run=data=>new Promise((resolve,reject)=>{worker.onmessage=e=>e.data.error?reject(Error(e.data.error)):resolve(e.data);worker.onerror=e=>reject(Error(e.message));worker.postMessage(data,[data.rgba.buffer]);});
+ let active=false,last,maxGap,frameCount;
+ const frame=t=>{if(active){if(last!==undefined)maxGap=Math.max(maxGap,t-last);last=t;frameCount++;}requestAnimationFrame(frame);};requestAnimationFrame(frame);
+ try{
+ for(const size of [132,512])for(const block of [6,8])for(let trial=0;trial<3;trial++){
+  const source=document.createElement('canvas');source.width=source.height=size;const ctx=source.getContext('2d');ctx.drawImage(img,0,0,size,size);
+  const readStart=performance.now();const rgba=ctx.getImageData(0,0,size,size).data;const readMs=performance.now()-readStart;
+  const raw=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,raw);const rawStart=performance.now();gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,size,size,0,gl.RGBA,gl.UNSIGNED_BYTE,rgba);const rgbaSubmitMs=performance.now()-rawStart;
+  active=true;last=undefined;maxGap=frameCount=0;const start=performance.now();
+  const encoded=await run({size,block,rgba});const roundTripMs=performance.now()-start;active=false;
+  let compressedSubmitMs=null,glError=null;
+  if(ext){const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);const t=performance.now();gl.compressedTexImage2D(gl.TEXTURE_2D,0,block===6?ext.COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR:ext.COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR,size,size,0,encoded.bytes);compressedSubmitMs=performance.now()-t;glError=gl.getError();gl.deleteTexture(texture);}
+  gl.deleteTexture(raw);
+  report.runs.push({size,block,trial,readMs,rgbaSubmitMs,roundTripMs,encodeMs:encoded.encodeMs,contextMs:encoded.contextMs,initMs:encoded.initMs,wasmMemoryBytes:encoded.memoryBytes,rgbaBytes:size*size*4,astcBytes:encoded.bytes.byteLength,compressedSubmitMs,glError,maxFrameGapMs:maxGap,frames:frameCount});
+  document.getElementById('status').textContent=JSON.stringify(report,null,2);
+  await new Promise(r=>setTimeout(r,100));
+ }
+ }finally{worker.terminate();}
+})().catch(e=>report.error=String(e)).finally(()=>{report.running=false;document.getElementById('status').textContent=JSON.stringify(report,null,2);});
+</script>

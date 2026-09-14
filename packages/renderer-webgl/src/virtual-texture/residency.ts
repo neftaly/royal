@@ -1,3 +1,5 @@
+// Encoded slots retain the existing page-key map while selecting a second atlas.
+export const COMPRESSED_SLOT_BASE = 65_536;
 import {
   virtualTexturePageKeyParts,
   type VirtualTextureManifest,
@@ -22,9 +24,13 @@ export const addVirtualTexturePageTablePage = (
   slot: number,
   atlasColumns: number,
   target: Uint8Array,
+  compressedColumns = atlasColumns,
 ): void => {
-  const slotX = slot % atlasColumns;
-  const slotY = Math.floor(slot / atlasColumns);
+  const compressed = slot >= COMPRESSED_SLOT_BASE;
+  const physical = compressed ? slot - COMPRESSED_SLOT_BASE : slot;
+  const columns = compressed ? compressedColumns : atlasColumns;
+  const slotX = physical % columns;
+  const slotY = Math.floor(physical / columns);
   for (let mip = page.mip; mip >= 0; mip -= 1) {
     const scale = 2 ** (page.mip - mip);
     const layout = manifest.mipLayouts[mip]!;
@@ -38,7 +44,7 @@ export const addVirtualTexturePageTablePage = (
         target[offset] = slotX;
         target[offset + 1] = slotY;
         target[offset + 2] = page.mip;
-        target[offset + 3] = 255;
+        target[offset + 3] = compressed ? 128 : 255;
       }
     }
   }
@@ -60,6 +66,7 @@ export const selectVirtualTexturePoolSlot = (
   let oldestFrame = Infinity;
   if (ownedSlots !== undefined) {
     for (const slot of ownedSlots.values()) {
+      if (slot >= COMPRESSED_SLOT_BASE) continue;
       const resident = slots[slot]!;
       if (resident.pageKey === pageKey) return slot;
       if (protectedPages.has(resourceKey, resident.pageKey)) continue;
@@ -95,6 +102,7 @@ export const writeVirtualTexturePageTable = (
   residentSlots: ReadonlyMap<VirtualTexturePageKey, number>,
   atlasColumns: number,
   target: Uint8Array,
+  compressedColumns = atlasColumns,
 ): void => {
   if (!Number.isSafeInteger(atlasColumns) || atlasColumns < 1 || atlasColumns > 256) {
     throw new RangeError("Royal VT atlas columns must be within 1..256");
@@ -116,12 +124,15 @@ export const writeVirtualTexturePageTable = (
         const offset = layout.byteOffset + (y * storageWidth + x) * 4;
         const slot = residentSlots.get(virtualTexturePageKeyParts(mip, x, y));
         if (slot !== undefined) {
-          const slotY = Math.floor(slot / atlasColumns);
+          const compressed = slot >= COMPRESSED_SLOT_BASE;
+          const physical = compressed ? slot - COMPRESSED_SLOT_BASE : slot;
+          const columns = compressed ? compressedColumns : atlasColumns;
+          const slotY = Math.floor(physical / columns);
           if (slotY > 255) throw new RangeError("Royal VT atlas rows must be within 1..256");
-          target[offset] = slot % atlasColumns;
+          target[offset] = physical % columns;
           target[offset + 1] = slotY;
           target[offset + 2] = mip;
-          target[offset + 3] = 255;
+          target[offset + 3] = compressed ? 128 : 255;
         } else if (parentLayout !== undefined) {
           const parentOffset = parentLayout.byteOffset
             + (Math.floor(y / 2) * parentWidth + Math.floor(x / 2)) * 4;

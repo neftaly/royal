@@ -52,14 +52,17 @@
     "vtReviewFixesTotalGzipBytes": 640,
     "instanceIdentityAndVtRetentionInitialGzipBytes": 384,
     "instanceBatchingEligibilityLazyGzipBytes": 128,
-    "instanceIdentityAndVtRetentionTotalGzipBytes": 512
+    "instanceIdentityAndVtRetentionTotalGzipBytes": 512,
+    "cooperativeIdleAstcLazyAndTotalGzipBytes": 94208,
+    "cooperativeIdleAstcWorkerGzipBytes": 90112,
+    "cooperativeIdleAstcChunkReferencesInitialGzipBytes": 8
   },
-  "royalInitialGzipBytes": 144586,
+  "royalInitialGzipBytes": 144594,
   "royalIncrementalGzipBytes": 85334,
   "royalGltfInitialGzipBytes": 145570,
   "royalGltfIncrementalGzipBytes": 1050,
-  "royalLazyGzipBytes": 131008,
-  "royalTotalIncrementalGzipBytes": 216270,
-  "royalTotalGzipBytes": 275560,
-  "royalWorkerGzipBytes": 23790
+  "royalLazyGzipBytes": 225216,
+  "royalTotalIncrementalGzipBytes": 310478,
+  "royalTotalGzipBytes": 369768,
+  "royalWorkerGzipBytes": 113902
 }

@@ -81,6 +81,7 @@ try {
       entry !== 'package/package.json'
       && entry !== 'package/README.md'
       && entry !== 'package/LICENSE'
+      && entry !== 'package/THIRD_PARTY_NOTICES'
       && !entry.startsWith('package/dist/'));
     if (unexpectedFile !== undefined) {
       throw new Error(`${manifest.name} packed unexpected file: ${unexpectedFile}`);
@@ -95,6 +96,10 @@ try {
       throw new Error(`${manifest.name} packed export target is missing: ${missingTarget}`);
     }
     if (manifest.name === '@royal/renderer-webgl') {
+      if (!contents.includes('package/THIRD_PARTY_NOTICES') || !contents.some(entry =>
+        /^package\/dist\/assets\/idle-astc-worker-.*\.js$/u.test(entry))) {
+        throw new Error('@royal/renderer-webgl packed ASTC worker or third-party notices are missing');
+      }
       const worker = contents.find((entry) =>
         /^package\/dist\/assets\/static-preparation-worker-.*\.js$/u.test(entry));
       if (worker === undefined) {

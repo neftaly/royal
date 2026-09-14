@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="darkreader-lock" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="%BASE_URL%favicon.svg" />
+    <title>Royal</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      const mode = new URLSearchParams(location.search).get('mode');
+      window.__astcAcceptanceMode = mode;
+      if (mode === 'rgba') {
+        const getExtension = WebGL2RenderingContext.prototype.getExtension;
+        WebGL2RenderingContext.prototype.getExtension = function(name) {
+          return name === 'WEBGL_compressed_texture_astc' ? null : getExtension.call(this, name);
+        };
+      }
+      history.replaceState(null, '', '/gltf-ghostscript-tiger-svg?acceptance=' + mode);
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

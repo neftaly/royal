@@ -34,6 +34,8 @@ export type VirtualTexturePageSource = Readonly<{
   setDemand?(pages: readonly VirtualTexturePageId[]): void;
   /** Scheduling hint only; reads still use the bounded preparation lane. */
   hasCachedPage?(page: VirtualTexturePageId): boolean;
+  /** Atomically pins a completed raster; never starts decoding on a cache miss. */
+  readCached?(page: VirtualTexturePageId, signal: AbortSignal): Promise<DecodedVirtualTexturePage | undefined>;
   read(
     page: VirtualTexturePageId,
     signal: AbortSignal,

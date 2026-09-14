@@ -312,7 +312,7 @@ export const surfaceTextureUnitMask = (features: number): number => (
   | (features & SURFACE_FEATURE_SCREEN_SPACE_PARTITION
     ? 1 << SCREEN_SPACE_PARTITION_SURFACE_TEXTURE_UNIT
     : 0)
-  | (features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? 0b1000_0001 : 0);
+  | (features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE ? 0b1000_0001 | (1 << 14) : 0);
 
 export const residentOrdinaryTextureMask = (
   bindings: readonly GpuTextureBinding[],
@@ -395,5 +395,6 @@ export const composeSurfaceTextureBindingsInto = (
   if (virtualTexture !== undefined) {
     bindings[0] = virtualTexture.atlas;
     bindings[7] = virtualTexture.pageTable;
+    bindings[14] = virtualTexture.compressedAtlas ?? virtualTexture.atlas;
   }
 };

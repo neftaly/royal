@@ -1,0 +1,60 @@
+{
+  "running": false,
+  "ua": "Mozilla/5.0 (X11; Linux x86_64; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/152.0.0.32.30.1064607984 Chrome/152.0.7977.64 VR Safari/537.36",
+  "cases": [
+    {
+      "name": "gradients",
+      "psnr": 49.35557966454674,
+      "mae": 0.6171162923177084,
+      "max": 4,
+      "alphaMae": 0,
+      "boundaryMae": 0.5260416666666666,
+      "glError": 0
+    },
+    {
+      "name": "text",
+      "psnr": 37.48349158899657,
+      "mae": 0.97576904296875,
+      "max": 48,
+      "alphaMae": 0,
+      "boundaryMae": 1.578125,
+      "glError": 0
+    },
+    {
+      "name": "alpha",
+      "psnr": 43.42023155648549,
+      "mae": 1.0827865101933367,
+      "max": 27.30980392156863,
+      "alphaMae": 1.522979736328125,
+      "boundaryMae": 1.3773935355391795,
+      "glError": 0
+    },
+    {
+      "name": "seams",
+      "psnr": 38.936017575652755,
+      "mae": 1.1928914388020833,
+      "max": 108,
+      "alphaMae": 0,
+      "boundaryMae": 0.5755208333333334,
+      "glError": 0
+    },
+    {
+      "name": "checker",
+      "psnr": null,
+      "mae": 0,
+      "max": 0,
+      "alphaMae": 0,
+      "boundaryMae": 0,
+      "glError": 0
+    },
+    {
+      "name": "tiger",
+      "psnr": 32.74509725718391,
+      "mae": 2.6226806640625,
+      "max": 88,
+      "alphaMae": 0,
+      "boundaryMae": 4.498046875,
+      "glError": 0
+    }
+  ]
+}

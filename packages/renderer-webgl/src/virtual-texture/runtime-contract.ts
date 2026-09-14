@@ -51,6 +51,8 @@ export type VirtualTextureShaderSource = Readonly<{
 
 export type VirtualTextureGpuBinding = Readonly<{
   atlas: TextureUnitBinding;
+  compressedAtlas?: TextureUnitBinding;
+  compressedSettings?: Float32Array;
   pageTable: TextureUnitBinding;
   settings0: Float32Array;
   settings1: Float32Array;
@@ -63,6 +65,24 @@ export type VirtualTextureFrameUpdate = Readonly<{
 }>;
 
 export type VirtualTextureRuntimeSnapshot = Readonly<{
+  /** Cumulative page-stage elapsed time; parallel jobs overlap. Growth counts pool-frames. */
+  pageQueueMs?: number;
+  /** Estimated projected contribution with admitted detail resident; not GPU visibility feedback. */
+  visibleDetailFraction?: number;
+  pageReadMs?: number;
+  pageReadyWaitMs?: number;
+  pageTimedReads?: number;
+  pageTimedUploads?: number;
+  atlasGrowthFrames?: number;
+  /** Background ASTC storage including any unfinished replacement. */
+  idleAstcBytes?: number;
+  /** Retained foreground pixels reused by the idle encoder, without rereading the source. */
+  idleAstcPixelHits?: number;
+  idleAstcSourceReads?: number;
+  /** Bounded uncompressed handoff cache, included in automaticDecodedBytes. */
+  retainedPagePixelBytes?: number;
+  /** Optional background failure; usable RGBA pages remain resident. */
+  idleAstcFailure?: string;
   /** VT upload bytes admitted during the most recent runtime update. */
   admittedUploadBytes: number;
   /** Compatible root-owned physical atlas pools. */
@@ -81,7 +101,7 @@ export type VirtualTextureRuntimeSnapshot = Readonly<{
   unresidentPages: number;
   /** Unique ordinary base-color assets considered by the latest scene. */
   automaticCandidates: number;
-  /** Estimated automatic raster leases plus reserved/retained shared SVG rasters. */
+  /** Estimated automatic raster leases, shared SVG rasters, and retained ASTC blocks. */
   automaticDecodedBytes: number;
   /** Latest-scene candidates rejected by format, size, or decoded-memory policy. */
   automaticIneligible: number;

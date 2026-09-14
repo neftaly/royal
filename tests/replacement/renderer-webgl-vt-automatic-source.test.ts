@@ -87,8 +87,11 @@ describe("automatic virtual texture page source", () => {
     source.setDemand!(pages);
     try {
       expect(source.hasCachedPage!(pages[1]!)).toBe(false);
+      expect(await source.readCached!(pages[1]!, new AbortController().signal)).toBeUndefined();
+      expect(decode).not.toHaveBeenCalled();
       (await source.read(pages[0]!, new AbortController().signal))!.close();
       expect(source.hasCachedPage!(pages[1]!)).toBe(true);
+      (await source.readCached!(pages[1]!, new AbortController().signal))!.close();
       if (pages[2] !== undefined) expect(source.hasCachedPage!(pages[2])).toBe(false);
       for (const page of pages.slice(1)) (await source.read(page, new AbortController().signal))!.close();
       expect(decode).toHaveBeenCalledTimes(rasters);
@@ -109,6 +112,8 @@ describe("automatic virtual texture page source", () => {
         async () => ({ width: 1024, height: 1024, source: {} as ImageBitmap }), () => undefined);
       expect(closed).toHaveBeenCalledTimes(rasters);
       expect(source.hasCachedPage!(pages[1]!)).toBe(false);
+      expect(await source.readCached!(pages[1]!, new AbortController().signal)).toBeUndefined();
+      expect(decode).toHaveBeenCalledTimes(rasters);
       cache.delete(pressure);
       source.setDemand!([]);
       source.setDemand!(pages);

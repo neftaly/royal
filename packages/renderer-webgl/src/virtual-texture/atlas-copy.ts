@@ -35,10 +35,19 @@ export const copyVirtualTextureAtlasSlots = (
     for (let index = 0; index < slots.length; index += 1) {
       const slot = slots[index]!;
       const targetSlot = targetSlots[index]!;
+      // Merge only contiguous source and destination cells within both rows.
+      // Byte admission still counts pages; gaps and repacking boundaries split runs.
+      let pages = 1;
+      const rowLimit = Math.min(source.atlasColumns - slot % source.atlasColumns,
+        target.atlasColumns - targetSlot % target.atlasColumns);
+      while (pages < rowLimit && index + pages < slots.length
+        && slots[index + pages] === slot + pages
+        && targetSlots[index + pages] === targetSlot + pages) pages++;
       gl.copyTexSubImage2D(gl.TEXTURE_2D, 0,
         (targetSlot % target.atlasColumns) * size, Math.floor(targetSlot / target.atlasColumns) * size,
         (slot % source.atlasColumns) * size, Math.floor(slot / source.atlasColumns) * size,
-        size, size);
+        size * pages, size);
+      index += pages - 1;
     }
     if (validate && gl.getError() !== gl.NO_ERROR) throw new Error("Royal VT atlas copy failed");
   } finally {

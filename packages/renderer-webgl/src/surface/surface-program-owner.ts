@@ -78,6 +78,8 @@ export type UnlitProgram = Readonly<{
   texture: WebGLUniformLocation | null;
   textureCoordinates: TextureCoordinatesProgram | null;
   virtualPageTable: WebGLUniformLocation | null;
+  virtualCompressedAtlas: WebGLUniformLocation | null;
+  virtualCompressedSettings: WebGLUniformLocation | null;
   virtualSettings0: WebGLUniformLocation | null;
   virtualSettings1: WebGLUniformLocation | null;
   virtualSettings2: WebGLUniformLocation | null;
@@ -116,6 +118,8 @@ export type StandardProgram = Readonly<{
   texture: WebGLUniformLocation | null;
   textureCoordinates: TextureCoordinatesProgram | null;
   virtualPageTable: WebGLUniformLocation | null;
+  virtualCompressedAtlas: WebGLUniformLocation | null;
+  virtualCompressedSettings: WebGLUniformLocation | null;
   virtualSettings0: WebGLUniformLocation | null;
   virtualSettings1: WebGLUniformLocation | null;
   virtualSettings2: WebGLUniformLocation | null;
@@ -284,6 +288,10 @@ const createUnlitProgram = (
       && features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
       ? textureCoordinatesProgram(gl, program, "baseColor")
       : null,
+    virtualCompressedAtlas: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualCompressedAtlas") : null,
+    virtualCompressedSettings: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualCompressedSettings") : null,
     virtualPageTable: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
       ? uniform(gl, program, "virtualPageTable") : null,
     virtualSettings0: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
@@ -434,6 +442,10 @@ const createStandardProgram = (
       && features & (SURFACE_FEATURE_BASE_COLOR_TEXTURE | SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE)
       ? textureCoordinatesProgram(gl, program, "baseColor")
       : null,
+    virtualCompressedAtlas: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualCompressedAtlas") : null,
+    virtualCompressedSettings: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
+      ? uniform(gl, program, "virtualCompressedSettings") : null,
     virtualPageTable: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
       ? uniform(gl, program, "virtualPageTable") : null,
     virtualSettings0: features & SURFACE_FEATURE_VIRTUAL_BASE_COLOR_TEXTURE
@@ -600,6 +612,7 @@ export class SurfaceProgramOwner {
       if (program.sceneColor !== null) this.#gl.uniform1i(program.sceneColor, 10);
       if (program.environmentSpecular !== null) this.#gl.uniform1i(program.environmentSpecular, 11);
     }
+    if (program.virtualCompressedAtlas !== null) this.#gl.uniform1i(program.virtualCompressedAtlas, 14);
     if (program.virtualPageTable !== null) this.#gl.uniform1i(program.virtualPageTable, 7);
     if (program.kind === "unlit" && program.partition !== null) {
       this.#gl.uniform1i(

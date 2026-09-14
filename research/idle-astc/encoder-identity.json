@@ -1,0 +1,9 @@
+{
+  "source": "Probability packages/card-assets/src/astc-encoder.wasm",
+  "sha256": "c283efbbf63930c4a69747321182c58470e33af777fab248c2d0ae23c66e9744",
+  "bytes": 177882,
+  "quality": 0,
+  "profile": "ASTCENC_PRF_LDR_SRGB",
+  "levels": 1,
+  "workerThreads": 1
+}

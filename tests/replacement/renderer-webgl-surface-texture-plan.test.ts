@@ -309,8 +309,9 @@ describe("surface texture planning core", () => {
       prefilteredEnvironment,
     );
 
-    expect(bindings).toHaveLength(12);
-    expect(bindings).toEqual([
+    expect(bindings).toHaveLength(15);
+    expect(bindings[14]).toBe(atlas);
+    expect(bindings.slice(0, 12)).toEqual([
       atlas,
       ordinary[3],
       ordinary[4],
@@ -563,7 +564,7 @@ describe("surface texture planning core", () => {
       ordinaryTextureMask: 0b1_1111_1111,
       punctualLightCount: 1,
     });
-    expect(surfaceTextureUnitMask(virtualFeatures)).toBe(0b1111_1111_1111);
+    expect(surfaceTextureUnitMask(virtualFeatures)).toBe(0b1111_1111_1111 | (1 << 14));
   });
 
   it("specializes thin transmission separately from authored volume", () => {

@@ -41,6 +41,9 @@ export type VirtualTextureDemandWorkspace = Readonly<{
   frustumPlanes: Float32Array;
   instanceBounds: MutableWorldBounds;
   keys: Set<number | string>;
+  importance: Map<number | string, number>;
+  order: Uint32Array;
+  scores: Float64Array;
   mips: Uint16Array;
   model: MutableMat4;
   modelViewProjection: MutableMat4;
@@ -81,6 +84,9 @@ export const createVirtualTextureDemandWorkspace = (
     frustumPlanes: new Float32Array(24),
     instanceBounds: emptyWorldBounds(),
     keys: new Set(),
+    importance: new Map(),
+    order: new Uint32Array(maxPages),
+    scores: new Float64Array(maxPages),
     mips: new Uint16Array(maxPages),
     model: identityMat4(),
     modelViewProjection: identityMat4(),
@@ -102,6 +108,7 @@ export const resetVirtualTextureDemand = (workspace: VirtualTextureDemandWorkspa
   workspace.coarsestTarget = false;
   workspace.screen[FINEST_FOOTPRINT_SQUARED] = Infinity;
   workspace.keys.clear();
+  workspace.importance.clear();
   workspace.overflow = false;
 };
 
@@ -125,12 +132,15 @@ export const truncateVirtualTextureDemand = (
       for (let index = 0; index < workspace.count; index += 1) finest = Math.min(finest, workspace.mips[index]!);
       let target = 0;
       workspace.keys.clear();
+      const importance = new Map<number | string, number>();
       for (let index = 0; index < workspace.count; index += 1) {
         const coarsen = workspace.mips[index] === finest;
         const mip = workspace.mips[index]! + (coarsen ? 1 : 0);
         const x = coarsen ? Math.floor(workspace.xs[index]! / 2) : workspace.xs[index]!;
         const y = coarsen ? Math.floor(workspace.ys[index]! / 2) : workspace.ys[index]!;
         const key = virtualTexturePageKeyParts(mip, x, y);
+        const oldKey = virtualTexturePageKeyParts(workspace.mips[index]!, workspace.xs[index]!, workspace.ys[index]!);
+        importance.set(key, (importance.get(key) ?? 0) + (workspace.importance.get(oldKey) ?? 0));
         if (workspace.keys.has(key)) continue;
         workspace.keys.add(key);
         workspace.mips[target] = mip;
@@ -139,6 +149,8 @@ export const truncateVirtualTextureDemand = (
         target += 1;
       }
       workspace.count = target;
+      workspace.importance.clear();
+      for (const [key, value] of importance) workspace.importance.set(key, value);
     }
     workspace.overflow = true;
     return;
@@ -178,15 +190,20 @@ const addPage = (
   mip: number,
   x: number,
   y: number,
+  importance = 0,
 ): void => {
   const key = virtualTexturePageKeyParts(mip, x, y);
-  if (workspace.keys.has(key)) return;
+  if (workspace.keys.has(key)) {
+    workspace.importance.set(key, (workspace.importance.get(key) ?? 0) + importance); return;
+  }
   if (workspace.count >= workspace.mips.length) {
     workspace.overflow = true;
     return;
   }
   const index = workspace.count;
   workspace.keys.add(key);
+  workspace.importance.set(key, importance);
+  workspace.order[index] = index;
   workspace.mips[index] = mip;
   workspace.xs[index] = x;
   workspace.ys[index] = y;
@@ -200,16 +217,17 @@ const addPageWithAncestors = (
   mip: number,
   x: number,
   y: number,
+  importance: number,
 ): void => {
   if (mip === manifest.mipCount - 1) workspace.coarsestTarget = true;
   // A retained target already has its required ancestors. Overlapping triangles
   // often request the same pages; avoid walking that chain again for each one.
-  if (workspace.keys.has(virtualTexturePageKeyParts(mip, x, y))) return;
+  if (workspace.keys.has(virtualTexturePageKeyParts(mip, x, y))) { addPage(workspace, mip, x, y, importance); return; }
   for (let ancestorMip = manifest.mipCount - 1; ancestorMip >= mip; ancestorMip -= 1) {
     if (workspace.ancestors === "coarsest" && ancestorMip !== manifest.mipCount - 1
       && ancestorMip !== mip && !(workspace.mipLinear && ancestorMip === mip + 1)) continue;
     const divisor = 2 ** (ancestorMip - mip);
-    addPage(workspace, ancestorMip, Math.floor(x / divisor), Math.floor(y / divisor));
+    addPage(workspace, ancestorMip, Math.floor(x / divisor), Math.floor(y / divisor), importance);
   }
 };
 
@@ -395,6 +413,9 @@ const addWrappedRange = (
   const maximumU = Math.max(screen[2]! / screen[4]!, screen[7]! / screen[9]!, screen[12]! / screen[14]!);
   const minimumV = Math.min(screen[3]! / screen[4]!, screen[8]! / screen[9]!, screen[13]! / screen[14]!);
   const maximumV = Math.max(screen[3]! / screen[4]!, screen[8]! / screen[9]!, screen[13]! / screen[14]!);
+  const screenArea = Math.abs((screen[5]! - screen[0]!) * (screen[11]! - screen[1]!)
+    - (screen[10]! - screen[0]!) * (screen[6]! - screen[1]!)) * 0.5;
+  const uvArea = Math.max(1e-12, (maximumU - minimumU) * (maximumV - minimumV));
   const repeatsU = sampler.wrapS !== "clamp-to-edge";
   const repeatsV = sampler.wrapT !== "clamp-to-edge";
   // Saturate each repeating axis independently. The other axis still needs
@@ -430,7 +451,9 @@ const addWrappedRange = (
       const y1 = Math.min(layout.height - 1, Math.max(0, Math.floor(Math.max(0, localMaxV - Number.EPSILON) * layout.height)));
       for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) {
         for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) {
-          addPageWithAncestors(workspace, manifest, mip, x, y);
+          const coverage = Math.max(0, Math.min(localMaxU, (x + 1) / layout.width) - Math.max(localMinU, x / layout.width))
+            * Math.max(0, Math.min(localMaxV, (y + 1) / layout.height) - Math.max(localMinV, y / layout.height));
+          addPageWithAncestors(workspace, manifest, mip, x, y, screenArea * coverage / uvArea);
           if (workspace.overflow) return;
         }
       }

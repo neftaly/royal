@@ -31,3 +31,37 @@ it("releases an incomplete attachment and retries with a new framebuffer", () =>
   expect(gl.createFramebuffer).toHaveBeenCalledTimes(2);
   expect(gl.checkFramebufferStatus).toHaveBeenCalledTimes(2);
 });
+
+
+it("coalesces contiguous cells without crossing either atlas row or copying gaps", () => {
+  for (const sourceColumns of [2, 4, 8]) for (const targetColumns of [2, 4, 8]) {
+    for (const slots of [[0, 1, 2, 3, 4, 5], [1, 2, 4, 5, 9], [5, 4, 0, 1, 3]]) {
+      const gl = fakeGl();
+      const source = { atlasTexture: gl.createTexture()!, atlasColumns: sourceColumns, storedPageSize: 130 };
+      const target = { atlasTexture: gl.createTexture()!, atlasColumns: targetColumns, storedPageSize: 130 };
+      const targets = slots.map((_, index) => index + 1);
+      copyVirtualTextureAtlasSlots(gl, source, target, slots, false, targets);
+      const copied: number[][] = [];
+      for (const call of vi.mocked(gl.copyTexSubImage2D).mock.calls) {
+        const [, , dx, dy, sx, sy, width, height] = call;
+        expect(height).toBe(130);
+        expect(sx + width).toBeLessThanOrEqual(sourceColumns * 130);
+        expect(dx + width).toBeLessThanOrEqual(targetColumns * 130);
+        for (let x = 0; x < width; x += 130) copied.push([
+          sy / 130 * sourceColumns + (sx + x) / 130,
+          dy / 130 * targetColumns + (dx + x) / 130,
+        ]);
+      }
+      expect(copied).toEqual(slots.map((slot, index) => [slot, targets[index]]));
+    }
+  }
+});
+
+it("copies a complete contiguous atlas row with one driver call", () => {
+  const gl = fakeGl();
+  const source = { atlasTexture: gl.createTexture()!, atlasColumns: 8, storedPageSize: 132 };
+  const target = { ...source, atlasTexture: gl.createTexture()! };
+  copyVirtualTextureAtlasSlots(gl, source, target, [0, 1, 2, 3, 4, 5, 6, 7]);
+  expect(gl.copyTexSubImage2D).toHaveBeenCalledTimes(1);
+  expect(gl.copyTexSubImage2D).toHaveBeenCalledWith(gl.TEXTURE_2D, 0, 0, 0, 0, 0, 1056, 132);
+});

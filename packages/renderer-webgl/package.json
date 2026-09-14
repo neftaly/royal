@@ -42,7 +42,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "THIRD_PARTY_NOTICES"
   ],
   "scripts": {
     "build": "vite build --config ../../vite.config.ts --logLevel warn && tsc -p tsconfig.build.json",

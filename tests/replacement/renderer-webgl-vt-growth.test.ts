@@ -43,6 +43,9 @@ const harness = async (virtualSize = 1024, budgetBytes?: number, maxTextureSize?
   return { runtime, view, gl, budget, texture };
 };
 
+const copiedPages = (gl: ReturnType<typeof fakeGl>): number => gl.copyTexSubImage2D.mock.calls.reduce(
+  (total, call) => total + Number(call[6]) * Number(call[7]) / (130 * 130), 0);
+
 describe("demand-grown RGBA atlases", () => {
   it("migrates small resident pages by a bounded byte allowance before requesting zoom detail", async () => {
     const { runtime, view, gl, texture } = await harness();
@@ -59,13 +62,13 @@ describe("demand-grown RGBA atlases", () => {
       runtime.update([view]); // allocate
       runtime.update([view]); // fence allocation
       runtime.update([view]); // validate and copy
-      const firstBatch = gl.copyTexSubImage2D.mock.calls.length;
+      const firstBatch = copiedPages(gl);
       expect(firstBatch).toBeGreaterThan(4);
       expect(firstBatch * 130 * 130 * 4).toBeLessThanOrEqual(1024 * 1024);
       expect(runtime.runtimeSnapshot().pageRequests).toBe(requests);
       expect(runtime.binding(texture)).toBe(original);
       runtime.update([view]); // remaining copies
-      expect(gl.copyTexSubImage2D).toHaveBeenCalledTimes(21);
+      expect(copiedPages(gl)).toBe(21);
       expect((21 - firstBatch) * 130 * 130 * 4).toBeLessThanOrEqual(1024 * 1024);
       runtime.update([view]); // fence copies
       expect(runtime.binding(texture)).toBe(original);
@@ -585,7 +588,7 @@ describe("demand-grown RGBA atlases", () => {
       expect(grown.settings1[1]).toBeGreaterThan(original.settings1[1]!);
       expect(grown.pageTable.texture).toBe(original.pageTable.texture);
       expect(gl.texSubImage2D).not.toHaveBeenCalled();
-      expect(gl.copyTexSubImage2D).toHaveBeenCalledTimes(5);
+      expect(copiedPages(gl)).toBe(5);
     } finally { runtime.dispose(); }
   });
 
@@ -640,7 +643,7 @@ describe("demand-grown RGBA atlases", () => {
       runtime.update([view]);
       runtime.update([view]);
       runtime.update([view]);
-      expect(gl.copyTexSubImage2D).toHaveBeenCalledTimes(5);
+      expect(copiedPages(gl)).toBe(5);
       expect(runtime.binding(texture)).toBe(original);
       vi.mocked(gl.getError).mockReturnValueOnce(0x0505);
       runtime.update([view]);
@@ -810,7 +813,7 @@ describe("demand-grown RGBA atlases", () => {
       expect(gl.copyTexSubImage2D).not.toHaveBeenCalled();
       runtime.update([view]);
       runtime.update([view]);
-      expect(gl.copyTexSubImage2D).toHaveBeenCalledTimes(5);
+      expect(copiedPages(gl)).toBe(5);
       expect(runtime.binding(texture)).toBe(initial);
       // Both textures are accounted until the atomic binding/page-table swap.
       expect(runtime.runtimeSnapshot().atlasBytes).toBe((8 + 128) * 130 * 130 * 4);

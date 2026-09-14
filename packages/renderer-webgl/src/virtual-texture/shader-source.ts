@@ -2,6 +2,8 @@
 export const VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS = String.raw`
 uniform sampler2D baseColorTexture;
 uniform sampler2D virtualPageTable;
+uniform sampler2D virtualCompressedAtlas;
+uniform vec4 virtualCompressedSettings;
 uniform vec4 virtualSettings0;
 uniform vec4 virtualSettings1;
 uniform vec4 virtualSettings2;
@@ -38,6 +40,7 @@ vec4 royalVirtualMip(vec2 virtualTexel, int desiredMip) {
   vec2 atlasTexel = decoded.xy * storedPageSize
     + vec2(virtualSettings0.w)
     + localTexel;
+  if (entry.a < 0.75) return texture(virtualCompressedAtlas, atlasTexel / virtualCompressedSettings.xy);
   return texture(baseColorTexture, atlasTexel / virtualSettings1.xy);
 }
 

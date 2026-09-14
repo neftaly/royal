@@ -2232,6 +2232,7 @@ export class SurfaceGpuOwner {
     this.#gl.uniform4fv(program.virtualSettings0, binding.settings0);
     this.#gl.uniform4fv(program.virtualSettings1, binding.settings1);
     this.#gl.uniform4fv(program.virtualSettings2, binding.settings2);
+    if (program.virtualCompressedSettings !== null) this.#gl.uniform4fv(program.virtualCompressedSettings, binding.compressedSettings ?? binding.settings1);
   }
 
   #planOpaqueMultiDrawRuns(): void {

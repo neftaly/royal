@@ -1,0 +1,184 @@
+{
+  "before": {
+    "frame": 104,
+    "gltfInstancing": null,
+    "gltfLoadDiagnostics": {
+      "assets": [
+        {
+          "imageCandidates": 1,
+          "imageFallbacks": 0,
+          "imageFailures": 0,
+          "imagesLoaded": 1,
+          "imageRequests": 1,
+          "lightCount": 0,
+          "nodeCount": 1,
+          "phaseMs": {
+            "firstUsable": 347.60000002384186,
+            "imagesComplete": 348.69999998807907,
+            "preparation": 209.60000002384186,
+            "preparationQueue": 84.40000003576279,
+            "externalResourceRead": 6.899999976158142,
+            "sourceRead": 46.19999998807907,
+            "sourceReadStart": 0.5
+          },
+          "primitiveCount": 2,
+          "sceneIndex": 0,
+          "src": "/fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf",
+          "status": "ready",
+          "variantNames": []
+        }
+      ]
+    },
+    "lifecycle": {
+      "generation": 1,
+      "interruptions": 0,
+      "recoveries": 0,
+      "state": "available"
+    },
+    "resourcePressure": {
+      "activePreparationJobs": 0,
+      "activeTexturePreparations": 0,
+      "admittedGeometryUploadBytes": 0,
+      "admittedOrdinaryTextureUploadBytes": 0,
+      "sourceReservationLimit": 64,
+      "sourceReservations": 0,
+      "decodedTextureHandoffBytes": 0,
+      "decodedTextureHandoffThresholdBytes": 67108864,
+      "deferredGeometryUploads": 0,
+      "deferredOrdinaryTextureUploads": 0,
+      "ordinaryTextureUploadBudgetBytes": 33554432,
+      "preparationJobLimit": 8,
+      "queuedDetailPreparationJobs": 0,
+      "queuedForegroundPreparationJobs": 0,
+      "queuedPreparationJobs": 0,
+      "persistentGpuBudgetBytes": 268435456,
+      "persistentGpuDeniedClaims": 0,
+      "persistentGpuRetainedBytes": 681552,
+      "pendingOrdinaryTextureStorageRepresentations": 0,
+      "pendingSurfaceUploads": 0,
+      "retainedEncodedTextureSourceBytes": 68630
+    },
+    "textureResidency": {
+      "bytes": 65160,
+      "compressedBytes": 0,
+      "compressedResources": 0,
+      "fitted": 1,
+      "resources": 1
+    },
+    "virtualTexturing": {
+      "idleAstcBytes": 247808,
+      "admittedUploadBytes": 0,
+      "atlasBytes": 526592,
+      "atlasPools": 1,
+      "atlasGrowthFailures": 0,
+      "desiredPages": 21,
+      "admittedPages": 21,
+      "unresidentPages": 0,
+      "automaticCandidates": 1,
+      "automaticDecodedBytes": 1499396,
+      "automaticIneligible": 0,
+      "automaticResources": 1,
+      "automaticWaiting": 0,
+      "deferredUploads": 0,
+      "failedPages": 0,
+      "pageRequests": 21,
+      "pendingPages": 0,
+      "pendingPageBytes": 0,
+      "pendingPageByteLimit": 16777216,
+      "residentPages": 21,
+      "uploadedPages": 21,
+      "uploadBudgetBytes": 33554432
+    }
+  },
+  "after": {
+    "frame": 213,
+    "gltfInstancing": null,
+    "gltfLoadDiagnostics": {
+      "assets": [
+        {
+          "imageCandidates": 1,
+          "imageFallbacks": 0,
+          "imageFailures": 0,
+          "imagesLoaded": 1,
+          "imageRequests": 1,
+          "lightCount": 0,
+          "nodeCount": 1,
+          "phaseMs": {
+            "firstUsable": 347.60000002384186,
+            "imagesComplete": 348.69999998807907,
+            "preparation": 209.60000002384186,
+            "preparationQueue": 84.40000003576279,
+            "externalResourceRead": 6.899999976158142,
+            "sourceRead": 46.19999998807907,
+            "sourceReadStart": 0.5
+          },
+          "primitiveCount": 2,
+          "sceneIndex": 0,
+          "src": "/fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf",
+          "status": "ready",
+          "variantNames": []
+        }
+      ]
+    },
+    "lifecycle": {
+      "generation": 2,
+      "interruptions": 1,
+      "recoveries": 1,
+      "state": "available"
+    },
+    "resourcePressure": {
+      "activePreparationJobs": 0,
+      "activeTexturePreparations": 0,
+      "admittedGeometryUploadBytes": 0,
+      "admittedOrdinaryTextureUploadBytes": 87380,
+      "sourceReservationLimit": 64,
+      "sourceReservations": 0,
+      "decodedTextureHandoffBytes": 0,
+      "decodedTextureHandoffThresholdBytes": 67108864,
+      "deferredGeometryUploads": 0,
+      "deferredOrdinaryTextureUploads": 0,
+      "ordinaryTextureUploadBudgetBytes": 33554432,
+      "preparationJobLimit": 8,
+      "queuedDetailPreparationJobs": 0,
+      "queuedForegroundPreparationJobs": 0,
+      "queuedPreparationJobs": 0,
+      "persistentGpuBudgetBytes": 268435456,
+      "persistentGpuDeniedClaims": 0,
+      "persistentGpuRetainedBytes": 542160,
+      "pendingOrdinaryTextureStorageRepresentations": 0,
+      "pendingSurfaceUploads": 0,
+      "retainedEncodedTextureSourceBytes": 68630
+    },
+    "textureResidency": {
+      "bytes": 65160,
+      "compressedBytes": 0,
+      "compressedResources": 0,
+      "fitted": 1,
+      "resources": 1
+    },
+    "virtualTexturing": {
+      "idleAstcBytes": 247808,
+      "admittedUploadBytes": 87380,
+      "atlasBytes": 387200,
+      "atlasPools": 1,
+      "atlasGrowthFailures": 0,
+      "desiredPages": 21,
+      "admittedPages": 21,
+      "unresidentPages": 0,
+      "automaticCandidates": 1,
+      "automaticDecodedBytes": 1507140,
+      "automaticIneligible": 0,
+      "automaticResources": 1,
+      "automaticWaiting": 0,
+      "deferredUploads": 0,
+      "failedPages": 0,
+      "pageRequests": 42,
+      "pendingPages": 0,
+      "pendingPageBytes": 0,
+      "pendingPageByteLimit": 16777216,
+      "residentPages": 21,
+      "uploadedPages": 42,
+      "uploadBudgetBytes": 33554432
+    }
+  }
+}

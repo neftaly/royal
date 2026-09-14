@@ -1,0 +1,62 @@
+<!doctype html><meta charset="utf-8"><title>ASTC page acceptance</title>
+<style>body{background:#aaa;font:16px sans-serif}canvas{image-rendering:pixelated;width:768px;height:384px;display:block}pre{white-space:pre-wrap}</style>
+<h1>RGBA / ASTC 6×6 page comparison</h1><div id="images"></div><pre id="status"></pre>
+<script type="module">
+window.report={running:true,ua:navigator.userAgent,cases:[]};
+const worker=new Worker('/@fs/home/neftaly/dev/royal/packages/renderer-webgl/src/virtual-texture/astc/idle-astc-worker.ts',{type:'module'});
+let id=0;
+const encode=async source=>{
+ const bitmap=await createImageBitmap(source), job=++id;
+ return new Promise((resolve,reject)=>{
+  worker.onerror=e=>reject(Error(e.message));
+  worker.onmessage=({data})=>{
+   if(data.id!==job)return;
+   if(data.type==='yield')setTimeout(()=>worker.postMessage({type:'step',id:job}),4);
+   else if(data.type==='complete')resolve(data.blocks);
+   else reject(Error(data.error));
+  };
+  worker.postMessage({type:'start',id:job,bitmap,size:132},[bitmap]);
+ });
+};
+try {
+const canvas=document.createElement('canvas');canvas.width=256;canvas.height=128;
+const gl=canvas.getContext('webgl2',{premultipliedAlpha:false,preserveDrawingBuffer:true});
+if(!gl.getExtension('WEBGL_compressed_texture_astc'))throw Error('No ASTC');
+const shader=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;};
+const program=gl.createProgram();
+gl.attachShader(program,shader(gl.VERTEX_SHADER,`#version 300 es
+void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(p*2.-1.,0,1);}`));
+gl.attachShader(program,shader(gl.FRAGMENT_SHADER,`#version 300 es
+precision highp float;uniform sampler2D atlas;out vec4 color;
+void main(){vec2 p=gl_FragCoord.xy;float page=floor(p.x/128.);vec2 uv=vec2(page*132.+mod(p.x,128.)+2.,p.y+2.)/vec2(264.,132.);vec4 c=texture(atlas,uv);color=vec4(mix(12.92*c.rgb,1.055*pow(c.rgb,vec3(1./2.4))-.055,step(vec3(.0031308),c.rgb)),c.a);}`));
+gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));gl.useProgram(program);
+const texture=format=>{const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texStorage2D(gl.TEXTURE_2D,1,format,264,132);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);return t;};
+const draw=texture=>{gl.bindTexture(gl.TEXTURE_2D,texture);gl.drawArrays(gl.TRIANGLES,0,3);const pixels=new Uint8Array(256*128*4);gl.readPixels(0,0,256,128,gl.RGBA,gl.UNSIGNED_BYTE,pixels);return pixels;};
+const cases={
+ gradients:ctx=>{const g=ctx.createLinearGradient(0,0,260,132);g.addColorStop(0,'#071628');g.addColorStop(.5,'#ea946e');g.addColorStop(1,'white');ctx.fillStyle=g;ctx.fillRect(0,0,260,132);},
+ text:ctx=>{ctx.fillStyle='white';ctx.fillRect(0,0,260,132);ctx.fillStyle='black';for(const [i,size]of [8,12,18,26].entries()){ctx.font=`${size}px sans-serif`;ctx.fillText('Royal 0123456789 AaBb',5,20+i*30);}},
+ alpha:ctx=>{const g=ctx.createLinearGradient(0,0,260,0);g.addColorStop(0,'#ff330000');g.addColorStop(1,'#ff3300ff');ctx.fillStyle=g;ctx.fillRect(0,0,260,132);ctx.fillStyle='#0077ddbb';ctx.beginPath();ctx.arc(130,66,47,0,Math.PI*2);ctx.fill();},
+ seams:ctx=>{ctx.fillStyle='#fff';ctx.fillRect(0,0,260,132);ctx.strokeStyle='#121212';ctx.lineWidth=1;for(let y=3;y<132;y+=7){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(260,y+31);ctx.stroke();}ctx.fillStyle='#e4831f';ctx.fillRect(120,20,22,92);},
+ checker:ctx=>{for(let y=0;y<132;y+=6)for(let x=0;x<260;x+=6){ctx.fillStyle=((x+y)/6)%2?'#000':'#fff';ctx.fillRect(x,y,6,6);}},
+};
+const img=new Image();img.src='/fixtures/gltf-svg-texture/ghostscript-tiger-fallback.png';await img.decode();cases.tiger=ctx=>ctx.drawImage(img,0,0,260,132);
+for(const [name,paint]of Object.entries(cases)){
+ const source=document.createElement('canvas');source.width=260;source.height=132;paint(source.getContext('2d'));
+ const rgba=texture(gl.SRGB8_ALPHA8),astc=texture(0x93d4);
+ for(let page=0;page<2;page++){
+  const tile=document.createElement('canvas');tile.width=tile.height=132;const ctx=tile.getContext('2d');ctx.drawImage(source,page*128,0,132,132,0,0,132,132);
+  gl.bindTexture(gl.TEXTURE_2D,rgba);gl.texSubImage2D(gl.TEXTURE_2D,0,page*132,0,gl.RGBA,gl.UNSIGNED_BYTE,tile);
+  const blocks=await encode(tile);gl.bindTexture(gl.TEXTURE_2D,astc);gl.compressedTexSubImage2D(gl.TEXTURE_2D,0,page*132,0,132,132,0x93d4,blocks);
+ }
+ const a=draw(rgba),b=draw(astc);let squared=0,absolute=0,max=0,alpha=0,seam=0,seamCount=0;
+ for(let i=0;i<a.length;i+=4){alpha+=Math.abs(a[i+3]-b[i+3]);for(let c=0;c<3;c++){
+  // Compare composited color on black and white so transparent RGB cannot hide alpha errors.
+  for(const bg of [0,255]){const av=a[i+c]*a[i+3]/255+bg*(1-a[i+3]/255),bv=b[i+c]*b[i+3]/255+bg*(1-b[i+3]/255),e=Math.abs(av-bv);squared+=e*e;absolute+=e;max=Math.max(max,e);if((i/4)%256>=126&&(i/4)%256<=129){seam+=e;seamCount++;}}
+ }}
+ const n=256*128*6;report.cases.push({name,psnr:10*Math.log10(255**2/(squared/n)),mae:absolute/n,max,alphaMae:alpha/(256*128),boundaryMae:seam/seamCount,glError:gl.getError()});
+ const title=document.createElement('h2');title.textContent=name;images.append(title);
+ for(const [label,pixels]of [['RGBA',a],['ASTC',b]]){const c=document.createElement('canvas');c.width=256;c.height=128;c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(pixels),256,128),0,0);images.append(document.createTextNode(label),c);}
+ gl.deleteTexture(rgba);gl.deleteTexture(astc);
+}
+}catch(e){report.error=String(e);}finally{worker.terminate();report.running=false;document.getElementById("status").textContent=JSON.stringify(report,null,2);}
+</script>

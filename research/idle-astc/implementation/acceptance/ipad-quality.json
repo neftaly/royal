@@ -1,0 +1,60 @@
+{
+  "running": false,
+  "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Safari/605.1.15",
+  "cases": [
+    {
+      "name": "gradients",
+      "psnr": 48.87647440066468,
+      "mae": 0.655426025390625,
+      "max": 4,
+      "alphaMae": 0,
+      "boundaryMae": 0.5852864583333334,
+      "glError": 0
+    },
+    {
+      "name": "text",
+      "psnr": 36.94326183024896,
+      "mae": 1.117706298828125,
+      "max": 36,
+      "alphaMae": 0,
+      "boundaryMae": 1.5703125,
+      "glError": 0
+    },
+    {
+      "name": "alpha",
+      "psnr": 43.33345085152594,
+      "mae": 1.1277994392744892,
+      "max": 30.850980392156856,
+      "alphaMae": 1.5235595703125,
+      "boundaryMae": 1.430533854166648,
+      "glError": 0
+    },
+    {
+      "name": "seams",
+      "psnr": 39.678352937212175,
+      "mae": 1.1620992024739583,
+      "max": 132,
+      "alphaMae": 0,
+      "boundaryMae": 0.6998697916666666,
+      "glError": 0
+    },
+    {
+      "name": "checker",
+      "psnr": null,
+      "mae": 0,
+      "max": 0,
+      "alphaMae": 0,
+      "boundaryMae": 0,
+      "glError": 0
+    },
+    {
+      "name": "tiger",
+      "psnr": 32.740401938840705,
+      "mae": 2.6272684733072915,
+      "max": 88,
+      "alphaMae": 0,
+      "boundaryMae": 4.498697916666667,
+      "glError": 0
+    }
+  ]
+}

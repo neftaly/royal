@@ -354,6 +354,7 @@ export const createAutomaticPreviewPageSource = (
   let demand: readonly VirtualTexturePageId[] = [];
   return {
     manifest,
+    readCached: (page, signal) => detailPages?.readCached?.(page, signal) ?? Promise.resolve(undefined),
     ...(size === undefined ? {
       hasCachedPage: (page: VirtualTexturePageId) => detailPages?.hasCachedPage?.(page) ?? false,
       setDemand: (pages: readonly VirtualTexturePageId[]) => {
@@ -426,7 +427,7 @@ export const createAutomaticSvgPageSource = (
     return { sourceStart: start, sourceExtent: end - start, destinationStart: 0,
       destinationExtent: Math.ceil((end - start) / scale), reversed: false };
   };
-  return {
+  const pages: VirtualTexturePageSource = {
     hasCachedPage: (page) => {
       const key = sharedMips.get(page.mip) ?? sharedRegions.get(regionFor(page));
       return key !== undefined && rasterCache.has(key);
@@ -632,4 +633,8 @@ export const createAutomaticSvgPageSource = (
       };
     },
   };
+  // read enters rasterCache.use synchronously, pinning the completed entry before
+  // its first await. A miss must never start rasterization outside the detail lane.
+  return { ...pages, readCached: (page, signal) => pages.hasCachedPage!(page)
+    ? pages.read(page, signal) : Promise.resolve(undefined) };
 };
