@@ -2,7 +2,7 @@
 
 # Preview-first SVG loading with bounded background refinement
 
-Status: partially implemented. Royal PNG preview consumption landed in
+Historical status at the time of investigation: partially implemented. Royal PNG preview consumption landed in
 `a1b4961d` and is included in 0.0.23; full-atlas preparation queue starvation
 was fixed in `01ef7187`. The producer notes below record the supplied Probability
 contract. Preview-supported finer mips and physical-device performance acceptance

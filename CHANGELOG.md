@@ -3,6 +3,19 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.29 - 2026-09-14
+
+- Preserve required SVG/WebP/AVIF sources alongside optional ASTC and support
+  explicit low-resolution ASTC previews with lazy full-raster VT refinement.
+- Retain cached VT detail within the pool budget instead of expiring it on a
+  timer; rebalance competing pools and cancel unnecessary compaction.
+- Accelerate bounded GPU atlas copies, reuse SVG rasters across zoom changes,
+  and fix source scheduling, residency limits, cancellation and memory retention.
+- Preserve instance-specific pointer handlers and logical picking identity;
+  expose whole-asset batching eligibility and reuse glTF/geometry identity work.
+- Allow a custom image-capture encoder while preserving capture readiness and
+  cancellation. Remove completed proposal instructions and update documentation.
+
 ## 0.0.28 - 2026-09-12
 
 - Release discarded compressed mip storage after fitting and decoder temporaries on close; account for native SVG previews using their compressed byte sizes.

@@ -3,7 +3,7 @@
 
 # Selection-outline performance during camera movement
 
-Status: partially implemented. Retained source indexing landed in `a1b4961d`
+Historical status at the time of investigation: partially implemented. Retained source indexing landed in `a1b4961d`
 and is included in Royal 0.0.23, with differential and native pixel checks.
 Hardware performance, equivalent descriptor replacement, and GPU submission
 follow-up remain investigations.

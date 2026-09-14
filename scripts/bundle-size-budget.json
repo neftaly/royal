@@ -49,14 +49,17 @@
     "cancelledQueuePrefixInitialGzipBytes": 8,
     "vtCancellationAndBudgetRecoveryInitialGzipBytes": 512,
     "vtCoarseMigrationLazyGzipBytes": 128,
-    "vtReviewFixesTotalGzipBytes": 640
+    "vtReviewFixesTotalGzipBytes": 640,
+    "instanceIdentityAndVtRetentionInitialGzipBytes": 384,
+    "instanceBatchingEligibilityLazyGzipBytes": 128,
+    "instanceIdentityAndVtRetentionTotalGzipBytes": 512
   },
-  "royalInitialGzipBytes": 144202,
-  "royalIncrementalGzipBytes": 84950,
-  "royalGltfInitialGzipBytes": 145186,
+  "royalInitialGzipBytes": 144586,
+  "royalIncrementalGzipBytes": 85334,
+  "royalGltfInitialGzipBytes": 145570,
   "royalGltfIncrementalGzipBytes": 1050,
-  "royalLazyGzipBytes": 130880,
-  "royalTotalIncrementalGzipBytes": 215758,
-  "royalTotalGzipBytes": 275048,
+  "royalLazyGzipBytes": 131008,
+  "royalTotalIncrementalGzipBytes": 216270,
+  "royalTotalGzipBytes": 275560,
   "royalWorkerGzipBytes": 23790
 }

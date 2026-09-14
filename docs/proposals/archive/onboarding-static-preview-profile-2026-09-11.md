@@ -1,8 +1,8 @@
-> Historical consumer measurements and proposed API directions, archived 2026-09-11. Capture readiness is now implemented in the Royal working tree; the current proposal lists remaining work. No VT opt-out has been accepted.
+> Historical consumer measurements and proposed API directions, archived 2026-09-11. Capture readiness shipped in Royal 0.0.25; see [proposal decisions](../README.md) for current disposition. No VT opt-out has been accepted.
 
 # Optional static glTF preview delivery for Probability onboarding
 
-Status: proposal, 2026-09-11. This proposal adds no implementation or public option.
+Historical status: proposal, 2026-09-11. This proposal adds no implementation or public option.
 Inspected Royal checkout `cd59d051` plus its existing working-tree changes, and
 Probability's linked Royal build. Do not interpret source observations as a
 claim about a separately published release.

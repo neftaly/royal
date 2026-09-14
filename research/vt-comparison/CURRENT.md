@@ -7,8 +7,9 @@ records the latest validation and the scene-replacement race fixed afterward.
 
 ## Proposal and source behavior
 
-The user-owned proposal remains local and unchanged. Its requested
-source-combination and explicit raster-preview behavior is documented below:
+The completed ASTC proposal and raster-preview implementation plan were removed
+on 2026-09-14. Implemented source-combination and explicit raster-preview behavior
+is documented in the specifications and supported by the evidence below:
 
 | Requirement | Current behavior and evidence |
 | --- | --- |

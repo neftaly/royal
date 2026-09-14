@@ -2,7 +2,7 @@
 
 # Automatic texture memory
 
-Status: partially implemented in the working tree, 2026-09-08. Direct-target
+Historical status at the time of investigation: partially implemented in the working tree, 2026-09-08. Direct-target
 automatic demand, preview coverage, authoritative coarse targets, and bounded
 sharing of small target rasters are implemented. RGBA atlases now start from
 demand and grow through bounded GPU copies, with both allocations charged until

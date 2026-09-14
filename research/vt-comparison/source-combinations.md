@@ -1,6 +1,7 @@
 # Required full sources with optional ASTC
 
-The first part of `PROPOSAL-astc-full-source-alternatives.md` is implemented.
+Optional ASTC alongside required full sources is implemented; see the
+[current source-behavior guide](CURRENT.md#proposal-and-source-behavior).
 Optional ASTC can accompany a core source or a supported required SVG, WebP or
 AVIF source. Required SVG retains the ASTC representation instead of dropping
 it. No redundant PNG is needed for those required-source combinations.

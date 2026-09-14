@@ -1,6 +1,6 @@
 # Royal proposals and decisions
 
-Reconciled against Royal 0.0.26 and the current working tree on 2026-09-12. Implemented behavior belongs in
+Reconciled against Royal 0.0.28 and commit `442c3ca7` on 2026-09-14. Implemented behavior belongs in
 [the specifications](../specs) and [changelog](../../CHANGELOG.md). Historical
 consumer/device observations are retained as evidence.
 
@@ -26,6 +26,7 @@ the current contract.
 
 | Topic | Decision and retained evidence |
 | --- | --- |
+| Optional ASTC and full-source previews | Implemented. Obsolete proposal and implementation plan removed; retain the [raster-preview contract](../specs/raster-texture-previews.md) and [VT source evidence](../../research/vt-comparison/CURRENT.md). |
 | Onboarding capture | Onboarding already calls `captureImage`. No demonstrated need for a separate static backend or VT opt-out; the opt-out experiment changes pixels. Retain [capture research](../../research/image-capture/README.md). |
 | Unlimited lights | Play uses `importLights: false`; Royal already has the finite 512-light path. No current consumer demonstrates a need for unbounded or clustered lighting. Retain [many-light experiments](../../research/many-lights/README.md). |
 | Automatic texture memory | Allocation and refinement are implemented. Device calibration, ETC2 resizing and prefetch have no new failing consumer workload. Retain [VT research](../../research/virtual-texturing/README.md). |
