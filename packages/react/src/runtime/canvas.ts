@@ -143,7 +143,7 @@ export const createCanvasRootRecovery = (
 
 /** Private identity for exact immutable root-creation semantics. */
 const rendererRootOptionsKey = (options: ResolvedRendererRootOptions): string =>
-  `${options.alpha ? 1 : 0}${options.antialias ? 1 : 0}:${options.persistentGpuByteBudget}`;
+  `${options.alpha ? 1 : 0}${options.antialias ? 1 : 0}:${options.persistentGpuByteBudget}:${options.anisotropy}`;
 
 /** A root belongs only to the exact canvas generation that created it. */
 const activeCanvasRuntime = (

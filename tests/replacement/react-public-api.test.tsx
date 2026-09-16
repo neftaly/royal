@@ -530,20 +530,27 @@ describe("replacement React public API", () => {
     expect(resolveRendererRootOptions()).toEqual({
       alpha: false,
       antialias: false,
+      anisotropy: 16,
       persistentGpuByteBudget: 268_435_456,
     });
     expect(resolveRendererRootOptions({
       alpha: true,
       antialias: true,
+      anisotropy: 4,
       persistentGpuByteBudget: 2048,
     })).toEqual({
       alpha: true,
       antialias: true,
+      anisotropy: 4,
       persistentGpuByteBudget: 2048,
     });
   });
 
   it("rejects option aliases and invalid values instead of guessing", () => {
+    for (const anisotropy of [0, -1, 1.5, 17, Infinity, NaN, "16", null]) {
+      expect(() => resolveRendererRootOptions({ anisotropy } as Parameters<typeof resolveRendererRootOptions>[0]))
+        .toThrow("anisotropy must be an integer from 1 to 16");
+    }
     expect(() => resolveRendererRootOptions({
       antiAlias: false,
     } as unknown as Parameters<typeof resolveRendererRootOptions>[0])).toThrow(

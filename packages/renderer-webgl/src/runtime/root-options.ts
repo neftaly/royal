@@ -1,9 +1,12 @@
+import { DEFAULT_TEXTURE_ANISOTROPY } from "../texture/anisotropy";
 import { DEFAULT_PERSISTENT_GPU_BYTE_BUDGET } from "../resource/persistent-gpu-budget";
 
 /** Immutable creation policy for one renderer root and its WebGL2 context. */
 export type RendererRootOptions = Readonly<{
   /** Requests an alpha channel when creating the WebGL2 context. @defaultValue `false` */
   alpha?: boolean;
+  /** Maximum texture anisotropy, 1–16; 1 disables it. Capped by the device; unavailable extensions use 1. @defaultValue `16` */
+  anisotropy?: number;
   /** Requests browser antialiasing when creating the WebGL2 context. @defaultValue `false` */
   antialias?: boolean;
   /** Persistent GPU allocation ceiling in bytes. @defaultValue 256 MiB */
@@ -13,6 +16,7 @@ export type RendererRootOptions = Readonly<{
 /** Fully validated renderer creation policy with every default made explicit. */
 export type ResolvedRendererRootOptions = Readonly<{
   alpha: boolean;
+  anisotropy: number;
   antialias: boolean;
   persistentGpuByteBudget: number;
 }>;
@@ -27,6 +31,7 @@ export const resolveRendererRootOptions = (
   for (const key of Reflect.ownKeys(options)) {
     if (
       key !== "alpha"
+      && key !== "anisotropy"
       && key !== "antialias"
       && key !== "persistentGpuByteBudget"
     ) {
@@ -39,6 +44,10 @@ export const resolveRendererRootOptions = (
   if (options.antialias !== undefined && typeof options.antialias !== "boolean") {
     throw new TypeError("Royal renderer option antialias must be a boolean");
   }
+  const anisotropy = options.anisotropy === undefined ? DEFAULT_TEXTURE_ANISOTROPY : options.anisotropy;
+  if (!Number.isInteger(anisotropy) || anisotropy < 1 || anisotropy > 16) {
+    throw new RangeError("Royal renderer option anisotropy must be an integer from 1 to 16");
+  }
   const persistentGpuByteBudget = options.persistentGpuByteBudget
     ?? DEFAULT_PERSISTENT_GPU_BYTE_BUDGET;
   if (!Number.isSafeInteger(persistentGpuByteBudget) || persistentGpuByteBudget < 1) {
@@ -46,6 +55,7 @@ export const resolveRendererRootOptions = (
   }
   return {
     alpha: options.alpha === true,
+    anisotropy,
     antialias: options.antialias === true,
     persistentGpuByteBudget,
   };

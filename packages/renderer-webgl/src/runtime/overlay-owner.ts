@@ -1,3 +1,4 @@
+import type { TextureAnisotropy } from "../texture/anisotropy";
 import type {
   GltfAssetRef,
   GltfNode,
@@ -41,6 +42,7 @@ type OverlayOwnerOptions = Readonly<{
   gl: WebGL2RenderingContext;
   budget: PersistentGpuBudgetOwner;
   partitionPattern: ScreenSpacePartitionPatternOwner;
+  anisotropy?: TextureAnisotropy;
   etc2Available: boolean;
   getDecodedTexture(asset: TextureSourceRef): DecodedTextureSource | undefined;
   isTexturePending(asset: TextureSourceRef): boolean;
@@ -225,6 +227,7 @@ export class OverlayOwner {
         this.#options.budget,
         this.#options.partitionPattern,
         {
+          ...(this.#options.anisotropy === undefined ? {} : { anisotropy: this.#options.anisotropy }),
           etc2Available: this.#options.etc2Available,
           onChanged: () => this.#options.onChanged(),
           onFailure: (error) => this.#options.onFailure(error),

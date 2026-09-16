@@ -3,6 +3,20 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.31 - 2026-09-16
+
+- Add the immutable renderer-root `anisotropy` option, defaulting to 16 and
+  capped by device support. Apply hardware filtering to ordinary world and
+  overlay textures; retain authored nearest filtering and refresh capabilities
+  after context restoration.
+- Filter virtual textures along the projected pixel footprint with bounded
+  directional taps and matching CPU page demand. Resolve each tap through its
+  own virtual page, preserve minification/magnification filters, and retain
+  existing residency budgets. SVGs receive no special LOD bias.
+- Add root-option, capability, demand, atlas migration, and context-recovery
+  coverage, plus a real-WebGL CI pixel regression for directional detail,
+  repeating page seams, and mixed minification/magnification filters.
+
 ## 0.0.30 - 2026-09-15
 
 - Upload automatic virtual-texture pages as RGBA first, then progressively

@@ -507,6 +507,17 @@ additional capability-driven `renderScale`.
 fully explicit immutable values. It is intended for host wrappers that need to
 compare or report effective policy without reconstructing Royal's defaults.
 
+`createRendererRoot(canvas, { anisotropy: 16 })` and
+`<Canvas rendererOptions={{ anisotropy: 16 }}>` set the root-wide texture
+anisotropy ceiling. The default is 16; accepted values are integers from 1 to 16,
+with 1 disabling anisotropic filtering. The effective value is capped by the
+context's `EXT_texture_filter_anisotropic` limit and falls back to 1 when that
+extension is unavailable. Capability limits are refreshed after context
+restoration. Nearest-filtered textures retain their authored filtering. This
+policy applies to ordinary world/overlay textures and virtual textures; it does
+not alter environment roughness filtering or presentation/lookup textures.
+Changing this creation option replaces a React Canvas root.
+
 Imperative construction distinguishes browser refusal from an already or
 concurrently lost context with `RendererContextCreationError.reason`:
 `"unavailable"` or `"context-lost"`. The error is exported by both renderer and

@@ -15,6 +15,7 @@ import {
   truncateVirtualTextureDemand,
 } from "../../packages/renderer-webgl/src/virtual-texture/demand";
 import { parseVirtualTextureManifest } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
+import { virtualTextureFootprintSquared } from "../../packages/renderer-webgl/src/virtual-texture/footprint";
 
 const manifest = parseVirtualTextureManifest({
   borderTexels: 1,
@@ -44,6 +45,61 @@ const view = (projection = identityMat4()) => ({
 });
 
 describe("VT2 clipped projected demand", () => {
+  it("uses the minor ellipse axis with a bounded anisotropy ratio, including rotated and sheared footprints", () => {
+    expect(virtualTextureFootprintSquared(16, 0, 0, 2, 1)).toBe(256);
+    expect(virtualTextureFootprintSquared(16, 0, 0, 2, 4)).toBe(16);
+    expect(virtualTextureFootprintSquared(16, 0, 0, 2, 16)).toBe(4);
+    const r = Math.SQRT1_2;
+    expect(virtualTextureFootprintSquared(16 * r, 16 * r, -2 * r, 2 * r, 16)).toBeCloseTo(4);
+    expect(virtualTextureFootprintSquared(16 * r, 2 * r, -16 * r, 2 * r, 16)).toBeCloseTo(4);
+    // Parallel derivatives form a degenerate ellipse but retain the ratio cap.
+    expect(virtualTextureFootprintSquared(16, 0, 16, 0, 16)).toBe(2);
+    expect(virtualTextureFootprintSquared(0, 0, 0, 0, 16)).toBe(0);
+  });
+
+  it("requests finer oblique detail, preserves face-on demand and still respects budget coarsening", () => {
+    const source = parseVirtualTextureManifest({ borderTexels: 2, contractVersion: 2, pageSize: 128,
+      pages: { uriTemplate: "{mip}/{x}/{y}.png" }, virtualSize: [4096, 4096] });
+    const isotropic = createVirtualTextureDemandWorkspace(512, "coarsest");
+    const anisotropic = createVirtualTextureDemandWorkspace(512, "coarsest");
+    collectVirtualTextureDemand(isotropic, source, [surface], [view()], sampler, 0, 1);
+    collectVirtualTextureDemand(anisotropic, source, [surface], [view()], sampler, 0, 16);
+    expect(anisotropic.keys).toEqual(isotropic.keys);
+    resetVirtualTextureDemand(isotropic); resetVirtualTextureDemand(anisotropic);
+    const tilted = identityMat4(); tilted[5] = 0.125;
+    collectVirtualTextureDemand(isotropic, source, [surface], [view(tilted)], sampler, 0, 1);
+    collectVirtualTextureDemand(anisotropic, source, [surface], [view(tilted)], sampler, 0, 16);
+    expect(Math.min(...anisotropic.mips.slice(0, anisotropic.count))).toBe(3);
+    expect(Math.min(...isotropic.mips.slice(0, isotropic.count))).toBe(5);
+    expect(anisotropic.count).toBeGreaterThan(isotropic.count);
+    truncateVirtualTextureDemand(anisotropic, 8);
+    expect(anisotropic.count).toBeLessThanOrEqual(8);
+    resetVirtualTextureDemand(anisotropic);
+    collectVirtualTextureDemand(anisotropic, source, [surface], [view(tilted)], sampler, 4, 16);
+    expect([...anisotropic.mips.slice(0, anisotropic.count)].every(mip => mip >= 4)).toBe(true);
+  });
+
+  it.each(["clamp-to-edge", "repeat", "mirrored-repeat"] as const)("includes directional taps across page and %s boundaries", (wrapS) => {
+    const source = parseVirtualTextureManifest({ borderTexels: 2, contractVersion: 2, pageSize: 128,
+      pages: { uriTemplate: "{mip}/{x}/{y}.png" }, virtualSize: [1024, 1024] });
+    const workspace = createVirtualTextureDemandWorkspace(128, "coarsest");
+    const slice = { ...surface, textureCoordinates: {
+      row0: [0.4998, 0, 0.0001, 0] as const, row1: [0, 1, 0, 0] as const,
+    } };
+    const narrow = { ...view(), viewport: { ...view().viewport, width: 32 } };
+    collectVirtualTextureDemand(workspace, source, [slice], [narrow], { ...sampler, wrapS, minFilter: "linear-mipmap-nearest" }, 0, 16);
+    const columns = [...workspace.xs.slice(0, workspace.count)].filter((_, index) => workspace.mips[index] === 1);
+    expect(columns).toContain(2); // Tap past U = 0.5 leaves the triangle's page range.
+    if (wrapS === "repeat") expect(columns).toContain(3); // Tap below U = 0 wraps to the last page.
+    else expect(columns).not.toContain(3);
+    for (let index = 0; index < workspace.count; index++) {
+      const layout = source.mipLayouts[workspace.mips[index]!]!;
+      expect(workspace.xs[index]).toBeLessThan(layout.width);
+      expect(workspace.ys[index]).toBeLessThan(layout.height);
+    }
+    expect(workspace.overflow).toBe(false);
+  });
+
   it("accumulates bounded visible contribution and preserves it through coarsening", () => {
     const workspace = createVirtualTextureDemandWorkspace(64, "coarsest");
     collectVirtualTextureDemand(workspace, manifest, [surface], [view()], sampler);

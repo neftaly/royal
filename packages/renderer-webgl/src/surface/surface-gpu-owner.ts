@@ -1,3 +1,4 @@
+import type { TextureAnisotropy } from "../texture/anisotropy";
 import { LargeLightActivation } from "./large-light-activation";
 import { plannedSurfaceProgramFeatures, surfaceMaterialLodDrawable } from "./surface-publication-plan";
 import { BorrowedSurfaceSourceIndex } from "./borrowed-surface-source-index";
@@ -278,6 +279,7 @@ const surfaceDrawPacket = (
 export type SurfacePresentationLane = "overlay" | "world";
 
 export type SurfaceGpuOwnerOptions = Readonly<{
+  anisotropy?: TextureAnisotropy;
   etc2Available?: boolean;
   onChanged?: () => void;
   onFailure?: (error: unknown) => void;
@@ -387,6 +389,7 @@ export class SurfaceGpuOwner {
     budget: PersistentGpuBudgetOwner,
     partitionPattern: ScreenSpacePartitionPatternOwner,
     {
+      anisotropy,
       etc2Available = true,
       onChanged = () => undefined,
       onFailure = () => undefined,
@@ -415,7 +418,7 @@ export class SurfaceGpuOwner {
     this.#partitionPattern = partitionPattern;
     this.#presentationLane = presentationLane;
     this.#resourceBudget = budget;
-    this.#textureGpu = new TextureGpuOwner(gl, budget, uploadBudget, etc2Available);
+    this.#textureGpu = new TextureGpuOwner(gl, budget, uploadBudget, etc2Available, anisotropy);
     this.#uploadBudget = uploadBudget;
   }
 

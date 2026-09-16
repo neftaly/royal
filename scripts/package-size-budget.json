@@ -6,7 +6,7 @@
   },
   "@royal/react": 131072,
   "@royal/renderer-core": 524288,
-  "@royal/renderer-webgl": 871808,
+  "@royal/renderer-webgl": 876416,
   "_allowance": {
     "optionalCaptureModuleAndDeclarationsBytes": 8192,
     "lazyLargeLightRuntimeAndDeclarationsBytes": 8192,
@@ -36,6 +36,7 @@
     "vtBoundedGrowthPreparationBytes": 768,
     "vtDemandSizedSvgRegionsBytes": 512,
     "vtCancelledSvgConsumerRetentionBytes": 128,
-    "vtAstcLifecycleCleanupBytes": 256
+    "vtAstcLifecycleCleanupBytes": 256,
+    "rootAnisotropyDirectionalFilteringAndDeclarationsBytes": 4608
   }
 }

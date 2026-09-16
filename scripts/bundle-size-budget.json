@@ -12,7 +12,7 @@
     "royalWorkerGzipBytes": 56618
   },
   "_allowance": {
-    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, retained multi-view outline planning, invariant-prepass depth equality, final default-depth discard, transactional creation-loss recovery, alpha-safe AVIF fitting, retained screen-space segments, exact-budget VT atlas planning, and lazy bounded emissive volumes, extracted overlay ownership with reentrant installation guards and shared preparation policy, always-on VT, preview-first SVG refinement, indexed outline provenance, and opaque retained-presentation copies, and separated transparent bounds ordering, and full-atlas VT preparation queue liveness, bounded adaptive VT residency and preparation, nonblocking VT shader publication, and authored SVG crop semantics, per-mount imported-light control and optional image-capture capability, lazy 512-light composition with a shared material path, exact zero-contribution rejection through the existing BRDF early return, host frame scheduling, asynchronous SVG origin validation, and per-pass material and exact instance revision reuse, direct native ASTC/BC textures and authored VT through the shared compressed pipeline, ASTC glTF alternatives with deferred native SVG previews, virtual mip blending and bounded demand scratch, required full-source alternatives with native previews, explicit bounded raster previews through shared VT refinement",
+    "feature": "exact-compatible outline batching, bounded presentation, measured mask-normal reuse, exact scene-replacement geometry ownership, exact nested descriptor boundaries, retained multi-view outline planning, invariant-prepass depth equality, final default-depth discard, transactional creation-loss recovery, alpha-safe AVIF fitting, retained screen-space segments, exact-budget VT atlas planning, and lazy bounded emissive volumes, extracted overlay ownership with reentrant installation guards and shared preparation policy, always-on VT, preview-first SVG refinement, indexed outline provenance, and opaque retained-presentation copies, and separated transparent bounds ordering, and full-atlas VT preparation queue liveness, bounded adaptive VT residency and preparation, nonblocking VT shader publication, and authored SVG crop semantics, per-mount imported-light control and optional image-capture capability, lazy 512-light composition with a shared material path, exact zero-contribution rejection through the existing BRDF early return, host frame scheduling, asynchronous SVG origin validation, and per-pass material and exact instance revision reuse, direct native ASTC/BC textures and authored VT through the shared compressed pipeline, ASTC glTF alternatives with deferred native SVG previews, virtual mip blending and bounded demand scratch, required full-source alternatives with native previews, explicit bounded raster previews through shared VT refinement, root-level hardware anisotropy and bounded directional virtual-texture filtering",
     "initialAndTotalGzipBytes": 8600,
     "lazyGzipBytes": 3700,
     "minidraco050GzipBytes": 3700,
@@ -55,14 +55,17 @@
     "instanceIdentityAndVtRetentionTotalGzipBytes": 512,
     "cooperativeIdleAstcLazyAndTotalGzipBytes": 94208,
     "cooperativeIdleAstcWorkerGzipBytes": 90112,
-    "cooperativeIdleAstcChunkReferencesInitialGzipBytes": 8
+    "cooperativeIdleAstcChunkReferencesInitialGzipBytes": 8,
+    "rootAnisotropyInitialGzipBytes": 384,
+    "virtualTextureAnisotropyLazyGzipBytes": 784,
+    "rootAndVirtualTextureAnisotropyTotalGzipBytes": 1168
   },
-  "royalInitialGzipBytes": 144594,
-  "royalIncrementalGzipBytes": 85334,
-  "royalGltfInitialGzipBytes": 145570,
+  "royalInitialGzipBytes": 144978,
+  "royalIncrementalGzipBytes": 85718,
+  "royalGltfInitialGzipBytes": 145954,
   "royalGltfIncrementalGzipBytes": 1050,
-  "royalLazyGzipBytes": 225216,
-  "royalTotalIncrementalGzipBytes": 310478,
-  "royalTotalGzipBytes": 369768,
+  "royalLazyGzipBytes": 226000,
+  "royalTotalIncrementalGzipBytes": 311646,
+  "royalTotalGzipBytes": 370936,
   "royalWorkerGzipBytes": 113902
 }

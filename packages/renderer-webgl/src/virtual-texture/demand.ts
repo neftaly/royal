@@ -1,4 +1,5 @@
 import type { CanonicalTextureSampler } from "../texture/sampler";
+import { virtualTextureFootprintSquared } from "./footprint";
 import type { CanonicalTriangleGeometry } from "../surface/canonical-geometry";
 import type { CanonicalTextureCoordinates } from "../surface/texture-coordinates";
 import {
@@ -54,7 +55,7 @@ export type VirtualTextureDemandWorkspace = Readonly<{
   vertexFlags: Uint8Array;
   xs: Uint32Array;
   ys: Uint32Array;
-}> & { count: number; overflow: boolean; coarsestTarget: boolean; minimumMip: number; mipLinear: boolean };
+}> & { count: number; overflow: boolean; coarsestTarget: boolean; minimumMip: number; mipLinear: boolean; anisotropy: number };
 
 const CLIP_VERTEX_COMPONENTS = 6;
 const MAX_CLIPPED_VERTICES = 12;
@@ -78,6 +79,7 @@ export const createVirtualTextureDemandWorkspace = (
     coarsestTarget: false,
     minimumMip: 0,
     mipLinear: false,
+    anisotropy: 1,
     clipA: new Float64Array(MAX_CLIPPED_VERTICES * CLIP_VERTEX_COMPONENTS),
     clipB: new Float64Array(MAX_CLIPPED_VERTICES * CLIP_VERTEX_COMPONENTS),
     count: 0,
@@ -407,12 +409,14 @@ const addWrappedRange = (
   manifest: VirtualTextureManifest,
   mip: number,
   sampler: CanonicalTextureSampler,
+  radiusU: number,
+  radiusV: number,
 ): void => {
   const screen = workspace.screen;
-  const minimumU = Math.min(screen[2]! / screen[4]!, screen[7]! / screen[9]!, screen[12]! / screen[14]!);
-  const maximumU = Math.max(screen[2]! / screen[4]!, screen[7]! / screen[9]!, screen[12]! / screen[14]!);
-  const minimumV = Math.min(screen[3]! / screen[4]!, screen[8]! / screen[9]!, screen[13]! / screen[14]!);
-  const maximumV = Math.max(screen[3]! / screen[4]!, screen[8]! / screen[9]!, screen[13]! / screen[14]!);
+  const minimumU = Math.min(screen[2]! / screen[4]!, screen[7]! / screen[9]!, screen[12]! / screen[14]!) - radiusU;
+  const maximumU = Math.max(screen[2]! / screen[4]!, screen[7]! / screen[9]!, screen[12]! / screen[14]!) + radiusU;
+  const minimumV = Math.min(screen[3]! / screen[4]!, screen[8]! / screen[9]!, screen[13]! / screen[14]!) - radiusV;
+  const maximumV = Math.max(screen[3]! / screen[4]!, screen[8]! / screen[9]!, screen[13]! / screen[14]!) + radiusV;
   const screenArea = Math.abs((screen[5]! - screen[0]!) * (screen[11]! - screen[1]!)
     - (screen[10]! - screen[0]!) * (screen[6]! - screen[1]!)) * 0.5;
   const uvArea = Math.max(1e-12, (maximumU - minimumU) * (maximumV - minimumV));
@@ -508,6 +512,8 @@ const addClippedTriangleDemand = (
   let minimumMip = manifest.mipCount - 1;
   let maximumMip = 0;
   let sampled = false;
+  let radiusU = 0;
+  let radiusV = 0;
   // Constant clip W makes perspective-correct derivatives constant over the
   // triangle. Flat cards and orthographic meshes need only one sample.
   const sampleCount = q1 === 0 && q2 === 0 ? 1 : 4;
@@ -529,7 +535,14 @@ const addClippedTriangleDemand = (
     const dvDy = (vqDy * q - vq * qDy) * inverseQSquared * manifest.height;
     // Match the shader's squared footprint without variadic hypot calls in the
     // triangle loop. Overflow selects the coarsest mip; values below one clamp.
-    const footprintSquared = Math.max(duDx * duDx + dvDx * dvDx, duDy * duDy + dvDy * dvDy);
+    const footprintSquared = virtualTextureFootprintSquared(duDx, dvDx, duDy, dvDy, workspace.anisotropy);
+    if (workspace.anisotropy > 1 && Number.isFinite(footprintSquared)
+      && Math.max(1, footprintSquared) < Math.max(duDx * duDx + dvDx * dvDx, duDy * duDy + dvDy * dvDy)) {
+      // Directional taps can cross a triangle's UV boundary. Include their
+      // footprint before wrap splitting so neighbouring pages are resident.
+      radiusU = Math.max(radiusU, 0.5 * Math.sqrt(duDx * duDx + duDy * duDy) / manifest.width);
+      radiusV = Math.max(radiusV, 0.5 * Math.sqrt(dvDx * dvDx + dvDy * dvDy) / manifest.height);
+    }
     // Preserve unclamped preview demand in existing typed scratch. Convert
     // its finest footprint to a fractional LOD once when the runtime asks.
     if (footprintSquared < screen[FINEST_FOOTPRINT_SQUARED]!) screen[FINEST_FOOTPRINT_SQUARED] = footprintSquared;
@@ -613,6 +626,8 @@ const addClippedTriangleDemand = (
     manifest,
     targetMip,
     sampler,
+    radiusU,
+    radiusV,
   );
 };
 
@@ -725,10 +740,12 @@ export const collectVirtualTextureDemand = (
   views: readonly VirtualTextureDemandView[],
   sampler: CanonicalTextureSampler,
   minimumMip = 0,
+  anisotropy = 1,
 ): void => {
   const previousOverflow = workspace.overflow;
   workspace.overflow = false;
   workspace.minimumMip = minimumMip;
+  workspace.anisotropy = anisotropy;
   workspace.mipLinear = sampler.minFilter.endsWith("mipmap-linear");
   for (const view of views) {
     frustumPlanesInto(workspace.frustumPlanes, view.viewProjection);

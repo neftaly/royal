@@ -50,7 +50,7 @@ describe("surface program ownership", () => {
       /vec2 atlasTexel = decoded\.xy \* storedPageSize\s*\+ vec2\(virtualSettings0\.w\)\s*\+ localTexel;/,
     );
     expect(VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS).toContain(
-      "texture(baseColorTexture, atlasTexel / virtualSettings1.xy)",
+      "textureLod(baseColorTexture, atlasTexel / virtualSettings1.xy, atlasLod)",
     );
   });
 

@@ -10,6 +10,7 @@ import { ETC2_SRGB8_ALPHA8_WEBGL_FORMAT } from "../../packages/renderer-webgl/sr
 import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/texture/storage-fit";
 import { assertFuzz, forEachFuzzCase } from "../fuzz";
 import { fakeGl } from "./support/canvas-root-harness";
+import { TextureAnisotropy } from "../../packages/renderer-webgl/src/texture/anisotropy";
 
 const binding = (
   samplerKey: string,
@@ -54,6 +55,36 @@ const compressedBinding = (
 });
 
 describe("ordinary texture GPU owner", () => {
+  it.each([1, 4, 16])("applies root anisotropy %i within the device limit and refreshes it after context loss", (requested) => {
+    const extension = { TEXTURE_MAX_ANISOTROPY_EXT: 0x84fe, MAX_TEXTURE_MAX_ANISOTROPY_EXT: 0x84ff };
+    let available = true, limit = 8;
+    const gl = Object.assign(fakeGl(), {
+      getExtension: vi.fn(name => name === "EXT_texture_filter_anisotropic" && available ? extension : null),
+      getParameter: vi.fn(() => limit),
+    });
+    const owner = new TextureGpuOwner(gl, undefined, undefined, true, new TextureAnisotropy(gl, requested));
+    const recipes = [binding("linear", "linear-mipmap-linear"), binding("nearest", "nearest-mipmap-nearest")];
+    try {
+      owner.reconcileComplete(recipes);
+      if (requested === 1) expect(gl.samplerParameterf).not.toHaveBeenCalled();
+      else {
+        expect(gl.samplerParameterf).toHaveBeenCalledExactlyOnceWith(expect.anything(), 0x84fe, Math.min(requested, 8));
+        owner.reconcileComplete(recipes);
+        expect(gl.getExtension).toHaveBeenCalledTimes(1);
+      }
+      owner.invalidate();
+      vi.mocked(gl.samplerParameterf).mockClear();
+      limit = 2;
+      owner.reconcileComplete(recipes);
+      if (requested > 1) expect(gl.samplerParameterf).toHaveBeenCalledExactlyOnceWith(expect.anything(), 0x84fe, 2);
+      owner.invalidate();
+      vi.mocked(gl.samplerParameterf).mockClear();
+      available = false;
+      owner.reconcileComplete(recipes);
+      expect(gl.samplerParameterf).not.toHaveBeenCalled();
+    } finally { owner.dispose(); }
+  });
+
   it("replaces fitted storage and preserves the old texture while an upgrade is deferred", () => {
     const gl = fakeGl(), budget = new PersistentGpuBudgetOwner(4096);
     const owner = new TextureGpuOwner(gl, budget);

@@ -225,6 +225,7 @@ export const fakeGl = (): FakeGl => ({
   linkProgram: vi.fn(),
   pixelStorei: vi.fn(),
   samplerParameteri: vi.fn(),
+  samplerParameterf: vi.fn(),
   renderbufferStorage: vi.fn(),
   scissor: vi.fn(),
   shaderSource: vi.fn(),

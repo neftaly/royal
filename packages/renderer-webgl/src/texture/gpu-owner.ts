@@ -1,3 +1,4 @@
+import { TextureAnisotropy } from "./anisotropy";
 import { nativeTextureAvailable, nativeWebGlFormat, validateNativeBaseDimensions } from "./native-storage";
 import type { CanonicalTextureBinding } from "../surface/canonical-material";
 
@@ -67,6 +68,7 @@ const usesMipmaps = (filter: string): boolean => filter.includes("mipmap");
 
 /** Owns ordinary texture storage and sampler resources for one context generation. */
 export class TextureGpuOwner {
+  readonly #anisotropy: TextureAnisotropy;
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #deniedStorageKeys = new Set<string>();
   readonly #deferredStorageKeys = new Set<string>();
@@ -85,7 +87,9 @@ export class TextureGpuOwner {
     budget = new PersistentGpuBudgetOwner(),
     uploadBudget = new FrameUploadBudgetOwner(),
     etc2Available = true,
+    anisotropy = new TextureAnisotropy(gl),
   ) {
+    this.#anisotropy = anisotropy;
     this.#gl = gl;
     this.#budget = budget;
     this.#uploadBudget = uploadBudget;
@@ -109,6 +113,7 @@ export class TextureGpuOwner {
 
   /** Context loss invalidates handles without issuing deletion calls against the lost generation. */
   invalidate(): void {
+    this.#anisotropy.invalidate();
     this.#nativeAvailable.clear();
     this.#samplers.clear();
     for (const resource of this.#textures.values()) this.#budget.release(resource.budgetIdentity);
@@ -370,6 +375,7 @@ export class TextureGpuOwner {
       gl.samplerParameteri(sampler, gl.TEXTURE_MIN_FILTER, samplerFilter(gl, binding.sampler.minFilter));
       gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_S, samplerWrap(gl, binding.sampler.wrapS));
       gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_T, samplerWrap(gl, binding.sampler.wrapT));
+      this.#anisotropy.apply(sampler, binding.sampler);
       return { sampler };
     } catch (error) {
       gl.deleteSampler(sampler);

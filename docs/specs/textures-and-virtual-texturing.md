@@ -262,6 +262,18 @@ batch, trading a few cold driver calls and bounded padding bytes for the smaller
 Quest/Safari fragment path. All padded storage is charged to the VT GPU and
 per-frame upload budgets.
 
+Root texture anisotropy defaults to 16, capped by device support. Ordinary
+textures use the extension's sampler parameter. Virtual textures instead select
+LOD from the pixel footprint's minor ellipse axis, widened to respect that cap,
+and average at most 16 taps along its major axis. Each tap wraps the authored UV
+and resolves its own page before a level-zero atlas fetch. Hardware anisotropy
+on an atlas sampler is not used: neighbouring physical slots need not represent
+neighbouring virtual pages. CPU demand uses the same footprint calculation and
+includes the tap extent when splitting wrapped UV ranges. Existing residency
+budgets and complete-level coarsening still apply. At anisotropy 1, or for nearest
+filtering, the existing isotropic LOD and single-tap path remain in use. SVGs have
+no special LOD bias.
+
 Scene publication indexes each VT resource directly to its canonical demand
 surfaces. Per-frame demand MUST NOT rescan unrelated surfaces once per resource.
 Each ordered view computes one retained frustum broad phase for all of those

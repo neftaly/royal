@@ -58,7 +58,7 @@ describe.each(formats)("native $format", ({ vk, format, block, bytes, linear, sr
     const parsed = parseKtx2Native(createKtx2Fixture(vk + (colorSpace === "srgb" ? 1 : 0), 16, 16));
     if (parsed.format === "etc2-rgba") throw new Error("Expected native format");
     const gl = fakeGl();
-    Object.assign(gl, { getExtension: vi.fn(() => ({ getSupportedProfiles: () => ["ldr"] })) });
+    Object.assign(gl, { getExtension: vi.fn(name => name === "EXT_texture_filter_anisotropic" ? null : { getSupportedProfiles: () => ["ldr"] }) });
     const budget = new PersistentGpuBudgetOwner(4096);
     const owner = new TextureGpuOwner(gl, budget);
     const valid: CanonicalTextureBinding = {
@@ -95,7 +95,7 @@ describe.each(formats)("native $format", ({ vk, format, block, bytes, linear, sr
     }, new AbortController().signal);
     expect(decoded.kind).toBe("ktx2-native");
     const gl = fakeGl();
-    Object.assign(gl, { getExtension: vi.fn(() => ({ getSupportedProfiles: () => ["ldr"] })) });
+    Object.assign(gl, { getExtension: vi.fn(name => name === "EXT_texture_filter_anisotropic" ? null : { getSupportedProfiles: () => ["ldr"] }) });
     const budget = new PersistentGpuBudgetOwner(4096);
     const owner = new TextureGpuOwner(gl, budget, undefined, false);
     const binding: CanonicalTextureBinding = {
@@ -109,7 +109,8 @@ describe.each(formats)("native $format", ({ vk, format, block, bytes, linear, sr
     expect(gl.generateMipmap).not.toHaveBeenCalled();
     expect(budget.snapshot().retainedBytes).toBe(inspectNativeKtx2(payload).storageBytes);
     for (let frame = 0; frame < 100; frame++) owner.reconcileComplete([binding]);
-    expect(gl.getExtension).toHaveBeenCalledOnce();
+    expect(vi.mocked(gl.getExtension).mock.calls.filter(([name]) => String(name) !== "EXT_texture_filter_anisotropic")).toHaveLength(1);
+    expect(vi.mocked(gl.getExtension).mock.calls.filter(([name]) => String(name) === "EXT_texture_filter_anisotropic")).toHaveLength(1);
     expect(gl.compressedTexImage2D).toHaveBeenCalledTimes(5);
     owner.dispose();
     expect(budget.snapshot().retainedBytes).toBe(0);
@@ -150,7 +151,8 @@ describe.each(formats)("native $format", ({ vk, format, block, bytes, linear, sr
       expect(result[0]!.texture).toBeNull();
       expect(result[1]!.texture).not.toBeNull();
     }
-    expect(gl.getExtension).toHaveBeenCalledOnce();
+    expect(vi.mocked(gl.getExtension).mock.calls.filter(([name]) => String(name) !== "EXT_texture_filter_anisotropic")).toHaveLength(1);
+    expect(vi.mocked(gl.getExtension).mock.calls.filter(([name]) => String(name) === "EXT_texture_filter_anisotropic")).toHaveLength(1);
     expect(gl.compressedTexImage2D).not.toHaveBeenCalled();
     expect(budget.snapshot().retainedBytes).toBe(64);
     owner.dispose();
@@ -214,7 +216,7 @@ describe("native format validation", () => {
 describe("native review regressions", () => {
   it("re-enables extensions after context invalidation", () => {
     const gl = fakeGl();
-    const extension = vi.fn(() => ({ getSupportedProfiles: () => ["ldr"] }));
+    const extension = vi.fn((name: string) => name === "EXT_texture_filter_anisotropic" ? null : { getSupportedProfiles: () => ["ldr"] });
     Object.assign(gl, { getExtension: extension });
     const owner = new TextureGpuOwner(gl);
     const decoded = parseKtx2Native(createKtx2Fixture(166, 16, 16));
@@ -225,7 +227,8 @@ describe("native review regressions", () => {
     expect(owner.retain(binding).texture).not.toBeNull();
     owner.invalidate();
     expect(owner.retain(binding).texture).not.toBeNull();
-    expect(extension).toHaveBeenCalledTimes(2);
+    expect(extension.mock.calls.filter(([name]) => String(name) !== "EXT_texture_filter_anisotropic")).toHaveLength(2);
+    expect(extension.mock.calls.filter(([name]) => String(name) === "EXT_texture_filter_anisotropic")).toHaveLength(2);
     expect(gl.compressedTexImage2D).toHaveBeenCalledTimes(2);
     owner.dispose();
   });

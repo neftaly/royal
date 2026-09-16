@@ -1,3 +1,4 @@
+import { TextureAnisotropy } from "../texture/anisotropy";
 import { IdleAstcEncoder } from "./astc/encoder";
 import { IdleAstcStorage } from "./astc/storage";
 import { COMPRESSED_SLOT_BASE } from "./residency";
@@ -432,6 +433,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   readonly #atlasMinimumSlots = new Map<string, number>();
   #atlasGrowthFailures = 0;
   #lastAtlasGrowthFailure: string | undefined;
+  readonly #anisotropy: TextureAnisotropy;
   readonly #budget: PersistentGpuBudgetOwner;
   readonly #svgRasterCache = new SvgRasterCache();
   readonly #automatic: AutomaticVirtualTextureRuntimeOptions;
@@ -460,7 +462,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     uploadBudget: FrameUploadBudgetOwner,
     etc2Available: boolean,
     scheduleDetail: AsyncPreparationScheduler,
+    anisotropy: TextureAnisotropy,
   ) {
+    this.#anisotropy = anisotropy;
     this.#gl = gl;
     this.#onChanged = onChanged;
     this.#budget = budget;
@@ -504,9 +508,11 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   }
 
   invalidate(): void {
+    this.#anisotropy.invalidate();
     this.#stopCompression(false);
     this.#maxTextureSize = undefined;
     for (const resource of this.#resources.values()) {
+      resource.demandRevision = -1;
       if (resource.gpu !== undefined) {
         resource.gpu.astc?.dispose(false);
         this.#budget.release(resource.gpu.budgetIdentity);
@@ -1257,6 +1263,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           views,
           resource.sampler,
           minimumMip,
+          this.#anisotropy.forSampler(resource.sampler),
         );
         if (!resource.workspace.overflow) break;
       }
@@ -1741,6 +1748,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         atlas,
         maxTextureSize,
       );
+      gpu.binding.settings1[3] = this.#anisotropy.forSampler(resource.sampler);
       atlas.referenceCount += 1;
       return gpu;
     } catch (error) {
@@ -2250,6 +2258,7 @@ export const createBrowserVirtualTextureRuntime = (
   uploadBudget = new FrameUploadBudgetOwner(),
   etc2Available = true,
   scheduleDetail: AsyncPreparationScheduler = schedule,
+  anisotropy = new TextureAnisotropy(gl),
 ): VirtualTextureRuntime => new BrowserVirtualTextureRuntime(
   gl,
   onChanged,
@@ -2259,4 +2268,5 @@ export const createBrowserVirtualTextureRuntime = (
   uploadBudget,
   etc2Available,
   scheduleDetail,
+  anisotropy,
 );

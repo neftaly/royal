@@ -69,6 +69,9 @@ jobs:
       - name: BLEND surface pixel regression
         run: node scripts/alpha-blend-mat-smoke.mjs
 
+      - name: Virtual texture anisotropy pixel regression
+        run: node scripts/virtual-texture-anisotropy-smoke.mjs
+
       - name: Build
         run: pnpm build
 

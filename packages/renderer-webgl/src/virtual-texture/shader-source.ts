@@ -14,7 +14,7 @@ float royalVirtualWrap(float coordinate, float mode) {
   return min(0.99999994, 1.0 - abs(mod(coordinate, 2.0) - 1.0));
 }
 
-vec4 royalVirtualMip(vec2 virtualTexel, int desiredMip) {
+vec4 royalVirtualMip(vec2 virtualTexel, int desiredMip, float filterLod) {
   float pageSize = virtualSettings0.z;
   float desiredScale = exp2(float(desiredMip));
   vec2 desiredPage = floor((virtualTexel / desiredScale) / pageSize);
@@ -40,23 +40,52 @@ vec4 royalVirtualMip(vec2 virtualTexel, int desiredMip) {
   vec2 atlasTexel = decoded.xy * storedPageSize
     + vec2(virtualSettings0.w)
     + localTexel;
-  if (entry.a < 0.75) return texture(virtualCompressedAtlas, atlasTexel / virtualCompressedSettings.xy);
-  return texture(baseColorTexture, atlasTexel / virtualSettings1.xy);
+  // Each directional tap resolves its own virtual page. Atlas derivatives
+  // cannot describe neighbouring virtual texels across unrelated atlas slots.
+  float atlasLod = filterLod - decoded.z;
+  if (entry.a < 0.75) return textureLod(virtualCompressedAtlas, atlasTexel / virtualCompressedSettings.xy, atlasLod);
+  return textureLod(baseColorTexture, atlasTexel / virtualSettings1.xy, atlasLod);
 }
 
 vec4 sampleVirtualBaseColor(vec2 authoredUv) {
-  vec2 uv = vec2(
-    royalVirtualWrap(authoredUv.x, virtualSettings2.y),
-    royalVirtualWrap(authoredUv.y, virtualSettings2.z)
-  );
   vec2 texelDx = dFdx(authoredUv) * virtualSettings0.xy;
   vec2 texelDy = dFdy(authoredUv) * virtualSettings0.xy;
   float footprintSquared = max(dot(texelDx, texelDx), dot(texelDy, texelDy));
-  float lod = clamp(0.5 * log2(max(footprintSquared, 1.0)), 0.0, virtualSettings2.x - 1.0);
+  vec2 majorAxis = vec2(0.0);
+  int taps = 1;
+  float anisotropy = virtualSettings1.w;
+  if (anisotropy > 1.0) {
+    // Eigenvalues of J * transpose(J) give the squared ellipse axes.
+    float a = texelDx.x * texelDx.x + texelDy.x * texelDy.x;
+    float b = texelDx.x * texelDx.y + texelDy.x * texelDy.y;
+    float c = texelDx.y * texelDx.y + texelDy.y * texelDy.y;
+    float majorSquared = 0.5 * (a + c + sqrt((a - c) * (a - c) + 4.0 * b * b));
+    float determinant = texelDx.x * texelDy.y - texelDy.x * texelDx.y;
+    float minorSquared = majorSquared > 0.0 ? determinant * determinant / majorSquared : 0.0;
+    footprintSquared = max(minorSquared, majorSquared / (anisotropy * anisotropy));
+    taps = int(clamp(ceil(sqrt(majorSquared / max(1.0, footprintSquared))), 1.0, 16.0));
+    if (taps > 1) {
+      vec2 axis0 = vec2(majorSquared - c, b);
+      vec2 axis1 = vec2(b, majorSquared - a);
+      vec2 axis = dot(axis0, axis0) > dot(axis1, axis1) ? axis0 : axis1;
+      // Equal axes need no directional integration (including roundoff).
+      if (dot(axis, axis) > 0.0) majorAxis = normalize(axis) * sqrt(majorSquared);
+      else taps = 1;
+    }
+  }
+  float filterLod = 0.5 * log2(max(footprintSquared, 1e-16));
+  float lod = clamp(filterLod, 0.0, virtualSettings2.x - 1.0);
   int mip = int(floor(lod));
-  vec2 texel = uv * virtualSettings0.xy;
-  vec4 lower = royalVirtualMip(texel, mip);
-  if (virtualSettings1.z < 0.5 || fract(lod) == 0.0) return lower;
-  return mix(lower, royalVirtualMip(texel, mip + 1), fract(lod));
+  float blend = virtualSettings1.z < 0.5 ? 0.0 : fract(lod);
+  vec4 result = vec4(0.0);
+  for (int index = 0; index < taps; index++) {
+    vec2 sampleUv = authoredUv + majorAxis / virtualSettings0.xy
+      * ((float(index) + 0.5) / float(taps) - 0.5);
+    vec2 uv = vec2(royalVirtualWrap(sampleUv.x, virtualSettings2.y), royalVirtualWrap(sampleUv.y, virtualSettings2.z));
+    vec2 texel = uv * virtualSettings0.xy;
+    vec4 lower = royalVirtualMip(texel, mip, filterLod);
+    result += blend == 0.0 ? lower : mix(lower, royalVirtualMip(texel, mip + 1, filterLod), blend);
+  }
+  return result / float(taps);
 }
 `;

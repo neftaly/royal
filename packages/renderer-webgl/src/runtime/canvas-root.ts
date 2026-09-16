@@ -1,3 +1,4 @@
+import { TextureAnisotropy } from "../texture/anisotropy";
 import { rendererBeginImageCapture, type RootImageCaptureHost } from "./image-capture-host";
 import {
   type GltfInstanceTransforms,
@@ -637,6 +638,7 @@ export class CanvasRoot implements RendererRoot {
     this.#restoreContext();
   };
   readonly #platform: CanvasRootPlatform;
+  readonly #anisotropy: TextureAnisotropy;
   readonly #persistentGpuBudget: PersistentGpuBudgetOwner;
   #presentationRequired = false;
   readonly #progressivePresentation: ProgressivePresentationOwner;
@@ -723,6 +725,7 @@ export class CanvasRoot implements RendererRoot {
       });
       this.#gl = createContext(canvas, resolvedOptions);
       creationContext = this.#gl;
+      this.#anisotropy = new TextureAnisotropy(this.#gl, resolvedOptions.anisotropy);
       this.#assertConstructionContext();
       this.#sizeLimits = readSizeLimits(this.#gl);
       this.#assertConstructionContext();
@@ -761,6 +764,7 @@ export class CanvasRoot implements RendererRoot {
         this.#persistentGpuBudget,
         this.#screenSpacePartitionPattern,
         {
+          anisotropy: this.#anisotropy,
           etc2Available: this.#etc2Available,
           onChanged: () => this.#invalidatePresentation(),
           onFailure: (error) => this.#captureScheduledFailure(error),
@@ -772,6 +776,7 @@ export class CanvasRoot implements RendererRoot {
         gl: this.#gl,
         budget: this.#persistentGpuBudget,
         partitionPattern: this.#screenSpacePartitionPattern,
+        anisotropy: this.#anisotropy,
         etc2Available: this.#etc2Available,
         getDecodedTexture: this.#getDecodedTexture,
         isTexturePending: this.#isTexturePending,
@@ -1767,6 +1772,7 @@ export class CanvasRoot implements RendererRoot {
         this.#frameUploadBudget,
         this.#etc2Available,
         this.#asyncPreparation.run,
+        this.#anisotropy,
       );
       this.#surfaceGpu.setVirtualTextureRuntime(runtime);
       this.#virtualTextureRuntime = runtime;
