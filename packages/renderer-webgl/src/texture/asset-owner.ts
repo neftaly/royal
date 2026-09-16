@@ -443,10 +443,9 @@ export class TextureAssetOwner {
     if (this.#disposed) return;
     for (const entry of this.#entries.values()) {
       entry.residentStorageKeys.clear();
-      if (entry.decoded !== undefined && !entry.decodedReleased) {
-        this.#platform.onAssetChanged(entry.key);
-      } else if (
-        entry.reservation?.phase !== "preparing"
+      if (
+        (entry.decoded === undefined || entry.decodedReleased)
+        && entry.reservation?.phase !== "preparing"
         && !entry.queued
         && entry.snapshot.status !== "error"
       ) {
@@ -454,6 +453,8 @@ export class TextureAssetOwner {
         entry.snapshot = { status: "loading" };
         this.#queuePreparation(entry);
       }
+      // Materials must discard closed pixel references while re-decode is pending.
+      this.#platform.onAssetChanged(entry.key);
       this.#platform.onSnapshotChanged(entry.key);
       this.#publish(entry.key);
     }

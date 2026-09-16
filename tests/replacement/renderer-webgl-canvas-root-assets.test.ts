@@ -524,6 +524,39 @@ describe("canvas root asset publication", () => {
     }
   });
 
+  it("waits for released texture pixels to decode before restoring their GPU copy", async () => {
+    const close = vi.fn();
+    const first = { width: 8, height: 8, source: {} as ImageBitmap, close };
+    const second = { width: 8, height: 8, source: {} as ImageBitmap };
+    let resume!: () => void;
+    const gate = new Promise<void>(resolve => { resume = resolve; });
+    const decodeTexture = vi.fn().mockResolvedValueOnce(first).mockImplementation(async () => {
+      await gate;
+      return second;
+    });
+    const texture = imageTexture("/released-restore.png");
+    const { canvas, root, flushScheduledFrames, scheduledFailures } = harness({ decodeTexture });
+    try {
+      root.setSize({ cssHeight: 200, cssWidth: 300, pixelRatio: 1 });
+      root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [
+        mesh({ geometry: planeGeometry(1), material: unlitMaterial({ texture }) }),
+      ] }));
+      await waitFor(() => { flushScheduledFrames(); expect(close).toHaveBeenCalledOnce(); });
+      canvas.gl.texSubImage2D.mockClear();
+      canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+      canvas.dispatchEvent(new Event("webglcontextrestored"));
+      flushScheduledFrames();
+      expect(canvas.gl.texSubImage2D).not.toHaveBeenCalled();
+      resume();
+      await waitFor(() => {
+        flushScheduledFrames();
+        expect(canvas.gl.texSubImage2D).toHaveBeenCalledOnce();
+      });
+      expect(canvas.gl.texSubImage2D.mock.calls[0]!.at(-1)).toBe(second.source);
+      expect(scheduledFailures).toHaveLength(0);
+    } finally { resume(); root.dispose(); }
+  });
+
   it("uses studio fallback until one offline environment becomes GPU-ready", async () => {
     const environment = prefilteredEnvironment({ src: "/environment.ktx", version: 2 });
     const source = environmentKtx1Fixture(2).source;

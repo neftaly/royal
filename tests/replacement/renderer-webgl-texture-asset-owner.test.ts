@@ -760,13 +760,14 @@ describe("ordinary texture asset lifecycle owner", () => {
 
   it("re-decodes released pixels when GPU residency is invalidated", async () => {
     const firstClose = vi.fn();
+    const changed = vi.fn();
     const second = decoded();
     const decode = vi.fn()
       .mockResolvedValueOnce(decoded(firstClose))
       .mockResolvedValueOnce(second);
     const owner = new TextureAssetOwner({
       decode,
-      onAssetChanged: vi.fn(),
+      onAssetChanged: changed,
       onListenerError: vi.fn(),
       onSnapshotChanged: vi.fn(),
     });
@@ -774,10 +775,13 @@ describe("ordinary texture asset lifecycle owner", () => {
     owner.reconcile([asset]);
     await waitFor(() => expect(owner.getSnapshot(asset).status).toBe("ready"));
     owner.releaseUploaded([textureStorageKey(asset)]);
+    changed.mockClear();
 
     owner.invalidateResidency();
 
     expect(owner.decoded(asset)).toBeUndefined();
+    // Canonical materials must drop their closed bitmap before any restore draw.
+    expect(changed).toHaveBeenCalledExactlyOnceWith(decodedTextureKey(asset));
     expect(owner.getSnapshot(asset)).toEqual({ status: "loading" });
     await waitFor(() => expect(owner.decoded(asset)).toBe(second));
     expect(decode).toHaveBeenCalledTimes(2);

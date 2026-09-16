@@ -4,7 +4,15 @@ Reviewed on 2026-09-16 against Royal 0.0.30 (`981b64b3`) for release 0.0.31.
 
 ## Review
 
-No blocking correctness defect remained after review. Checked the immutable
+Review found and fixed a pre-existing context-restoration defect: released
+ImageBitmap references remained in canonical materials while replacement decode
+was pending. Invalidating GPU residency now publishes every affected texture
+key so materials discard those references before the first restored draw. Both
+the asset-owner notification test and root upload-order regression fail before
+the fix and pass after it. The real-browser trace originally caught GL error
+1281 from `texSubImage2D`; deployment was paused until this was corrected.
+
+Checked the immutable
 root/React option, capability capping and unsupported-extension fallback,
 ordinary and overlay sampler ownership, lazy VT propagation, atlas migration,
 context restoration, nearest filtering, directional page demand, and retained
@@ -17,12 +25,13 @@ resolves its own page; explicit atlas LOD preserves mixed MIN/MAG selection.
 The review added a persistent real-WebGL regression to CI because shader-source
 assertions alone do not verify the new filtering. The renderer archive budget
 also needed an explicit 4,608-byte allowance for code, declarations and maps;
-measured archive size is 876,140 bytes, under the 876,416-byte ceiling.
+the anisotropy archive measured 876,140 bytes, and the final restoration fix
+also passes the 876,416-byte ceiling.
 
 The new browser regression checks directional stripe detail and every pixel
 across repeated page boundaries, plus mixed nearest/linear minification and
 magnification. The existing BLEND regression passes all 150 pixels. The full
-suite passes 1,572 tests across 157 files and the 65-case glTF manifest. Typecheck,
+suite passes 1,573 tests across 157 files and the 65-case glTF manifest. Typecheck,
 strict lint, build, package entrypoints, packed TypeScript 6/7 consumers/codecs,
 and bundle limits pass. Onboarding also recovers from a lost WebGL context with
 both ordinary and virtual anisotropy enabled, with no GL or page errors.
@@ -47,7 +56,8 @@ clock. Synchronized wall time adds a 1×1 `readPixels` to wait for queued GL wor
 This includes software GPU execution, command transport and readback overhead;
 it is neither GPU timer-query time nor ordinary animation FPS. Measurements
 use Chromium/ANGLE SwiftShader on this host, not physical Safari or Quest.
-No builds or other test suites ran during the recorded final pass.
+No builds or other test suites ran during the recorded final pass. These
+steady-rendering traces precede the final restoration-only notification fix.
 
 The per-frame samples, snapshots and renderer string are in `performance.json`.
 The before/after images show the same card at 1× and 16×:

@@ -13,6 +13,8 @@ versions identify source-level prerelease checkpoints in this repository.
   directional taps and matching CPU page demand. Resolve each tap through its
   own virtual page, preserve minification/magnification filters, and retain
   existing residency budgets. SVGs receive no special LOD bias.
+- Drop released bitmap references from materials during context restoration,
+  preventing uploads of closed pixels while replacement decode is pending.
 - Add root-option, capability, demand, atlas migration, and context-recovery
   coverage, plus a real-WebGL CI pixel regression for directional detail,
   repeating page seams, and mixed minification/magnification filters.
