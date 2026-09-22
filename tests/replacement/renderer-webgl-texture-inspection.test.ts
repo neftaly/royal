@@ -154,3 +154,116 @@ describe("root texture inspection", () => {
     expect(() => resolveRendererRootOptions({ textureInspection: { key: "v1", allow: false as never } })).toThrow("allow predicate");
   });
 });
+
+describe("bounded inspection throughput", () => {
+  it("admits two jobs, delays sampling the third, and preserves FIFO after queued cancellation", async () => {
+    const gates = [deferred<boolean>(), deferred<boolean>(), deferred<boolean>()];
+    const entered = [deferred<void>(), deferred<void>(), deferred<void>()];
+    let calls = 0;
+    const owner = new TextureInspectionOwner({ key: "v1", concurrency: 2, allow: () => {
+      const index = calls++;
+      entered[index]!.resolve();
+      return gates[index]!.promise;
+    } });
+    const first = owner.inspect("a", async () => sample(), signal());
+    const second = owner.inspect("b", async () => sample(), signal());
+    await Promise.all([entered[0]!.promise, entered[1]!.promise]);
+    const abort = new AbortController();
+    const canceledSample = vi.fn(async () => sample());
+    const canceled = owner.inspect("cancel", canceledSample, abort.signal);
+    const rejection = expect(canceled).rejects.toMatchObject({ name: "AbortError" });
+    const thirdSample = vi.fn(async () => sample());
+    const third = owner.inspect("c", thirdSample, signal());
+    await Promise.resolve();
+    expect(thirdSample).not.toHaveBeenCalled();
+    abort.abort();
+    await rejection;
+    expect(canceledSample).not.toHaveBeenCalled();
+    gates[0]!.resolve(true);
+    await entered[2]!.promise;
+    expect(thirdSample).toHaveBeenCalledOnce();
+    gates[1]!.resolve(true); gates[2]!.resolve(true);
+    await Promise.all([first, second, third]);
+    owner.dispose();
+  });
+
+  it("retains the active lane and borrowed image if a predicate ignores cancellation", async () => {
+    const gate = deferred<boolean>(), entered = deferred<void>();
+    const image = sample();
+    const allow = vi.fn(async () => { entered.resolve(); return gate.promise; });
+    const owner = new TextureInspectionOwner({ key: "v1", allow });
+    const abort = new AbortController();
+    const first = owner.inspect("a", async () => image, abort.signal);
+    const rejected = expect(first).rejects.toMatchObject({ name: "AbortError" });
+    await entered.promise;
+    abort.abort();
+    const produce = vi.fn(async () => sample());
+    const second = owner.inspect("b", produce, signal());
+    await Promise.resolve(); await Promise.resolve();
+    expect(produce).not.toHaveBeenCalled();
+    expect(image.width).toBe(256);
+    gate.resolve(true);
+    await rejected; await second;
+    expect(image.width).toBe(1);
+    owner.dispose();
+  });
+
+  it("drains a large burst without iterating pending maps and bounds the completed cache", async () => {
+    const allow = vi.fn(async () => true);
+    const owner = new TextureInspectionOwner({ key: "v1", concurrency: 2, allow });
+    const iterator = vi.spyOn(Map.prototype, Symbol.iterator);
+    try {
+      await Promise.all(Array.from({ length: 4096 }, (_, i) => owner.inspect(String(i), async () => sample(), signal())));
+      expect(iterator).not.toHaveBeenCalled();
+    } finally { iterator.mockRestore(); }
+    expect(allow).toHaveBeenCalledTimes(4096);
+    await owner.inspect("4095", async () => sample(), signal());
+    expect(allow).toHaveBeenCalledTimes(4096);
+    await owner.inspect("0", async () => sample(), signal());
+    expect(allow).toHaveBeenCalledTimes(4097);
+    owner.dispose();
+  });
+
+  it("does not sample a queued pixel representation after cancellation or disposal", async () => {
+    const gate = deferred<boolean>(), entered = deferred<void>();
+    const owner = new TextureInspectionOwner({ key: "v1", allow: async () => { entered.resolve(); return gate.promise; } });
+    const active = owner.inspect("a", async () => sample(), signal());
+    const activeRejected = expect(active).rejects.toMatchObject({ name: "AbortError" });
+    await entered.promise;
+    const produce = vi.fn(async () => sample());
+    const abort = new AbortController();
+    const canceled = owner.inspectPixels("b", produce, abort.signal);
+    const canceledRejected = expect(canceled).rejects.toMatchObject({ name: "AbortError" });
+    abort.abort(); await canceledRejected;
+    const disposed = owner.inspectPixels("c", produce, signal());
+    const disposedRejected = expect(disposed).rejects.toMatchObject({ name: "AbortError" });
+    owner.dispose(); await disposedRejected;
+    expect(produce).not.toHaveBeenCalled();
+    gate.resolve(true); await activeRejected;
+  });
+
+  it.each([0, -1, 1.5, 5, NaN, Infinity])("rejects invalid concurrency %s", concurrency => {
+    expect(() => resolveRendererRootOptions({ textureInspection: { key: "v1", allow: async () => true, concurrency } })).toThrow("concurrency");
+  });
+});
+
+it("closes queued decoded sources exactly once on cancellation and disposal", async () => {
+  const entered = deferred<void>(), verdict = deferred<boolean>();
+  const owner = new TextureInspectionOwner({ key: "v1", allow: async () => { entered.resolve(); return verdict.promise; } });
+  const active = owner.inspect("held", async () => sample(), signal());
+  const activeRejected = expect(active).rejects.toMatchObject({ name: "AbortError" });
+  await entered.promise;
+  const closeCanceled = vi.fn(), closeDisposed = vi.fn();
+  const abort = new AbortController();
+  const canceled = owner.accept({ kind: "asset", src: "/canceled" }, { source: {} as ImageBitmap, width: 4, height: 4, close: closeCanceled }, abort.signal);
+  const canceledRejected = expect(canceled).rejects.toMatchObject({ name: "AbortError" });
+  abort.abort(); await canceledRejected;
+  expect(closeCanceled).toHaveBeenCalledOnce();
+  const disposed = owner.accept({ kind: "asset", src: "/disposed" }, { source: {} as ImageBitmap, width: 4, height: 4, close: closeDisposed }, signal());
+  const disposedRejected = expect(disposed).rejects.toMatchObject({ name: "AbortError" });
+  owner.dispose(); await disposedRejected;
+  expect(closeDisposed).toHaveBeenCalledOnce();
+  verdict.resolve(true); await activeRejected;
+  expect(closeCanceled).toHaveBeenCalledOnce();
+  expect(closeDisposed).toHaveBeenCalledOnce();
+});

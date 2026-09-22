@@ -3,7 +3,12 @@ import type { DecodedTextureSource, TextureSourceRef } from "./source";
 /** Consumer policy for a borrowed, bounded image. Return true to permit display. */
 export type TexturePredicate = (image: HTMLCanvasElement, signal: AbortSignal) => Promise<boolean>;
 /** Immutable root policy. Change key when the model or thresholds change. */
-export type TextureInspection = Readonly<{ key: string; allow: TexturePredicate }>;
+export type TextureInspection = Readonly<{
+  key: string;
+  allow: TexturePredicate;
+  /** Maximum concurrent sampling/classification jobs per root, 1–4. Defaults to 1. */
+  concurrency?: number;
+}>;
 
 /** Shared cold inspection service, loaded only when a configured root needs pixels. */
 export interface TextureInspector {

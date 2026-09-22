@@ -1,0 +1,175 @@
+diff --git a/dist/workerpool.js b/dist/workerpool.js
+index 2bf2c201cf7e8bd4b98c923b2da3351fdc42a8ed..dae73811eaee6b0dda7dd92d74e3a2b939f3b2a1 100644
+--- a/dist/workerpool.js
++++ b/dist/workerpool.js
+@@ -927,12 +927,15 @@
+     // reject all running tasks on worker error
+     function onError(error) {
+       me.terminated = true;
+-      for (var id in me.processing) {
+-        if (me.processing[id] !== undefined) {
+-          me.processing[id].resolver.reject(error);
++      // Rejection runs pool callbacks synchronously. Clear busy state before those
++      // callbacks remove/terminate this worker and advance the queue.
++      var processing = me.processing;
++      me.processing = Object.create(null);
++      for (var id in processing) {
++        if (processing[id] !== undefined) {
++          processing[id].resolver.reject(error);
+         }
+       }
+-      me.processing = Object.create(null);
+     }
+ 
+     // send all queued requests to worker
+@@ -942,7 +945,7 @@
+       try {
+         for (_iterator.s(); !(_step = _iterator.n()).done;) {
+           var request = _step.value;
+-          me.worker.send(request.message, request.transfer);
++          me._sendRequest(request);
+         }
+       } catch (err) {
+         _iterator.e(err);
+@@ -956,6 +959,9 @@
+       var message = error && error.message ? error.message : String(error || 'Unknown worker error');
+       onError(new TerminateError$1('Workerpool Worker error: ' + message, error));
+     });
++    this.worker.on('messageerror', function () {
++      onError(new TerminateError$1('Workerpool Worker message deserialization failed'));
++    });
+     this.worker.on('exit', function (exitCode, signalCode) {
+       var message = 'Workerpool Worker terminated Unexpectedly\n';
+       message += '    exitCode: `' + exitCode + '`\n';
+@@ -984,6 +990,20 @@
+     return this.exec('methods');
+   };
+ 
++  // A structured-clone/transfer failure must settle the task and release its slot.
++  WorkerHandler.prototype._sendRequest = function (request) {
++    try {
++      this.worker.send(request.message, request.transfer);
++    } catch (error) {
++      var task = this.processing[request.message.id];
++      if (!task) {
++        throw error;
++      }
++      delete this.processing[request.message.id];
++      task.resolver.reject(error);
++    }
++  };
++
+   /**
+    * Execute a method with given parameters on the worker
+    * @param {String} method
+@@ -1020,7 +1040,7 @@
+       resolver.reject(new TerminateError$1('Worker is terminated'));
+     } else if (this.worker.ready) {
+       // send the request to the worker
+-      this.worker.send(request.message, request.transfer);
++      this._sendRequest(request);
+     } else {
+       this.requestQueue.push(request);
+     }
+@@ -1652,6 +1672,11 @@
+       var workers = this.workers;
+       for (var i = 0; i < workers.length; i++) {
+         var worker = workers[i];
++        // A prewarmed/idle worker can fail without an active task to remove it.
++        if (worker.terminated) {
++          this._removeWorker(worker);
++          return this._getWorker();
++        }
+         if (worker.busy() === false) {
+           return worker;
+         }
+diff --git a/src/Pool.js b/src/Pool.js
+index ab84273812b4393eed4d5c2e369c4898a20f68cb..4d3d7f947b20a4b079e11905b20a8fce8aad9000 100644
+--- a/src/Pool.js
++++ b/src/Pool.js
+@@ -270,6 +270,11 @@ Pool.prototype._getWorker = function () {
+   var workers = this.workers;
+   for (var i = 0; i < workers.length; i++) {
+     var worker = workers[i];
++    // A prewarmed/idle worker can fail without an active task to remove it.
++    if (worker.terminated) {
++      this._removeWorker(worker);
++      return this._getWorker();
++    }
+     if (worker.busy() === false) {
+       return worker;
+     }
+diff --git a/src/WorkerHandler.js b/src/WorkerHandler.js
+index b765a7516f303eb7131b69b09e72570c34ced589..d5d972a670176d21bf648b14e38ad1a1b4d70b03 100644
+--- a/src/WorkerHandler.js
++++ b/src/WorkerHandler.js
+@@ -329,21 +329,22 @@ function WorkerHandler(script, _options) {
+   // reject all running tasks on worker error
+   function onError(error) {
+     me.terminated = true;
+-
+-    for (var id in me.processing) {
+-      if (me.processing[id] !== undefined) {
+-        me.processing[id].resolver.reject(error);
++    // Rejection runs pool callbacks synchronously. Clear busy state before those
++    // callbacks remove/terminate this worker and advance the queue.
++    var processing = me.processing;
++    me.processing = Object.create(null);
++    for (var id in processing) {
++      if (processing[id] !== undefined) {
++        processing[id].resolver.reject(error);
+       }
+     }
+-
+-    me.processing = Object.create(null);
+   }
+ 
+   // send all queued requests to worker
+   function dispatchQueuedRequests()
+   {
+     for(const request of me.requestQueue.splice(0)) {
+-      me.worker.send(request.message, request.transfer);
++      me._sendRequest(request);
+     }
+   }
+ 
+@@ -353,6 +354,9 @@ function WorkerHandler(script, _options) {
+     const message = error && error.message ? error.message : String(error || 'Unknown worker error')
+     onError(new TerminateError('Workerpool Worker error: ' + message, error))
+   });
++  this.worker.on('messageerror', function () {
++    onError(new TerminateError('Workerpool Worker message deserialization failed'));
++  });
+   this.worker.on('exit', function (exitCode, signalCode) {
+     var message = 'Workerpool Worker terminated Unexpectedly\n';
+ 
+@@ -386,6 +390,20 @@ WorkerHandler.prototype.methods = function () {
+   return this.exec('methods');
+ };
+ 
++// A structured-clone/transfer failure must settle the task and release its slot.
++WorkerHandler.prototype._sendRequest = function (request) {
++  try {
++    this.worker.send(request.message, request.transfer);
++  } catch (error) {
++    var task = this.processing[request.message.id];
++    if (!task) {
++      throw error;
++    }
++    delete this.processing[request.message.id];
++    task.resolver.reject(error);
++  }
++};
++
+ /**
+  * Execute a method with given parameters on the worker
+  * @param {String} method
+@@ -423,7 +441,7 @@ WorkerHandler.prototype.exec = function(method, params, resolver, options) {
+     resolver.reject(new TerminateError('Worker is terminated'));
+   } else if (this.worker.ready) {
+     // send the request to the worker
+-    this.worker.send(request.message, request.transfer);
++    this._sendRequest(request);
+   } else {
+     this.requestQueue.push(request);
+   }

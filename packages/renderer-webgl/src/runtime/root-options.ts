@@ -63,8 +63,12 @@ export const resolveRendererRootOptions = (
     || typeof inspection.key !== "string" || inspection.key.length === 0 || typeof inspection.allow !== "function")) {
     throw new TypeError("Royal textureInspection requires a non-empty key and an allow predicate");
   }
+  if (inspection?.concurrency !== undefined && (!Number.isInteger(inspection.concurrency)
+    || inspection.concurrency < 1 || inspection.concurrency > 4)) {
+    throw new RangeError("Royal textureInspection concurrency must be an integer from 1 to 4");
+  }
   return {
-    ...(inspection === undefined ? {} : { textureInspection: { key: inspection.key, allow: inspection.allow } }),
+    ...(inspection === undefined ? {} : { textureInspection: { key: inspection.key, allow: inspection.allow, ...(inspection.concurrency === undefined ? {} : { concurrency: inspection.concurrency }) } }),
     alpha: options.alpha === true,
     anisotropy,
     antialias: options.antialias === true,

@@ -54,7 +54,8 @@
   "dependencies": {
     "@royal/renderer-core": "workspace:*",
     "meshoptimizer": "1.2.0",
-    "minidraco": "catalog:"
+    "minidraco": "catalog:",
+    "workerpool": "10.0.3"
   },
   "devDependencies": {
     "oxlint": "catalog:",

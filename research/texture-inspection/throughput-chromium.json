@@ -1,0 +1,54 @@
+{
+  "initializationMs": 1231.5,
+  "records": [
+    {
+      "concurrency": 1,
+      "batchMs": 930.5,
+      "aliasMs": 19.600000008940697,
+      "calls": 16,
+      "peak": 1,
+      "rejected": 0
+    },
+    {
+      "concurrency": 2,
+      "batchMs": 521.2000000029802,
+      "aliasMs": 19.700000002980232,
+      "calls": 16,
+      "peak": 2,
+      "rejected": 0
+    },
+    {
+      "concurrency": 2,
+      "batchMs": 528.3999999910593,
+      "aliasMs": 20.299999997019768,
+      "calls": 16,
+      "peak": 2,
+      "rejected": 0
+    },
+    {
+      "concurrency": 1,
+      "batchMs": 816.4000000059605,
+      "aliasMs": 19.099999994039536,
+      "calls": 16,
+      "peak": 1,
+      "rejected": 0
+    },
+    {
+      "concurrency": 1,
+      "batchMs": 851.2000000029802,
+      "aliasMs": 18.799999997019768,
+      "calls": 16,
+      "peak": 1,
+      "rejected": 0
+    },
+    {
+      "concurrency": 2,
+      "batchMs": 564.2000000029802,
+      "aliasMs": 19.600000008940697,
+      "calls": 16,
+      "peak": 2,
+      "rejected": 0
+    }
+  ],
+  "errors": []
+}

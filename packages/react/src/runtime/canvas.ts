@@ -146,7 +146,7 @@ export const createCanvasRootRecovery = (
 
 /** Private identity for exact immutable root-creation semantics. */
 const rendererRootOptionsKey = (options: ResolvedRendererRootOptions): string =>
-  `${options.alpha ? 1 : 0}${options.antialias ? 1 : 0}:${options.persistentGpuByteBudget}:${options.anisotropy}:${JSON.stringify(options.textureInspection?.key ?? null)}`;
+  `${options.alpha ? 1 : 0}${options.antialias ? 1 : 0}:${options.persistentGpuByteBudget}:${options.anisotropy}:${JSON.stringify(options.textureInspection?.key ?? null)}:${options.textureInspection?.concurrency ?? 1}`;
 
 /** A root belongs only to the exact canvas generation that created it. */
 const activeCanvasRuntime = (
@@ -299,12 +299,13 @@ export const Canvas = ({
   useLayoutEffect(() => { policyRef.current = policy; });
   const stablePolicy = useMemo(() => policy === undefined ? undefined : {
     key: policy.key,
+    concurrency: policy.concurrency ?? 1,
     allow: (image: HTMLCanvasElement, signal: AbortSignal) => {
       const current = policyRef.current;
-      if (current === undefined || current.key !== policy.key) return Promise.reject(new Error("Royal texture inspection policy changed"));
+      if (current === undefined || current.key !== policy.key || (current.concurrency ?? 1) !== (policy.concurrency ?? 1)) return Promise.reject(new Error("Royal texture inspection policy changed"));
       return current.allow(image, signal);
     },
-  }, [policy?.key]);
+  }, [policy?.key, policy?.concurrency]);
   const resolvedOptions = { ...configuredOptions, ...(stablePolicy === undefined ? {} : { textureInspection: stablePolicy }) };
   const optionsKey = rendererRootOptionsKey(resolvedOptions);
   const scenePickingIndex = useMemo(() => createScenePickingIndex(scene), [scene]);

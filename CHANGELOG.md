@@ -3,6 +3,12 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## Unreleased
+
+- Allow 1–4 concurrent texture-inspection jobs per root (default 1), with admission before sampling and cancellation-safe borrowed images. Keep completed decisions separately from pending work and reuse identical sample decisions across asset IDs.
+- Accelerate HDR inspection with exact packed-value lookup tables and direct small-mip conversion, preserving every inspected pixel.
+- Move large image GPU sampling and area reduction to a lazy inspection-only workerpool worker, with request deadlines, cancellation and recovery. Preserve exact reduction pixels and fix standalone compressed mip sampling on WebKit.
+
 ## 0.0.33 - 2026-09-22
 
 - Replace duplicate full-resolution ordinary GPU storage with small fallbacks once automatic VT is available, preserving shared material maps and source pixels for restoration.

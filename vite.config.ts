@@ -7,6 +7,7 @@ import glsl from 'vite-plugin-glsl';
 import type { Plugin } from 'vite';
 
 type PackageConfig = {
+  readonly bundled?: readonly string[];
   readonly external?: readonly string[];
   readonly lib: {
     readonly entry: string | Record<string, string>;
@@ -34,6 +35,7 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     }
   },
   '@royal/renderer-webgl': {
+    bundled: ['workerpool'],
     external: ['@royal/renderer-core', '@royal/renderer-core/render-object'],
     lib: {
       entry: {
@@ -101,7 +103,9 @@ const assertPublishedSourceMapReferences = (directory: string): void => {
     }
     if (!entry.name.endsWith('.js')) continue;
     const source = readFileSync(entryPath, 'utf8');
-    for (const match of source.matchAll(/\/\/# sourceMappingURL=([^\r\n]+)/gu)) {
+    // Inspect the emitted footer, not sourcemap text inside workerpool's embedded
+    // default-worker string (which this package never executes).
+    for (const match of source.matchAll(/(?:^|\r?\n)\/\/# sourceMappingURL=([^\r\n]+)\s*$/gu)) {
       const reference = match[1];
       if (reference === undefined || reference.startsWith('data:')) continue;
       const target = path.resolve(path.dirname(entryPath), reference);
@@ -168,7 +172,7 @@ const packageExternalPredicate = (
   config: PackageConfig
 ): ((id: string) => boolean) => {
   const externalPackageNames = new Set([
-    ...packageDependencyNames(packageManifest),
+    ...packageDependencyNames(packageManifest).filter(name => !config.bundled?.includes(name)),
     ...(config.external ?? [])
   ]);
   const externalPackagePrefixes = Array.from(externalPackageNames).map((packageName) => packageName + '/');
