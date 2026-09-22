@@ -47,6 +47,7 @@
     "vite": "catalog:",
     "vite-plugin-glsl": "catalog:",
     "vitest": "catalog:",
-    "workerpool": "10.0.3"
+    "workerpool": "10.0.3",
+    "ws": "8.21.3"
   }
 }

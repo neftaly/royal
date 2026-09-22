@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-import { randomBytes } from 'node:crypto';
+import { websocketConnect } from './webkit-socket.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import http from 'node:http';
-import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isExpectedIpadDevTransportDiagnostic } from './ipad-benchmark-report-check.mjs';
@@ -87,152 +86,6 @@ const jsonGet = (url) =>
     });
     request.on('error', reject);
   });
-
-const websocketConnect = (wsUrl) => {
-  const url = new URL(wsUrl);
-  const key = randomBytes(16).toString('base64');
-  const socket = net.createConnection({ host: url.hostname, port: Number(url.port || 80) });
-  let buffer = Buffer.alloc(0);
-  const waiters = [];
-  const events = [];
-  const listeners = new Set();
-  let opened = false;
-
-  const sendFrame = (text) => {
-    const payload = Buffer.from(text);
-    const header = [];
-    header.push(0x81);
-    if (payload.length < 126) {
-      header.push(0x80 | payload.length);
-    } else if (payload.length < 65536) {
-      header.push(0x80 | 126, payload.length >> 8, payload.length & 0xff);
-    } else {
-      throw new Error('WebSocket payload too large');
-    }
-
-    const mask = randomBytes(4);
-    const masked = Buffer.alloc(payload.length);
-    for (let index = 0; index < payload.length; index += 1) {
-      masked[index] = payload[index] ^ mask[index % 4];
-    }
-    socket.write(Buffer.concat([Buffer.from(header), mask, masked]));
-  };
-
-  const resolveWaiters = (message) => {
-    for (const listener of listeners) listener(message);
-    for (let index = 0; index < waiters.length; index += 1) {
-      const waiter = waiters[index];
-      if (!waiter.match(message)) continue;
-      waiters.splice(index, 1);
-      clearTimeout(waiter.timeout);
-      waiter.resolve(message);
-      return;
-    }
-    events.push(message);
-  };
-
-  const handleText = (text) => {
-    resolveWaiters(JSON.parse(text));
-  };
-
-  const parseFrames = () => {
-    while (buffer.length >= 2) {
-      const first = buffer[0];
-      const second = buffer[1];
-      const opcode = first & 0x0f;
-      let offset = 2;
-      let length = second & 0x7f;
-      if (length === 126) {
-        if (buffer.length < offset + 2) return;
-        length = buffer.readUInt16BE(offset);
-        offset += 2;
-      } else if (length === 127) {
-        if (buffer.length < offset + 8) return;
-        const high = buffer.readUInt32BE(offset);
-        const low = buffer.readUInt32BE(offset + 4);
-        if (high !== 0) throw new Error('WebSocket frame too large');
-        length = low;
-        offset += 8;
-      }
-      const masked = (second & 0x80) !== 0;
-      const mask = masked ? buffer.subarray(offset, offset + 4) : undefined;
-      if (masked) offset += 4;
-      if (buffer.length < offset + length) return;
-
-      let payload = buffer.subarray(offset, offset + length);
-      buffer = buffer.subarray(offset + length);
-      if (mask !== undefined) {
-        const unmasked = Buffer.alloc(payload.length);
-        for (let index = 0; index < payload.length; index += 1) {
-          unmasked[index] = payload[index] ^ mask[index % 4];
-        }
-        payload = unmasked;
-      }
-      if (opcode === 0x1) handleText(payload.toString('utf8'));
-      if (opcode === 0x8) socket.end();
-    }
-  };
-
-  const openedPromise = new Promise((resolve, reject) => {
-    socket.on('connect', () => {
-      const requestPath = `${url.pathname}${url.search}`;
-      socket.write([
-        `GET ${requestPath} HTTP/1.1`,
-        `Host: ${url.host}`,
-        'Upgrade: websocket',
-        'Connection: Upgrade',
-        `Sec-WebSocket-Key: ${key}`,
-        'Sec-WebSocket-Version: 13',
-        '',
-        '',
-      ].join('\r\n'));
-    });
-    socket.on('error', reject);
-    socket.on('data', (chunk) => {
-      buffer = Buffer.concat([buffer, chunk]);
-      if (!opened) {
-        const headerEnd = buffer.indexOf('\r\n\r\n');
-        if (headerEnd < 0) return;
-        const header = buffer.subarray(0, headerEnd).toString('utf8');
-        if (!header.startsWith('HTTP/1.1 101')) {
-          reject(new Error(header));
-          return;
-        }
-        buffer = buffer.subarray(headerEnd + 4);
-        opened = true;
-        resolve();
-      }
-      parseFrames();
-    });
-  });
-
-  const waitFor = (match, waitMs = timeoutMs) => {
-    const existingIndex = events.findIndex(match);
-    if (existingIndex >= 0) {
-      const [event] = events.splice(existingIndex, 1);
-      return Promise.resolve(event);
-    }
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        const index = waiters.findIndex((waiter) => waiter.resolve === resolve);
-        if (index >= 0) waiters.splice(index, 1);
-        reject(new Error(`Timed out waiting for WebKit response after ${waitMs}ms`));
-      }, waitMs);
-      waiters.push({ match, resolve, timeout });
-    });
-  };
-
-  return {
-    close: () => socket.destroy(),
-    onMessage: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    opened: openedPromise,
-    send: (message) => sendFrame(JSON.stringify(message)),
-    waitFor,
-  };
-};
 
 const captureWebKitDiagnostics = (client, targetId, { maxEntries = 500 } = {}) => {
   const entries = [];
@@ -739,7 +592,7 @@ const preserveCurrentPage = async (client, targetId, diagnostics) => {
 const run = async () => {
   const expectedSource = await expectedBenchmarkSource();
   const page = await findPage();
-  const client = websocketConnect(page.webSocketDebuggerUrl);
+  const client = websocketConnect(page.webSocketDebuggerUrl, { timeoutMs });
   await client.opened;
   const targetEvent = await client.waitFor((event) => event.method === 'Target.targetCreated');
   const targetId = targetEvent.params?.targetInfo?.targetId;

@@ -364,3 +364,8 @@ describe('browser harness', () => {
     expect(session.calls.filter(({ method }) => method === 'Tracing.end')).toHaveLength(1);
   });
 });
+
+it('strips OSC hyperlinks and CSI color codes from readiness output', () => {
+  expect(stripTerminalControlSequences('\u001b]8;;http://localhost:5173\u0007Local\u001b]8;;\u0007 \u001b[32mready\u001b[0m'))
+    .toBe('Local ready');
+});

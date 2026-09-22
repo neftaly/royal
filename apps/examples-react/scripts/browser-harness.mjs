@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from 'node:util';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createRequire } from 'node:module';
@@ -525,10 +526,8 @@ export const spawnLogged = (command, args, options = {}) => {
   return child;
 };
 
-const ansiControlSequence = /\u001b\[[0-?]*[ -/]*[@-~]/gu;
-
 export const stripTerminalControlSequences = (value) =>
-  String(value).replace(ansiControlSequence, '');
+  stripVTControlCharacters(String(value));
 
 export const startVitePreview = ({ appRoot, host, port }) => {
   let readyOutput = '';

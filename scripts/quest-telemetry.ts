@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs } from "node:util";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -312,33 +313,21 @@ const usage = (): string => [
 
 export const parseRecordArgs = (argv: readonly string[], environment: NodeJS.ProcessEnv = process.env): RecordOptions => {
   if (argv[0] !== "record") throw new Error(usage());
-  let adbPath = environment.ADB?.trim() || "adb";
-  let logLimit = defaultLogLimit;
-  let outputPath: string | undefined;
-  let serial = environment.ANDROID_SERIAL?.trim() || undefined;
-  let index = 1;
-
-  for (; index < argv.length; index += 1) {
-    const argument = argv[index];
-    if (argument === "--") {
-      index += 1;
-      break;
-    }
-    const value = argv[index + 1];
-    if (argument === "--adb" && value !== undefined) adbPath = value;
-    else if (argument === "--log-limit" && value !== undefined) {
-      const parsed = Number(value);
-      if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 1_000) {
-        throw new Error("--log-limit must be an integer from 0 through 1000");
-      }
-      logLimit = parsed;
-    } else if (argument === "--output" && value !== undefined) outputPath = value;
-    else if (argument === "--serial" && value !== undefined) serial = value;
-    else throw new Error(`Unknown or incomplete option ${JSON.stringify(argument)}\n\n${usage()}`);
-    index += 1;
+  const separator = argv.indexOf("--", 1);
+  const { values } = parseArgs({
+    args: argv.slice(1, separator < 0 ? undefined : separator),
+    options: { adb: { type: "string" }, "log-limit": { type: "string" }, output: { type: "string" }, serial: { type: "string" } },
+    strict: true,
+    allowPositionals: false,
+  });
+  const adbPath = values.adb ?? (environment.ADB?.trim() || "adb");
+  const serial = values.serial ?? (environment.ANDROID_SERIAL?.trim() || undefined);
+  const outputPath = values.output;
+  const logLimit = values["log-limit"] === undefined ? defaultLogLimit : Number(values["log-limit"]);
+  if (!Number.isSafeInteger(logLimit) || logLimit < 0 || logLimit > 1_000) {
+    throw new Error("--log-limit must be an integer from 0 through 1000");
   }
-
-  const command = argv.slice(index);
+  const command = separator < 0 ? [] : argv.slice(separator + 1);
   if (outputPath === undefined || outputPath.trim() === "") throw new Error(`--output is required\n\n${usage()}`);
   if (command.length === 0) throw new Error(`A command is required after --\n\n${usage()}`);
   const basePath = environment.INIT_CWD?.trim() || process.cwd();

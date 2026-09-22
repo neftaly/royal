@@ -157,3 +157,14 @@ describe("Quest telemetry command contract", () => {
     });
   });
 });
+
+it("parses equals options while preserving child command flags", () => {
+  const parsed = parseRecordArgs(["record", "--output=report.json", "--serial=device", "--log-limit=0", "--", "node", "--output=child.json"], {});
+  expect(parsed.serial).toBe("device");
+  expect(parsed.logLimit).toBe(0);
+  expect(parsed.command).toEqual(["node", "--output=child.json"]);
+});
+
+it("rejects missing option values before running a child command", () => {
+  expect(() => parseRecordArgs(["record", "--serial", "--output=report.json", "--", "node"], {})).toThrow();
+});
