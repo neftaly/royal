@@ -126,6 +126,7 @@ import {
   createTexturePublicationWorkspace,
   MATERIAL_TEXTURE_UNITS,
   materialTextureBindingAt,
+  collectVirtualFallbackStorageKeys,
   presentableBaseColorInto,
   presentableOrdinaryTextureMask,
   residentOrdinaryTextureMask,
@@ -279,6 +280,7 @@ const surfaceDrawPacket = (
 export type SurfacePresentationLane = "overlay" | "world";
 
 export type SurfaceGpuOwnerOptions = Readonly<{
+  onTextureFallbackChanged?: (key: string, compact: boolean) => void;
   anisotropy?: TextureAnisotropy;
   etc2Available?: boolean;
   onChanged?: () => void;
@@ -390,6 +392,7 @@ export class SurfaceGpuOwner {
     partitionPattern: ScreenSpacePartitionPatternOwner,
     {
       anisotropy,
+      onTextureFallbackChanged,
       etc2Available = true,
       onChanged = () => undefined,
       onFailure = () => undefined,
@@ -418,7 +421,7 @@ export class SurfaceGpuOwner {
     this.#partitionPattern = partitionPattern;
     this.#presentationLane = presentationLane;
     this.#resourceBudget = budget;
-    this.#textureGpu = new TextureGpuOwner(gl, budget, uploadBudget, etc2Available, anisotropy);
+    this.#textureGpu = new TextureGpuOwner(gl, budget, uploadBudget, etc2Available, anisotropy, onTextureFallbackChanged);
     this.#uploadBudget = uploadBudget;
   }
 
@@ -1199,6 +1202,12 @@ export class SurfaceGpuOwner {
 
   #reconcilePendingResources(state: WebGlStateOwner): void {
     if (!this.#dirty) return;
+    if (this.#dirty && this.#fullReconcileRequired) {
+      this.#textureGpu.setFallbackStorageKeys(collectVirtualFallbackStorageKeys(
+        (this.#scene?.surfaces ?? []).map(surface => surface.material),
+        asset => this.#virtualTexture?.automaticBinding(asset) !== undefined,
+      ));
+    }
     if (
       this.#screenSpacePartitionRequested
       && this.#partitionPattern.ensure()

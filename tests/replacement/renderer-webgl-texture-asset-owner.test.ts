@@ -140,6 +140,43 @@ describe("ordinary texture asset lifecycle owner", () => {
     } finally { lease?.release(); owner.dispose(); }
   });
 
+  it("keeps approved source pixels alive after VT releases a compact GPU fallback", async () => {
+    const source = decoded();
+    const asset = imageTexture("/compact.png");
+    const owner = new TextureAssetOwner({ decode: async () => source,
+      onAssetChanged: vi.fn(), onSnapshotChanged: vi.fn(), onListenerError: vi.fn() });
+    try {
+      owner.reconcile([asset]);
+      await waitFor(() => expect(owner.decoded(asset)).toBe(source));
+      const lease = owner.acquireDecoded(asset)!;
+      owner.setStorageFallback(textureStorageKey(asset), true);
+      owner.releaseUploaded([textureStorageKey(asset)]);
+      lease.release();
+      expect(source.close).not.toHaveBeenCalled();
+      expect(owner.snapshot().sourceReservations).toBe(0);
+      owner.setStorageFallback(textureStorageKey(asset), false);
+      expect(source.close).toHaveBeenCalledOnce();
+    } finally { owner.dispose(); }
+  });
+
+  it("drops compact source retention when an invalidated color-space claim is removed", async () => {
+    const source = decoded();
+    const asset = imageTexture("/compact-alias.png");
+    const alias = imageTexture({ src: "/compact-alias.png", colorSpace: "linear" });
+    const owner = new TextureAssetOwner({ decode: async () => source,
+      onAssetChanged: vi.fn(), onSnapshotChanged: vi.fn(), onListenerError: vi.fn() });
+    try {
+      owner.reconcile([asset, alias]);
+      await waitFor(() => expect(owner.decoded(asset)).toBe(source));
+      owner.setStorageFallback(textureStorageKey(asset), true);
+      owner.releaseUploaded([textureStorageKey(asset), textureStorageKey(alias)]);
+      owner.invalidateStorageResidency([textureStorageKey(asset)]);
+      owner.reconcile([alias]);
+      owner.releaseUploaded([textureStorageKey(alias)]);
+      expect(source.close).toHaveBeenCalledOnce();
+    } finally { owner.dispose(); }
+  });
+
   it("restores discarded native mip levels by decoding the source again once", async () => {
     const make = (size: number): DecodedTextureSource => ({ kind: "ktx2-etc2", colorSpace: "srgb", width: size, height: size,
       sourceWidth: 64, sourceHeight: 64, close: vi.fn(), levels: [{ width: size, height: size, blocks: new Uint8Array(size * size) }] });

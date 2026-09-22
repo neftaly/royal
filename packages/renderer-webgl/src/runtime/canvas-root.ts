@@ -739,6 +739,7 @@ export class CanvasRoot implements RendererRoot {
         this.#screenSpacePartitionPattern,
         {
           anisotropy: this.#anisotropy,
+          onTextureFallbackChanged: (key, compact) => this.#textureAssets.setStorageFallback(key, compact),
           etc2Available: this.#etc2Available,
           onChanged: () => this.#invalidatePresentation(),
           onFailure: (error) => this.#captureScheduledFailure(error),

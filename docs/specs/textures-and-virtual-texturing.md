@@ -74,13 +74,19 @@ Decoded raster sources MAY be retained for context restoration or an active
 automatic-VT representation only within CPU budget. Eviction MUST leave a reconstruction recipe or legal refetch path.
 
 Ordinary texture allocation redistributes unused shares from decoded small
-sources to larger sources. Every claimed color/sampler storage representation
+sources to larger sources. Every claimed color-space storage representation
 counts toward the allocation; unknown sources retain a fair share until decoded.
 Finite per-representation allocations are capped at a 64 MiB mip-chain budget,
 keeping raster base pixels within the existing VT CPU-source and inspection
 limits. A fitted source can be decoded again when returned budget restores detail;
 its replacement passes the same inspection gate before publication. Automatic
 pages derive from that retained raster, never from a new vector rendering.
+Once an automatic VT root is resident, ordinary raster storage used exclusively
+by virtual base-color maps is reduced to a 512-pixel-long-edge fallback. Shared
+non-VT material-map uses retain full storage. Approved source pixels stay alive
+until paging and full-storage restoration no longer need them. VT therefore
+saves steady-state GPU storage; the decoded source and transient initial full
+upload still have memory costs.
 
 When the persistent budget requires a smaller ordinary PNG/JPEG/WebP/AVIF,
 Royal reads a bounded encoded-header prefix through a pure, non-authoritative

@@ -479,3 +479,38 @@ describe("ordinary texture GPU owner", () => {
     expect(gl.pixelStorei).toHaveBeenCalledTimes(6);
   });
 });
+
+describe("VT ordinary fallbacks", () => {
+  it("compacts GPU storage once and restores it when ordinary sampling needs detail", () => {
+    const gl = fakeGl();
+    const changed = vi.fn();
+    const drawImage = vi.fn();
+    vi.stubGlobal("document", { createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage }) }) });
+    const uploads = new FrameUploadBudgetOwner();
+    const owner = new TextureGpuOwner(gl, undefined, uploads, undefined, undefined, changed);
+    const input = { ...binding("linear", "linear-mipmap-linear"), decoded: { width: 4096, height: 2048, source: {} as ImageBitmap } };
+    try {
+      owner.reconcileComplete([input]);
+      const full = owner.snapshot().residentBytes;
+      owner.setFallbackStorageKeys(new Set([input.storageKey]));
+      uploads.beginFrame();
+      owner.beginFrame();
+      owner.reconcileComplete([input]);
+      expect(owner.snapshot().residentBytes).toBe(ordinaryTextureStorageBytes(512, 256, true));
+      expect(owner.snapshot().residentBytes).toBeLessThan(full / 60);
+      expect(changed).toHaveBeenLastCalledWith(input.storageKey, true);
+      owner.reconcileComplete([input]);
+      expect(drawImage).toHaveBeenCalledTimes(1);
+      uploads.beginFrame();
+      owner.reconcileComplete([{ ...input, decoded: { ...input.decoded, width: 8192, height: 4096 } }]);
+      expect(drawImage).toHaveBeenCalledTimes(2);
+      expect(owner.snapshot().residentBytes).toBe(ordinaryTextureStorageBytes(512, 256, true));
+      owner.setFallbackStorageKeys(new Set());
+      uploads.beginFrame();
+      owner.beginFrame();
+      owner.reconcileComplete([input]);
+      expect(owner.snapshot().residentBytes).toBe(full);
+      expect(changed).toHaveBeenLastCalledWith(input.storageKey, false);
+    } finally { owner.dispose(); vi.unstubAllGlobals(); }
+  });
+});

@@ -3,7 +3,9 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
-## Unreleased
+## 0.0.33 - 2026-09-22
+
+- Replace duplicate full-resolution ordinary GPU storage with small fallbacks once automatic VT is available, preserving shared material maps and source pixels for restoration.
 
 - Redistribute unused texture allocations to larger images and restore fitted raster detail for automatic paging within the existing source-memory limits.
 

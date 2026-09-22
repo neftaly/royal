@@ -1,10 +1,14 @@
 import * as pageSources from "../../packages/renderer-webgl/src/virtual-texture/automatic-page-source";
 import { createGeneratedVirtualTextureLayout } from "../../packages/renderer-webgl/src/virtual-texture/layout";
-import { afterEach, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { directionalLight, mesh, perspectiveCamera, planeGeometry, scene, standardMaterial, unlitMaterial, imageTexture } from "@royal/renderer-core";
 import { canvasRootHarness, fakeGl } from "./support/canvas-root-harness";
 import * as demand from "../../packages/renderer-webgl/src/virtual-texture/demand";
 import { waitFor } from "./support/wait-for";
+
+beforeEach(() => {
+  vi.stubGlobal("document", { createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage: vi.fn() }) }) });
+});
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const decoded = { width: 1024, height: 1024, source: {} as ImageBitmap };
@@ -41,6 +45,7 @@ it.each([
       const settings = vi.mocked(canvas.gl.uniform4fv).mock.calls.filter(([location]) =>
         (location as { name?: string }).name === "virtualSettings1").at(-1)?.[1];
       expect(settings === undefined ? undefined : Array.from(settings)[3]).toBe(maximum);
+      expect(root.getSnapshot().resources.imageTextures.residentBytes).toBeLessThan(2 * 1024 * 1024);
     });
     await check(expected);
     root.setSize({ cssWidth: 1024, cssHeight: 1024, pixelRatio: 1 });

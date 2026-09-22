@@ -114,6 +114,7 @@ type AssetEntry = {
   alpha: DecodedTextureAlpha | undefined;
   asset: TextureSourceRef;
   readonly claimedStorageKeys: Set<string>;
+  readonly fallbackStorageKeys: Set<string>;
   controller: AbortController | undefined;
   reservation: TextureReservation;
   preparationDeferred: boolean;
@@ -335,6 +336,9 @@ export class TextureAssetOwner {
       for (const storageKey of entry.residentStorageKeys) {
         if (!claim.storageKeys.has(storageKey)) entry.residentStorageKeys.delete(storageKey);
       }
+      for (const storageKey of entry.fallbackStorageKeys) {
+        if (!claim.storageKeys.has(storageKey)) entry.fallbackStorageKeys.delete(storageKey);
+      }
       this.#refreshStorageFit(entry);
       const retainAlpha = retainedAlphaKeys.has(key);
       if (entry.retainAlpha !== retainAlpha) {
@@ -371,6 +375,15 @@ export class TextureAssetOwner {
       this.#releaseSourceReservation(entry);
       this.#publish(key);
     }
+  }
+
+  /** Compact GPU fallbacks still need the approved source for full-storage restoration. */
+  setStorageFallback(storageKey: string, compact: boolean): void {
+    const entry = this.#storageEntries.get(storageKey);
+    if (entry === undefined || this.#disposed) return;
+    if (compact) entry.fallbackStorageKeys.add(storageKey);
+    else entry.fallbackStorageKeys.delete(storageKey);
+    this.#releaseDecodedIfUnused(entry);
   }
 
   /** Releases browser decode storage after the claimed WebGL copies are resident. */
@@ -486,6 +499,7 @@ export class TextureAssetOwner {
       decodedReleased: false,
       preparationRetainsAlpha: false,
       preparationAlphaOnly: false,
+      fallbackStorageKeys: new Set(),
       preparationQueuedAt: startedAt,
       preparationStartedAt: 0,
       key,
@@ -616,6 +630,10 @@ export class TextureAssetOwner {
       || entry.decoded === undefined
       || storageIncomplete(entry.claimedStorageKeys, entry.residentStorageKeys)
     ) return;
+    if (entry.fallbackStorageKeys.size > 0) {
+      this.#releaseSourceReservation(entry);
+      return;
+    }
     entry.decoded.close?.();
     entry.decodedReleased = true;
     this.#releaseSourceReservation(entry);
@@ -731,9 +749,7 @@ export class TextureAssetOwner {
       this.#platform.onSnapshotChanged(key);
       this.#publish(key);
       if (!storageIncomplete(entry.claimedStorageKeys, entry.residentStorageKeys)) {
-        decodedSource.close?.();
-        entry.decodedReleased = true;
-        this.#releaseSourceReservation(entry);
+        this.#releaseDecodedIfUnused(entry);
       } else this.#drainPreparationQueue();
       this.#redistributeStorage();
     }).catch((error: unknown) => {

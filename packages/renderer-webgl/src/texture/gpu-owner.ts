@@ -19,11 +19,14 @@ type GpuTexture = {
   readonly budgetIdentity: object;
   byteLength: number;
   readonly compressed: boolean;
+  readonly compact: boolean;
   readonly fitted: boolean;
   readonly height: number;
   mipmapped: boolean;
   readonly texture: WebGLTexture;
   readonly width: number;
+  readonly decodedWidth: number;
+  readonly decodedHeight: number;
 };
 type GpuSampler = Readonly<{ sampler: WebGLSampler }>;
 
@@ -81,6 +84,8 @@ export class TextureGpuOwner {
   readonly #uploadedStorageKeys = new Set<string>();
   readonly #uploadBudget: FrameUploadBudgetOwner;
   #unpackStateKnown = false;
+  #fallbackStorageKeys: ReadonlySet<string> = new Set();
+  readonly #onFallbackChanged: (key: string, compact: boolean) => void;
 
   constructor(
     gl: WebGL2RenderingContext,
@@ -88,12 +93,25 @@ export class TextureGpuOwner {
     uploadBudget = new FrameUploadBudgetOwner(),
     etc2Available = true,
     anisotropy = new TextureAnisotropy(gl),
+    onFallbackChanged: (key: string, compact: boolean) => void = () => undefined,
   ) {
+    this.#onFallbackChanged = onFallbackChanged;
     this.#anisotropy = anisotropy;
     this.#gl = gl;
     this.#budget = budget;
     this.#uploadBudget = uploadBudget;
     this.#etc2Available = etc2Available;
+  }
+
+  setFallbackStorageKeys(keys: ReadonlySet<string>): void {
+    this.#fallbackStorageKeys = keys;
+  }
+
+  #storageSize(binding: CanonicalTextureBinding): { width: number; height: number } {
+    const { width, height } = binding.decoded;
+    const scale = binding.decoded.kind === undefined && this.#fallbackStorageKeys.has(binding.storageKey)
+      ? Math.min(1, 512 / Math.max(width, height)) : 1;
+    return { width: Math.max(1, Math.floor(width * scale)), height: Math.max(1, Math.floor(height * scale)) };
   }
 
   dispose(): void {
@@ -227,6 +245,7 @@ export class TextureGpuOwner {
     for (const [key, resource] of createdTextures) {
       this.#textures.set(key, resource);
       this.#uploadedStorageKeys.add(key);
+      this.#onFallbackChanged(key, resource.compact);
     }
     return result;
   }
@@ -246,6 +265,7 @@ export class TextureGpuOwner {
       this.#gl.deleteTexture(resource.texture);
       this.#budget.release(resource.budgetIdentity);
       this.#textures.delete(key);
+      this.#onFallbackChanged(key, false);
       this.#releasedStorageKeys.add(key);
       this.#uploadedStorageKeys.delete(key);
       this.#deniedStorageKeys.delete(key);
@@ -263,7 +283,9 @@ export class TextureGpuOwner {
 
   #textureForBinding(binding: CanonicalTextureBinding): GpuTexture | undefined {
     const previous = this.#textures.get(binding.storageKey);
-    if (previous === undefined || (previous.width === binding.decoded.width && previous.height === binding.decoded.height)) return previous;
+    const size = this.#storageSize(binding);
+    if (previous === undefined || (previous.width === size.width && previous.height === size.height
+      && previous.decodedWidth === binding.decoded.width && previous.decodedHeight === binding.decoded.height)) return previous;
     const replacement = this.#createTexture(binding);
     if (replacement === undefined) {
       this.#uploadedStorageKeys.delete(binding.storageKey);
@@ -273,6 +295,7 @@ export class TextureGpuOwner {
     this.#gl.deleteTexture(previous.texture);
     this.#budget.release(previous.budgetIdentity);
     this.#textures.set(binding.storageKey, replacement);
+    this.#onFallbackChanged(binding.storageKey, replacement.compact);
     this.#uploadedStorageKeys.add(binding.storageKey);
     return replacement;
   }
@@ -305,6 +328,7 @@ export class TextureGpuOwner {
       }
       if (createdTexture) {
         this.#textures.set(binding.storageKey, texture);
+        this.#onFallbackChanged(binding.storageKey, texture.compact);
         this.#uploadedStorageKeys.add(binding.storageKey);
       }
       if (createdSampler) this.#samplers.set(binding.samplerKey, sampler);
@@ -388,6 +412,8 @@ export class TextureGpuOwner {
     const gl = this.#gl;
     const decoded = binding.decoded;
     const compressed = decoded.kind !== undefined;
+    const { width, height } = this.#storageSize(binding);
+    const compact = width !== decoded.width || height !== decoded.height;
     if (decoded.kind === "ktx2-native") {
       const format = nativeWebGlFormat(decoded.format, binding.colorSpace);
       let available = this.#nativeAvailable.get(format);
@@ -412,7 +438,7 @@ export class TextureGpuOwner {
     }
     const byteLength = compressed
       ? ktx2Etc2StorageBytes(decoded)
-      : ordinaryTextureStorageBytes(decoded.width, decoded.height, mipmapped);
+      : ordinaryTextureStorageBytes(width, height, mipmapped);
     const budgetIdentity = {};
     if (!this.#budget.tryClaim(budgetIdentity, byteLength)) {
       this.#deniedStorageKeys.add(binding.storageKey);
@@ -420,7 +446,7 @@ export class TextureGpuOwner {
     }
     const uploadBytes = compressed
       ? decoded.levels.reduce((total, level) => total + level.blocks.byteLength, 0)
-      : decoded.width * decoded.height * 4;
+      : width * height * 4;
     if (!Number.isSafeInteger(uploadBytes)) {
       this.#budget.release(budgetIdentity);
       throw new RangeError("Royal ordinary texture upload exceeds safe integer range");
@@ -458,15 +484,25 @@ export class TextureGpuOwner {
           );
         }
       } else {
+        let source = decoded.source;
+        if (compact) {
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const context = canvas.getContext("2d");
+          if (context === null) throw new Error("Royal could not create a texture fallback");
+          context.drawImage(source as CanvasImageSource, 0, 0, width, height);
+          source = canvas;
+        }
         this.#applyUnpackState();
         const internalFormat = binding.colorSpace === "srgb" ? gl.SRGB8_ALPHA8 : gl.RGBA8;
         if (mipmapped) {
           gl.texStorage2D(
             gl.TEXTURE_2D,
-            completeKtx2MipLevelCount(decoded.width, decoded.height),
+            completeKtx2MipLevelCount(width, height),
             internalFormat,
-            decoded.width,
-            decoded.height,
+            width,
+            height,
           );
           gl.texSubImage2D(
             gl.TEXTURE_2D,
@@ -475,7 +511,7 @@ export class TextureGpuOwner {
             0,
             gl.RGBA,
             gl.UNSIGNED_BYTE,
-            decoded.source,
+            source,
           );
           gl.generateMipmap(gl.TEXTURE_2D);
         } else {
@@ -486,7 +522,7 @@ export class TextureGpuOwner {
             internalFormat,
             gl.RGBA,
             gl.UNSIGNED_BYTE,
-            decoded.source,
+            source,
           );
         }
       }
@@ -495,11 +531,14 @@ export class TextureGpuOwner {
         budgetIdentity,
         byteLength,
         compressed,
+        compact,
         fitted: decoded.sourceWidth !== undefined,
-        height: decoded.height,
+        height,
         mipmapped,
         texture,
-        width: decoded.width,
+        width,
+        decodedWidth: decoded.width,
+        decodedHeight: decoded.height,
       };
     } catch (error) {
       gl.deleteTexture(texture);

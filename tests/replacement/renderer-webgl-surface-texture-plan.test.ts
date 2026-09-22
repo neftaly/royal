@@ -1,3 +1,4 @@
+import { imageTexture } from "@royal/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
   resolveCanonicalMaterialTexture,
@@ -10,6 +11,7 @@ import {
 } from "../../packages/renderer-webgl/src/texture/sampler";
 import {
   authoredOrdinaryTextureMask,
+  collectVirtualFallbackStorageKeys,
   collectCompleteSurfaceTextureClaimsInto,
   collectTexturePublicationSurfaceIndicesInto,
   composeSurfaceTextureBindingsInto,
@@ -85,6 +87,16 @@ const standard = (
 });
 
 describe("surface texture planning core", () => {
+  it("only compacts exclusively virtual base-color storage, regardless of material order", () => {
+    const asset = imageTexture("/shared.png");
+    const base = standard({ baseColorAsset: asset });
+    const normal = standard({ normalAsset: asset });
+    expect([...collectVirtualFallbackStorageKeys([base], () => true)]).toEqual([textureStorageKey(asset)]);
+    expect(collectVirtualFallbackStorageKeys([base], () => false).size).toBe(0);
+    expect(collectVirtualFallbackStorageKeys([base, normal], () => true).size).toBe(0);
+    expect(collectVirtualFallbackStorageKeys([normal, base], () => true).size).toBe(0);
+  });
+
   it("projects only semantically active authored ordinary texture slots", () => {
     const asset = { kind: "asset", sampler: {}, src: "/texture.png" } as const;
 

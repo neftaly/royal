@@ -397,3 +397,23 @@ export const composeSurfaceTextureBindingsInto = (
     bindings[14] = virtualTexture.compressedAtlas ?? virtualTexture.atlas;
   }
 };
+
+/** Only compact storage when every use is a base-color map with a resident VT root. */
+export const collectVirtualFallbackStorageKeys = (
+  materials: Iterable<CanonicalSurfaceMaterial>,
+  available: (asset: TextureSourceRef) => boolean,
+): ReadonlySet<string> => {
+  const compact = new Set<string>();
+  const full = new Set<string>();
+  for (const material of materials) {
+    for (let unit = 0; unit < MATERIAL_TEXTURE_UNITS; unit++) {
+      const asset = materialTextureAssetAt(material, unit);
+      if (asset === undefined) continue;
+      const key = textureStorageKey(asset);
+      if (unit === 0 && available(asset)) compact.add(key);
+      else full.add(key);
+    }
+  }
+  for (const key of full) compact.delete(key);
+  return compact;
+};
