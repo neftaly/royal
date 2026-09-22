@@ -1159,7 +1159,7 @@ const runVirtualTextureViewportConvergence = async (session, previous = null) =>
       lifecycleError: renderer?.lifecycle?.error ?? null,
       lifecycleState: renderer?.lifecycle?.state ?? null,
       failedPages: vt?.failedPages ?? null,
-      failedPages: vt?.failedPages ?? null,
+      pageRequests: vt?.pageRequests ?? null,
       automaticResources: vt?.automaticResources ?? null,
       pendingPages: vt?.pendingPages ?? null,
       residentPages: vt?.residentPages ?? null,
@@ -1171,13 +1171,15 @@ const runVirtualTextureViewportConvergence = async (session, previous = null) =>
       || sample.backingHeight !== previous.backingHeight
     );
     const advanced = previous === null || sample.frame > previous.frame;
-    const state = JSON.stringify(sample);
+    // Automatic ASTC refinement can keep presenting after page demand settles.
+    // Require an advanced frame, but measure convergence using viewport and residency.
+    const { frame: _frame, ...convergence } = sample;
+    const state = JSON.stringify(convergence);
     if (
       changed
       && advanced
       && sample.lifecycleState === 'available'
       && sample.lifecycleError === null
-      && sample.failedPages === 0
       && sample.failedPages === 0
       && sample.automaticResources === 1
       && sample.pendingPages === 0
