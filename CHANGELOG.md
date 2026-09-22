@@ -3,7 +3,11 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
-## Unreleased
+## 0.0.34 - 2026-09-23
+
+- Move glTF preparation, Draco decoding, and idle ASTC encoding onto workerpool; share the worker runtime with texture inspection and remove obsolete transport code.
+- Reuse Draco workers and codecs across assets, avoid parallel startup for small or imbalanced batches, and retain idle preparation workers for five seconds to reduce repeated-load latency.
+- Recover from worker startup and transport failures without stranded tasks; preserve cancellation, transferred-buffer ownership, and bounded ASTC row grants.
 
 - Allow 1–4 concurrent texture-inspection jobs per root (default 1), with admission before sampling and cancellation-safe borrowed images. Keep completed decisions separately from pending work and reuse identical sample decisions across asset IDs.
 - Accelerate HDR inspection with exact packed-value lookup tables and direct small-mip conversion, preserving every inspected pixel.
