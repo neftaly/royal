@@ -7,9 +7,9 @@
     createAutomaticRasterPageSource,
   } from "/packages/renderer-webgl/src/virtual-texture/automatic-page-source.ts";
   import {
-    createGeneratedVirtualTextureManifest,
+    createGeneratedVirtualTextureLayout,
     virtualTexturePageKeyParts,
-  } from "/packages/renderer-webgl/src/virtual-texture/manifest.ts";
+  } from "/packages/renderer-webgl/src/virtual-texture/layout.ts";
   import {
     writeVirtualTexturePageTable,
   } from "/packages/renderer-webgl/src/virtual-texture/residency.ts";
@@ -37,7 +37,7 @@
     source: sourceCanvas,
     width: 4096,
   }, sampler, "srgb");
-  const manifest = source.manifest;
+  const manifest = source.layout;
   const pageAt = (ordinal) => ({
     mip: 0,
     x: ordinal % 16,
@@ -74,7 +74,7 @@
       return super.get(key);
     }
   }
-  const pageTableManifest = createGeneratedVirtualTextureManifest({
+  const pageTableManifest = createGeneratedVirtualTextureLayout({
     borderTexels: 2,
     colorSpace: "srgb",
     height: 16384,

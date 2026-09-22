@@ -19,8 +19,8 @@ import {
 } from "../surface/surface-visibility";
 import {
   virtualTexturePageKeyParts,
-  type VirtualTextureManifest,
-} from "./manifest";
+  type VirtualTextureLayout,
+} from "./layout";
 
 export type VirtualTextureDemandView = Readonly<{
   viewProjection: Mat4;
@@ -36,7 +36,6 @@ export type VirtualTextureDemandSurface = Readonly<{
 }>;
 
 export type VirtualTextureDemandWorkspace = Readonly<{
-  ancestors: "all" | "coarsest";
   clipA: Float64Array;
   clipB: Float64Array;
   frustumPlanes: Float32Array;
@@ -67,7 +66,6 @@ export const virtualTextureDemandLod = (workspace: VirtualTextureDemandWorkspace
 
 export const createVirtualTextureDemandWorkspace = (
   maxPages: number,
-  ancestors: "all" | "coarsest" = "all",
 ): VirtualTextureDemandWorkspace => {
   if (!Number.isSafeInteger(maxPages) || maxPages < 1) {
     throw new RangeError("Royal VT demand capacity must be a positive safe integer");
@@ -75,7 +73,6 @@ export const createVirtualTextureDemandWorkspace = (
   const screen = new Float64Array(FINEST_FOOTPRINT_SQUARED + 1);
   screen[FINEST_FOOTPRINT_SQUARED] = Infinity;
   return {
-    ancestors,
     minimumMip: 0,
     mipLinear: false,
     anisotropy: 1,
@@ -124,65 +121,35 @@ export const truncateVirtualTextureDemand = (
     throw new RangeError("Royal VT demand capacity must be a positive safe integer");
   }
   if (workspace.count <= capacity) return;
-  if (workspace.ancestors === "coarsest") {
-    // Direct targets omit intermediate levels. Synthesize a feasible parent
-    // target instead of discarding all detail down to the coverage page.
-    while (workspace.count > capacity) {
-      let finest = Infinity;
-      for (let index = 0; index < workspace.count; index += 1) finest = Math.min(finest, workspace.mips[index]!);
-      let target = 0;
-      workspace.keys.clear();
-      const importance = new Map<number | string, number>();
-      for (let index = 0; index < workspace.count; index += 1) {
-        const coarsen = workspace.mips[index] === finest;
-        const mip = workspace.mips[index]! + (coarsen ? 1 : 0);
-        const x = coarsen ? Math.floor(workspace.xs[index]! / 2) : workspace.xs[index]!;
-        const y = coarsen ? Math.floor(workspace.ys[index]! / 2) : workspace.ys[index]!;
-        const key = virtualTexturePageKeyParts(mip, x, y);
-        const oldKey = virtualTexturePageKeyParts(workspace.mips[index]!, workspace.xs[index]!, workspace.ys[index]!);
-        importance.set(key, (importance.get(key) ?? 0) + (workspace.importance.get(oldKey) ?? 0));
-        if (workspace.keys.has(key)) continue;
-        workspace.keys.add(key);
-        workspace.mips[target] = mip;
-        workspace.xs[target] = x;
-        workspace.ys[target] = y;
-        target += 1;
-      }
-      workspace.count = target;
-      workspace.importance.clear();
-      for (const [key, value] of importance) workspace.importance.set(key, value);
-    }
-    workspace.overflow = true;
-    return;
-  }
-  let minimumMip = 0;
-  let maximumMip = 0;
-  for (let index = 0; index < workspace.count; index += 1) {
-    maximumMip = Math.max(maximumMip, workspace.mips[index]!);
-  }
-  let retainedCount = workspace.count;
-  while (retainedCount > capacity && minimumMip < maximumMip) {
-    minimumMip += 1;
-    retainedCount = 0;
+  // Direct targets omit intermediate levels. Synthesize a feasible parent
+  // target instead of discarding all detail down to the coverage page.
+  while (workspace.count > capacity) {
+    let finest = Infinity;
+    for (let index = 0; index < workspace.count; index += 1) finest = Math.min(finest, workspace.mips[index]!);
+    let target = 0;
+    workspace.keys.clear();
+    const importance = new Map<number | string, number>();
     for (let index = 0; index < workspace.count; index += 1) {
-      if (workspace.mips[index]! >= minimumMip) retainedCount += 1;
+      const coarsen = workspace.mips[index] === finest;
+      const mip = workspace.mips[index]! + (coarsen ? 1 : 0);
+      const x = coarsen ? Math.floor(workspace.xs[index]! / 2) : workspace.xs[index]!;
+      const y = coarsen ? Math.floor(workspace.ys[index]! / 2) : workspace.ys[index]!;
+      const key = virtualTexturePageKeyParts(mip, x, y);
+      const oldKey = virtualTexturePageKeyParts(workspace.mips[index]!, workspace.xs[index]!, workspace.ys[index]!);
+      importance.set(key, (importance.get(key) ?? 0) + (workspace.importance.get(oldKey) ?? 0));
+      if (workspace.keys.has(key)) continue;
+      workspace.keys.add(key);
+      workspace.mips[target] = mip;
+      workspace.xs[target] = x;
+      workspace.ys[target] = y;
+      target += 1;
     }
+    workspace.count = target;
+    workspace.importance.clear();
+    for (const [key, value] of importance) workspace.importance.set(key, value);
   }
-  workspace.keys.clear();
-  let target = 0;
-  for (let source = 0; source < workspace.count; source += 1) {
-    const mip = workspace.mips[source]!;
-    if (mip < minimumMip || target >= capacity) continue;
-    const x = workspace.xs[source]!;
-    const y = workspace.ys[source]!;
-    workspace.mips[target] = mip;
-    workspace.xs[target] = x;
-    workspace.ys[target] = y;
-    workspace.keys.add(virtualTexturePageKeyParts(mip, x, y));
-    target += 1;
-  }
-  workspace.count = target;
   workspace.overflow = true;
+  return;
 };
 
 const addPage = (
@@ -213,7 +180,7 @@ const addPage = (
 /** Adds coarsest ancestors first so any capacity prefix remains drawable. */
 const addPageWithAncestors = (
   workspace: VirtualTextureDemandWorkspace,
-  manifest: VirtualTextureManifest,
+  textureLayout: VirtualTextureLayout,
   mip: number,
   x: number,
   y: number,
@@ -222,8 +189,8 @@ const addPageWithAncestors = (
   // A retained target already has its required ancestors. Overlapping triangles
   // often request the same pages; avoid walking that chain again for each one.
   if (workspace.keys.has(virtualTexturePageKeyParts(mip, x, y))) { addPage(workspace, mip, x, y, importance); return; }
-  for (let ancestorMip = manifest.mipCount - 1; ancestorMip >= mip; ancestorMip -= 1) {
-    if (workspace.ancestors === "coarsest" && ancestorMip !== manifest.mipCount - 1
+  for (let ancestorMip = textureLayout.mipCount - 1; ancestorMip >= mip; ancestorMip -= 1) {
+    if (ancestorMip !== textureLayout.mipCount - 1
       && ancestorMip !== mip && !(workspace.mipLinear && ancestorMip === mip + 1)) continue;
     const divisor = 2 ** (ancestorMip - mip);
     addPage(workspace, ancestorMip, Math.floor(x / divisor), Math.floor(y / divisor), importance);
@@ -232,10 +199,10 @@ const addPageWithAncestors = (
 
 const addCoarsestMip = (
   workspace: VirtualTextureDemandWorkspace,
-  manifest: VirtualTextureManifest,
+  textureLayout: VirtualTextureLayout,
 ): void => {
-  const mip = manifest.mipCount - 1;
-  const layout = manifest.mipLayouts[mip]!;
+  const mip = textureLayout.mipCount - 1;
+  const layout = textureLayout.mipLayouts[mip]!;
   for (let y = 0; y < layout.height; y += 1) {
     for (let x = 0; x < layout.width; x += 1) {
       addPage(workspace, mip, x, y);
@@ -403,7 +370,7 @@ const copyInstanceModel = (
 
 const addWrappedRange = (
   workspace: VirtualTextureDemandWorkspace,
-  manifest: VirtualTextureManifest,
+  textureLayout: VirtualTextureLayout,
   mip: number,
   sampler: CanonicalTextureSampler,
   radiusU: number,
@@ -427,7 +394,7 @@ const addWrappedRange = (
   const uEnd = repeatsU && !fullU ? Math.floor(maximumU) : 0;
   const vStart = repeatsV && !fullV ? Math.floor(minimumV) : 0;
   const vEnd = repeatsV && !fullV ? Math.floor(maximumV) : 0;
-  const layout = manifest.mipLayouts[mip]!;
+  const layout = textureLayout.mipLayouts[mip]!;
   for (let dy = 0; dy <= vEnd - vStart; dy += 1) {
     const tileY = vStart + dy;
     for (let dx = 0; dx <= uEnd - uStart; dx += 1) {
@@ -454,7 +421,7 @@ const addWrappedRange = (
         for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) {
           const coverage = Math.max(0, Math.min(localMaxU, (x + 1) / layout.width) - Math.max(localMinU, x / layout.width))
             * Math.max(0, Math.min(localMaxV, (y + 1) / layout.height) - Math.max(localMinV, y / layout.height));
-          addPageWithAncestors(workspace, manifest, mip, x, y, screenArea * coverage / uvArea);
+          addPageWithAncestors(workspace, textureLayout, mip, x, y, screenArea * coverage / uvArea);
           if (workspace.overflow) return;
         }
       }
@@ -464,7 +431,7 @@ const addWrappedRange = (
 
 const addClippedTriangleDemand = (
   workspace: VirtualTextureDemandWorkspace,
-  manifest: VirtualTextureManifest,
+  textureLayout: VirtualTextureLayout,
   vertices: Float64Array,
   first: number,
   second: number,
@@ -506,7 +473,7 @@ const addClippedTriangleDemand = (
   const vqDy = (vq2 * dx1 - vq1 * dx2) * inverse;
   const qDx = (q1 * dy2 - q2 * dy1) * inverse;
   const qDy = (q2 * dx1 - q1 * dx2) * inverse;
-  let minimumMip = manifest.mipCount - 1;
+  let minimumMip = textureLayout.mipCount - 1;
   let maximumMip = 0;
   let sampled = false;
   let radiusU = 0;
@@ -526,10 +493,10 @@ const addClippedTriangleDemand = (
       : screen[sample * 5 + 4]!;
     if (!(q > 0) || !Number.isFinite(q)) continue;
     const inverseQSquared = 1 / (q * q);
-    const duDx = (uqDx * q - uq * qDx) * inverseQSquared * manifest.width;
-    const dvDx = (vqDx * q - vq * qDx) * inverseQSquared * manifest.height;
-    const duDy = (uqDy * q - uq * qDy) * inverseQSquared * manifest.width;
-    const dvDy = (vqDy * q - vq * qDy) * inverseQSquared * manifest.height;
+    const duDx = (uqDx * q - uq * qDx) * inverseQSquared * textureLayout.width;
+    const dvDx = (vqDx * q - vq * qDx) * inverseQSquared * textureLayout.height;
+    const duDy = (uqDy * q - uq * qDy) * inverseQSquared * textureLayout.width;
+    const dvDy = (vqDy * q - vq * qDy) * inverseQSquared * textureLayout.height;
     // Match the shader's squared footprint without variadic hypot calls in the
     // triangle loop. Overflow selects the coarsest mip; values below one clamp.
     const footprintSquared = virtualTextureFootprintSquared(duDx, dvDx, duDy, dvDy, workspace.anisotropy);
@@ -537,14 +504,14 @@ const addClippedTriangleDemand = (
       && Math.max(1, footprintSquared) < Math.max(duDx * duDx + dvDx * dvDx, duDy * duDy + dvDy * dvDy)) {
       // Directional taps can cross a triangle's UV boundary. Include their
       // footprint before wrap splitting so neighbouring pages are resident.
-      radiusU = Math.max(radiusU, 0.5 * Math.sqrt(duDx * duDx + duDy * duDy) / manifest.width);
-      radiusV = Math.max(radiusV, 0.5 * Math.sqrt(dvDx * dvDx + dvDy * dvDy) / manifest.height);
+      radiusU = Math.max(radiusU, 0.5 * Math.sqrt(duDx * duDx + duDy * duDy) / textureLayout.width);
+      radiusV = Math.max(radiusV, 0.5 * Math.sqrt(dvDx * dvDx + dvDy * dvDy) / textureLayout.height);
     }
     // Preserve unclamped preview demand in existing typed scratch. Convert
     // its finest footprint to a fractional LOD once when the runtime asks.
     if (footprintSquared < screen[FINEST_FOOTPRINT_SQUARED]!) screen[FINEST_FOOTPRINT_SQUARED] = footprintSquared;
-    const mip = Number.isNaN(footprintSquared) ? manifest.mipCount - 1 : Math.max(workspace.minimumMip, Math.min(
-      manifest.mipCount - 1,
+    const mip = Number.isNaN(footprintSquared) ? textureLayout.mipCount - 1 : Math.max(workspace.minimumMip, Math.min(
+      textureLayout.mipCount - 1,
       Math.floor(0.5 * Math.log2(Math.max(1, footprintSquared))),
     ));
     minimumMip = Math.min(minimumMip, mip);
@@ -604,7 +571,7 @@ const addClippedTriangleDemand = (
       );
       addClippedTriangleDemand(
         workspace,
-        manifest,
+        textureLayout,
         target,
         targetFirst,
         targetFirst + 1,
@@ -620,7 +587,7 @@ const addClippedTriangleDemand = (
   // Keep those actual levels even when intermediate ancestors are omitted.
   for (let targetMip = minimumMip; targetMip <= maximumMip; targetMip += 1) addWrappedRange(
     workspace,
-    manifest,
+    textureLayout,
     targetMip,
     sampler,
     radiusU,
@@ -630,7 +597,7 @@ const addClippedTriangleDemand = (
 
 const collectModelDemand = (
   workspace: VirtualTextureDemandWorkspace,
-  manifest: VirtualTextureManifest,
+  textureLayout: VirtualTextureLayout,
   surface: VirtualTextureDemandSurface,
   model: Mat4,
   view: VirtualTextureDemandView,
@@ -660,14 +627,14 @@ const collectModelDemand = (
       anyFlags |= flags;
     }
     if (anyFlags & 0b100_0000) {
-      addCoarsestMip(workspace, manifest);
+      addCoarsestMip(workspace, textureLayout);
       continue;
     }
     if (commonOutsidePlanes !== 0) continue;
     if (anyFlags === 0) {
       addClippedTriangleDemand(
         workspace,
-        manifest,
+        textureLayout,
         workspace.clipA,
         0,
         1,
@@ -689,7 +656,7 @@ const collectModelDemand = (
     for (let triangle = 1; triangle + 1 < count; triangle += 1) {
       addClippedTriangleDemand(
         workspace,
-        manifest,
+        textureLayout,
         source,
         0,
         triangle,
@@ -703,7 +670,7 @@ const collectModelDemand = (
 
 const collectVirtualTextureSurfaceViewDemand = (
   workspace: VirtualTextureDemandWorkspace,
-  manifest: VirtualTextureManifest,
+  textureLayout: VirtualTextureLayout,
   surface: VirtualTextureDemandSurface,
   view: VirtualTextureDemandView,
   sampler: CanonicalTextureSampler,
@@ -711,7 +678,7 @@ const collectVirtualTextureSurfaceViewDemand = (
   if (!worldBoundsVisible(surface.worldBounds, workspace.frustumPlanes)) return;
   const instances = surface.instances;
   if (instances === undefined || instances.count === 0) {
-    collectModelDemand(workspace, manifest, surface, surface.model, view, sampler);
+    collectModelDemand(workspace, textureLayout, surface, surface.model, view, sampler);
     return;
   }
   for (let instance = 0; instance < instances.count && !workspace.overflow; instance += 1) {
@@ -725,14 +692,14 @@ const collectVirtualTextureSurfaceViewDemand = (
     bounds.max[2] = -Infinity;
     includeTransformedBounds(bounds, surface.geometry.bounds, workspace.model);
     if (!worldBoundsVisible(bounds, workspace.frustumPlanes)) continue;
-    collectModelDemand(workspace, manifest, surface, workspace.model, view, sampler);
+    collectModelDemand(workspace, textureLayout, surface, workspace.model, view, sampler);
   }
 };
 
 /** Collects bounded demand while sharing one broad-phase frustum across an asset's surfaces. */
 export const collectVirtualTextureDemand = (
   workspace: VirtualTextureDemandWorkspace,
-  manifest: VirtualTextureManifest,
+  textureLayout: VirtualTextureLayout,
   surfaces: readonly VirtualTextureDemandSurface[],
   views: readonly VirtualTextureDemandView[],
   sampler: CanonicalTextureSampler,
@@ -747,7 +714,7 @@ export const collectVirtualTextureDemand = (
   for (const view of views) {
     frustumPlanesInto(workspace.frustumPlanes, view.viewProjection);
     for (const surface of surfaces) {
-      collectVirtualTextureSurfaceViewDemand(workspace, manifest, surface, view, sampler);
+      collectVirtualTextureSurfaceViewDemand(workspace, textureLayout, surface, view, sampler);
       // The runtime restarts at a coarser minimum mip after overflow. Completing
       // this discarded pass would multiply dense/repeated-UV work needlessly.
       if (workspace.overflow) return;

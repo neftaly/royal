@@ -1,26 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { parseVirtualTextureManifest, virtualTexturePageKey } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
+import { createGeneratedVirtualTextureLayout, virtualTexturePageKey } from "../../packages/renderer-webgl/src/virtual-texture/layout";
 import {
   selectVirtualTexturePoolSlot,
   addVirtualTexturePageTablePage,
   writeVirtualTexturePageTable,
 } from "../../packages/renderer-webgl/src/virtual-texture/residency";
 
-const manifest = parseVirtualTextureManifest({
-  borderTexels: 1,
-  contractVersion: 2,
-  mipCount: 3,
-  pageSize: 256,
-  pages: { uriTemplate: "{mip}/{x}/{y}.png" },
-  virtualSize: [1024, 1024],
-});
+const manifest = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", borderTexels: 1, pageSize: 256, width: 1024, height: 1024 });
 
 describe("VT2 residency core", () => {
   it("incrementally matches a rebuild for arbitrary insertion order and rectangular edges", () => {
-    const rectangular = parseVirtualTextureManifest({
-      borderTexels: 1, contractVersion: 2, pageSize: 128,
-      pages: { uriTemplate: "{mip}/{x}/{y}.png" }, virtualSize: [1025, 573],
-    });
+    const rectangular = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", borderTexels: 1, pageSize: 128, width: 1025, height: 573 });
     const pages = rectangular.mipLayouts.flatMap((layout, mip) => Array.from({ length: layout.width * layout.height },
       (_, index) => ({ mip, x: index % layout.width, y: Math.floor(index / layout.width) })));
     // Fine entries deliberately precede some ancestors; overwriting a page

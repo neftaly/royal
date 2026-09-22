@@ -27,12 +27,8 @@ import {
   textureAsset,
   triangleGeometry,
   transformGltfAssetBounds,
-  type TextureRef,
   unlitMaterial,
-  virtualTexture,
   wireframeMaterial,
-  type VirtualTextureAssetOptions,
-  type VirtualTextureInput,
 } from "@royal/renderer-core";
 
 const camera = perspectiveCamera({
@@ -593,47 +589,8 @@ describe("renderer-core descriptor contract", () => {
     }
   });
 
-  it("keeps virtual textures as texture refs without public preview fallbacks", () => {
-    const options = {
-      contentKey: "sha256:terrain",
-      manifestUri: "/textures/terrain.vt.json",
-    } satisfies VirtualTextureAssetOptions;
-    const texture: TextureRef = virtualTexture(options);
-
-    expect(standardMaterial({ texture }).baseColor).toBe(texture);
-    expect(unlitMaterial({ texture }).baseColor).toBe(texture);
-    expect(standardMaterial({
-      texture,
-      tint: [0.25, 0.5, 0.75, 0.5],
-    })).toMatchObject({
-      baseColor: texture,
-      tint: [0.25, 0.5, 0.75, 0.5],
-    });
-    expect(texture).toEqual({
-      contentKey: "sha256:terrain",
-      kind: "virtual-asset",
-      manifestUri: "/textures/terrain.vt.json",
-    });
-
-    const stringTexture: TextureRef = virtualTexture("/textures/terrain.vt.json");
-    expect(standardMaterial({ texture: stringTexture }).baseColor).toBe(stringTexture);
-    const textureFromInput = (input: VirtualTextureInput): TextureRef => virtualTexture(input);
-    expect(textureFromInput({ manifestUri: "/textures/terrain.vt.json" })).toEqual(stringTexture);
-
-    expect(() => virtualTexture({} as VirtualTextureAssetOptions)).toThrow(
-      'virtual texture "manifestUri" must be a non-empty string',
-    );
-    expect(() => virtualTexture({ manifestUri: "" })).toThrow(
-      'virtual texture "manifestUri" must be a non-empty string',
-    );
-
+  it("keeps ordinary texture constructors narrow", () => {
     if (false) {
-      virtualTexture({
-        manifestUri: "/textures/terrain.vt.json",
-        // @ts-expect-error preview is not a public render fallback for virtual textures.
-        preview: imageTexture("/textures/terrain-preview.png"),
-      });
-
       // @ts-expect-error fallbackColor is not a public render fallback for image textures.
       imageTexture({ fallbackColor: [1, 0, 1, 1], src: "/textures/albedo.png" });
 
@@ -649,17 +606,6 @@ describe("renderer-core descriptor contract", () => {
       // @ts-expect-error fallback is not a public render fallback for texture assets.
       textureAsset({ fallback: { color: [1, 0, 1, 1], kind: "solid" }, src: "/textures/mask.ktx2" });
 
-      // @ts-expect-error fallbackColor is not a public render fallback for virtual textures.
-      virtualTexture({ fallbackColor: [1, 0, 1, 1], manifestUri: "/textures/terrain.vt.json" });
-
-      // @ts-expect-error virtual textures require the explicit manifest URI field.
-      virtualTexture({});
-
-      virtualTexture({
-        manifestUri: "/textures/terrain-manifest.vt.json",
-        // @ts-expect-error src is not an object-form alias for manifestUri.
-        src: "/textures/terrain.vt.json",
-      });
     }
   });
 
@@ -769,9 +715,6 @@ describe("renderer-core descriptor contract", () => {
       ['image texture', () => imageTexture({
         flipY: false, src: '/albedo.png',
       } as unknown as Parameters<typeof imageTexture>[0])],
-      ['virtual texture', () => virtualTexture({
-        fallback: '/preview.png', manifestUri: '/terrain.vt.json',
-      } as unknown as Parameters<typeof virtualTexture>[0])],
       ['texture sampler', () => imageTexture({
         sampler: { anisotropy: 4 }, src: '/albedo.png',
       } as unknown as Parameters<typeof imageTexture>[0])],
@@ -853,14 +796,6 @@ describe("renderer-core descriptor contract", () => {
     });
     expect(imageTexture({ src: "/textures/albedo-a.png" })).not.toHaveProperty("contentKey");
 
-    expect(virtualTexture({
-      contentKey: "sha256:albedo-vt",
-      manifestUri: "/textures/albedo-a.vt.json",
-    })).toEqual({
-      contentKey: "sha256:albedo-vt",
-      kind: "virtual-asset",
-      manifestUri: "/textures/albedo-a.vt.json",
-    });
 
     expect(textureAsset({
       contentKey: "sha256:mask",
@@ -875,8 +810,6 @@ describe("renderer-core descriptor contract", () => {
       .toThrow(/texture asset version must be finite/);
     expect(() => textureAsset({ contentKey: "", src: "/textures/a.png" }))
       .toThrow(/texture asset contentKey must be a non-empty string/);
-    expect(() => virtualTexture({ manifestUri: "/textures/a.vt.json", version: Infinity }))
-      .toThrow(/virtual texture version must be finite/);
   });
 
   it("normalizes glTF source, version, scene selection, and bounds into asset identity", () => {

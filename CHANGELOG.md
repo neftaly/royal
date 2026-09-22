@@ -3,8 +3,15 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
-## Unreleased
+## 0.0.32 - 2026-09-22
 
+- Area-filter all inspected source pixels and check transparent images over black and white, closing sparse-grid and opacity-only inspection bypasses.
+
+- Inspect RGB beneath transparency and every authored native/environment mip; fingerprint environment samples before reusing inspection decisions.
+
+- Remove authored virtual-texture descriptors, manifests, tile transport, native-page uploads, and the offline page baker. Automatic paging remains internal to ordinary textures.
+
+- Add optional consumer texture inspection with an async allow predicate, shared decisions, frozen raster samples, and publication gating for ordinary images and environments; generated virtual pages reuse the approved source.
 - Remove `GS_texture_svg` and SVG texture decoding/refinement. Required use now
   fails preflight; optional extension payloads use the ordinary raster source.
 - Replace SVG texture examples and virtual-texture pages with raster assets.

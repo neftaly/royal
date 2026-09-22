@@ -39,8 +39,7 @@ Invalid authoring fails synchronously: malformed types and closed choices throw
 `RangeError`.
 
 Source names remain stable across constructor inputs and normalized
-descriptors: glTF and ordinary image references expose `src`; authored virtual
-textures expose `manifestUri` because that source is a JSON manifest. Pick
+descriptors: glTF and ordinary image references expose `src`. Pick
 targets likewise preserve the authored `pickingId` name.
 
 `boundedVolume(...)` adds a non-pickable emissive medium to the world scene. It

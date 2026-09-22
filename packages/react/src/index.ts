@@ -1,3 +1,4 @@
+export type { TextureInspection, TexturePredicate } from "@royal/renderer-webgl";
 export {
   Canvas,
   useCanvasElement,
@@ -38,12 +39,6 @@ export type {
   PrefilteredEnvironmentStatusIdentity,
   PrefilteredEnvironmentStatusInput,
 } from "./observation/prefiltered-environment";
-export { useVirtualTextureAssetStatus } from "./observation/virtual-texture-asset";
-export type {
-  VirtualTextureAssetStatus,
-  VirtualTextureAssetStatusIdentity,
-  VirtualTextureAssetStatusInput,
-} from "./observation/virtual-texture-asset";
 export {
   createOrbitCameraController,
   createOrbitControls,

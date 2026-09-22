@@ -57,21 +57,7 @@ export interface TextureAssetRef {
   readonly version?: TextureVersion;
 }
 
-export interface VirtualTextureAssetRef {
-  readonly kind: 'virtual-asset';
-  /** Override for the manifest color space; otherwise the manifest declaration is authoritative. */
-  readonly colorSpace?: TextureColorSpace;
-  /** Caller-asserted identity for equal decoded content across manifest URIs. */
-  readonly contentKey?: TextureContentKey;
-  /** URI of the authored virtual-texture JSON manifest. */
-  readonly manifestUri: string;
-  /** Sampling policy; omitted fields use the documented `TextureSampler` defaults. */
-  readonly sampler?: TextureSampler;
-  /** Revision of bytes at `manifestUri`; change it when the URI serves different bytes. */
-  readonly version?: TextureVersion;
-}
-
-export type TextureRef = SolidTextureRef | TextureAssetRef | VirtualTextureAssetRef;
+export type TextureRef = SolidTextureRef | TextureAssetRef;
 
 export interface SolidTextureOptions {
   /** Scene-linear RGBA texel value. Use `linearRgbaFromSrgb` for authored sRGB values. */
@@ -97,25 +83,6 @@ export interface TextureAssetOptions extends TextureAssetBaseOptions {
 /** Friendly image options; use `textureAsset` for explicit cross-URI content identity. */
 export type ImageTextureOptions = Omit<TextureAssetOptions, 'contentKey'>;
 
-interface VirtualTextureAssetBaseOptions {
-  /** Color-space override. Otherwise the manifest declaration is used when available. */
-  readonly colorSpace?: TextureColorSpace;
-  /** Caller-asserted identity for equal decoded content across manifest URIs. */
-  readonly contentKey?: TextureContentKey;
-  /** Sampling policy; omitted fields use the documented `TextureSampler` defaults. */
-  readonly sampler?: TextureSampler;
-  /** Revision of bytes at `manifestUri`; change it when the URI serves different bytes. */
-  readonly version?: TextureVersion;
-}
-
-export interface VirtualTextureAssetOptions extends VirtualTextureAssetBaseOptions {
-  /** URI of the authored virtual-texture JSON manifest. */
-  readonly manifestUri: string;
-}
-
-/** A manifest URI string or the equivalent authored-manifest options object. */
-export type VirtualTextureInput = string | VirtualTextureAssetOptions;
-
 const DEFAULT_IMAGE_TEXTURE_SAMPLER: TextureSampler = {
   magFilter: 'linear',
   minFilter: 'linear-mipmap-linear',
@@ -138,12 +105,8 @@ const TEXTURE_SAMPLER_FIELDS = ['magFilter', 'minFilter', 'wrapS', 'wrapT'] as c
 const SOLID_TEXTURE_FIELDS = ['color'] as const;
 const TEXTURE_ASSET_FIELDS = ['colorSpace', 'contentKey', 'sampler', 'src', 'version'] as const;
 const IMAGE_TEXTURE_FIELDS = ['colorSpace', 'sampler', 'src', 'version'] as const;
-const VIRTUAL_TEXTURE_FIELDS = [
-  'colorSpace', 'contentKey', 'manifestUri', 'sampler', 'version',
-] as const;
 const SOLID_TEXTURE_REF_FIELDS = ['color', 'kind'] as const;
 const TEXTURE_ASSET_REF_FIELDS = [...TEXTURE_ASSET_FIELDS, 'kind'] as const;
-const VIRTUAL_TEXTURE_REF_FIELDS = [...VIRTUAL_TEXTURE_FIELDS, 'kind'] as const;
 
 const optionalChoice = <Choice extends string>(
   value: unknown,
@@ -192,16 +155,7 @@ export const validateTextureRef: (
     if (texture.version !== undefined) identityScalar(texture.version, `${label} version`);
     return;
   }
-  if (texture.kind === 'virtual-asset') {
-    objectWithAllowedFields(value, VIRTUAL_TEXTURE_REF_FIELDS, label);
-    optionalChoice(texture.colorSpace, TEXTURE_COLOR_SPACES, `${label} colorSpace`);
-    if (texture.contentKey !== undefined) identityScalar(texture.contentKey, `${label} contentKey`);
-    nonEmptyString(texture.manifestUri, `${label} manifestUri`);
-    if (texture.sampler !== undefined) validateSampler(texture.sampler, `${label} sampler`);
-    if (texture.version !== undefined) identityScalar(texture.version, `${label} version`);
-    return;
-  }
-  throw new TypeError(`${label} must be a solidTexture, imageTexture, textureAsset, or virtualTexture descriptor`);
+  throw new TypeError(`${label} must be a solidTexture, imageTexture, or textureAsset descriptor`);
 };
 
 /** Creates one scene-linear constant texture without an external asset lifecycle. */
@@ -254,34 +208,4 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
     src: uri,
     ...(options.version === undefined ? {} : { version: options.version })
   });
-}
-
-const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => {
-  objectWithAllowedFields(options, VIRTUAL_TEXTURE_FIELDS, 'virtual texture');
-  const manifestUri = nonEmptyString(options.manifestUri, 'virtual texture "manifestUri"');
-  const colorSpace = optionalChoice(options.colorSpace, TEXTURE_COLOR_SPACES, 'virtual texture colorSpace');
-  const sampler = resolveSampler(options.sampler);
-  const contentKey = options.contentKey === undefined
-    ? undefined
-    : identityScalar(options.contentKey, 'virtual texture contentKey');
-  const version = options.version === undefined
-    ? undefined
-    : identityScalar(options.version, 'virtual texture version');
-
-  return {
-    kind: 'virtual-asset',
-    ...(colorSpace === undefined ? {} : { colorSpace }),
-    ...(contentKey === undefined ? {} : { contentKey }),
-    manifestUri,
-    ...(sampler === undefined ? {} : { sampler }),
-    ...(version === undefined ? {} : { version })
-  };
-};
-
-/** Creates an authored virtual-texture reference from its JSON manifest URI. */
-export function virtualTexture(manifestUri: string): VirtualTextureAssetRef;
-export function virtualTexture(options: VirtualTextureAssetOptions): VirtualTextureAssetRef;
-export function virtualTexture(input: VirtualTextureInput): VirtualTextureAssetRef;
-export function virtualTexture(input: VirtualTextureInput): VirtualTextureAssetRef {
-  return virtualTextureAsset(typeof input === 'string' ? { manifestUri: input } : input);
 }

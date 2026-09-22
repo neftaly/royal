@@ -3,16 +3,11 @@ import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const virtualSize = 4096;
-const pageSize = 512;
-const borderTexels = 1;
-const mipCount = 4;
 const outputDirectory = fileURLToPath(
-  new URL('../public/fixtures/virtual-texture-stress/map-pages/', import.meta.url),
+  new URL('../public/fixtures/virtual-texture-stress/', import.meta.url),
 );
 
-// Every page embeds this exact map in the same 4096-square coordinate system.
-// A page changes only its viewBox and diagnostic overlay, so parent and child
-// residency always depict the same landmarks instead of unrelated test cards.
+// One raster source supplies every runtime-generated mip and page.
 const canonicalMap = `<g id="canonical-map" clip-path="url(#canonical-map-clip)">
 <rect width="4096" height="4096" fill="#13232e"/>
 <path d="M0 0H2048V2048H0z" fill="#9b3f35"/><path d="M2048 0H4096V2048H2048z" fill="#c89435"/><path d="M0 2048H2048V4096H0z" fill="#397ba3"/><path d="M2048 2048H4096V4096H2048z" fill="#4a9568"/>
@@ -30,54 +25,19 @@ const canonicalMap = `<g id="canonical-map" clip-path="url(#canonical-map-clip)"
 <path d="M2048 70l-70 145h140z" fill="#fff1c9"/><text x="2048" y="330" text-anchor="middle" fill="#fff1c9" font-family="system-ui,sans-serif" font-size="76" font-weight="900">NORTH</text>
 </g>`;
 
-const periodicCanonicalCopies = [-virtualSize, 0, virtualSize]
-  .flatMap((y) => [-virtualSize, 0, virtualSize]
-    .map((x) => `<use href="#canonical-map" transform="translate(${x} ${y})"/>`))
-  .join('\n');
-
-export const pageArtwork = (mip, x, y) => {
-  const scale = 2 ** mip;
-  const sourceSize = pageSize * scale;
-  const sourceX = x * sourceSize;
-  const sourceY = y * sourceSize;
-  const storedSize = pageSize + borderTexels * 2;
-  const storedSourceSize = storedSize * scale;
-  const storedSourceX = sourceX - borderTexels * scale;
-  const storedSourceY = sourceY - borderTexels * scale;
-  const inset = 8 * scale;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${storedSize}" height="${storedSize}" viewBox="${storedSourceX} ${storedSourceY} ${storedSourceSize} ${storedSourceSize}">
-<defs>
-<clipPath id="canonical-map-clip"><rect width="${virtualSize}" height="${virtualSize}"/></clipPath>
+export const mapArtwork = () => `<svg xmlns="http://www.w3.org/2000/svg" width="${virtualSize}" height="${virtualSize}" viewBox="0 0 ${virtualSize} ${virtualSize}">
+<defs><clipPath id="canonical-map-clip"><rect width="${virtualSize}" height="${virtualSize}"/></clipPath></defs>
 ${canonicalMap}
-</defs>
-<g id="canonical-map-periodic-copies">
-${periodicCanonicalCopies}
-</g>
-<g id="vt-debug-overlay" data-vt-page="${mip}/${x}/${y}" opacity=".62">
-<rect x="${sourceX + inset}" y="${sourceY + inset}" width="${sourceSize - inset * 2}" height="${sourceSize - inset * 2}" rx="${12 * scale}" fill="none" stroke="#fff" stroke-width="${3 * scale}" stroke-dasharray="${10 * scale} ${8 * scale}"/>
-<rect x="${sourceX + 15 * scale}" y="${sourceY + 15 * scale}" width="${128 * scale}" height="${32 * scale}" rx="${7 * scale}" fill="#09141b"/>
-<text x="${sourceX + 24 * scale}" y="${sourceY + 38 * scale}" fill="#fff" font-family="ui-monospace,monospace" font-size="${18 * scale}" font-weight="800">m${mip} · ${x},${y}</text>
-</g>
-</svg>
-`;
-};
+</svg>`;
 
 const writePage = (path, artwork) => new Promise((resolve, reject) => {
-  const process = spawn('convert', ['svg:-', path], { stdio: ['pipe', 'ignore', 'inherit'] });
+  const process = spawn('convert', ['MSVG:-', path], { stdio: ['pipe', 'ignore', 'inherit'] });
   process.on('error', reject);
   process.on('exit', (code) => code === 0 ? resolve() : reject(new Error(`Rasterization failed: ${code}`)));
   process.stdin.end(artwork);
 });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-await mkdir(outputDirectory, { recursive: true });
-for (let mip = 0; mip < mipCount; mip += 1) {
-  const grid = virtualSize / pageSize / (2 ** mip);
-  for (let y = 0; y < grid; y += 1) {
-    for (let x = 0; x < grid; x += 1) {
-      await writePage(`${outputDirectory}/m${mip}-${x}-${y}.png`, pageArtwork(mip, x, y));
-    }
-  }
-}
-
+  await mkdir(outputDirectory, { recursive: true });
+  await writePage(`${outputDirectory}/map.png`, mapArtwork());
 }

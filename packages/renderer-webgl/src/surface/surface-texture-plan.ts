@@ -166,8 +166,7 @@ export const presentableBaseColorInto = (
   material: CanonicalSurfaceMaterial,
   textureResident: boolean,
 ): Float32List => {
-  const textured = material.baseColorAsset !== undefined
-    || material.baseColorVirtualAsset !== undefined;
+  const textured = material.baseColorAsset !== undefined;
   if (!textured || textureResident) return material.baseColor as unknown as Float32List;
   output[0] = material.baseColor[0] * NEUTRAL_PERCEPTUAL_GREY_LINEAR;
   output[1] = material.baseColor[1] * NEUTRAL_PERCEPTUAL_GREY_LINEAR;

@@ -1,3 +1,4 @@
+import { createTextureInspectionOwner, textureInspectionSource, type TextureInspector } from "../texture/inspection-policy";
 import { TextureAnisotropy } from "../texture/anisotropy";
 import { rendererBeginImageCapture, type RootImageCaptureHost } from "./image-capture-host";
 import {
@@ -14,7 +15,6 @@ import {
   type SceneOverlay,
   type TextureAssetRef,
   type Transform,
-  type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import type { ContextLifecycleSnapshot } from "../context/context-lifecycle";
 import { ContextLifecycleOwner } from "../context/context-lifecycle-owner";
@@ -107,8 +107,6 @@ import { RetainedPresentationOwner } from "./retained-presentation-owner";
 import {
   idleVirtualTextureRuntimeSnapshot,
   virtualTextureRuntimeRequired,
-  virtualTextureAssetKey,
-  type VirtualTextureAssetSnapshot,
   type VirtualTextureRuntime,
   type VirtualTextureRuntimeSnapshot,
 } from "../virtual-texture/runtime-contract";
@@ -141,7 +139,6 @@ import {
   type FrameUploadBudgetSnapshot,
 } from "../resource/frame-upload-budget";
 import {
-  KeyedRetainedListeners,
   RetainedListeners,
   requireRetainedListener,
 } from "../resource/retained-listeners";
@@ -215,10 +212,6 @@ export interface RendererRoot {
   readonly getSizeSnapshot: () => ResolvedCanvasSize | null;
   /** Stable getter for one exact decoded texture identity. */
   readonly getTextureAssetSnapshot: (asset: TextureAssetRef) => TextureAssetSnapshot;
-  /** Stable getter for one exact authored VT identity. */
-  readonly getVirtualTextureAssetSnapshot: (
-    asset: VirtualTextureAssetRef,
-  ) => VirtualTextureAssetSnapshot;
   /**
    * Visits borrowed highest-detail selected-scene triangles without another decode.
    * Returns the visited batch count, or `undefined` until that asset is prepared.
@@ -259,11 +252,6 @@ export interface RendererRoot {
   /** Stable subscription function for one exact decoded texture identity. */
   readonly subscribeTextureAsset: (
     asset: TextureAssetRef,
-    listener: () => void,
-  ) => () => void;
-  /** Stable subscription function for one exact authored VT identity. */
-  readonly subscribeVirtualTextureAsset: (
-    asset: VirtualTextureAssetRef,
     listener: () => void,
   ) => () => void;
 }
@@ -410,19 +398,6 @@ const lazyBrowserGltfPreparer = (
       computeGeometryTaskKeys,
     ),
   };
-};
-
-const IDLE_VIRTUAL_TEXTURE: VirtualTextureAssetSnapshot = {
-  failedPages: 0,
-  pendingPages: 0,
-  residentPages: 0,
-  status: "idle",
-};
-const LOADING_VIRTUAL_TEXTURE: VirtualTextureAssetSnapshot = {
-  failedPages: 0,
-  pendingPages: 0,
-  residentPages: 0,
-  status: "loading",
 };
 const sameColor = (left: LinearRgba, right: LinearRgba): boolean =>
   left[0] === right[0]
@@ -660,6 +635,7 @@ export class CanvasRoot implements RendererRoot {
   #capturePending = false;
   #surfaceResourcesPending = false;
   readonly #textureAssets: TextureAssetOwner;
+  readonly #textureInspection: TextureInspector | undefined;
   #textureResourcesPending = false;
   readonly #unsubscribeContext: () => void;
   readonly #projection = identityMat4();
@@ -682,9 +658,7 @@ export class CanvasRoot implements RendererRoot {
   #surfaceScene: ReturnType<typeof prepareCanonicalSurfaceScene> | null = null;
   #surfaceSceneInput: Scene | null = null;
   #virtualTextureActivation: VirtualTextureActivationState = initialVirtualTextureActivationState;
-  #authoredStorageRequired: boolean | undefined;
   #virtualTextureRuntime: VirtualTextureRuntime | null = null;
-  readonly #virtualTextureListeners = new KeyedRetainedListeners<string>();
   #worldPresentationRequired = false;
   #cameraPresentationChanged = false;
 
@@ -711,6 +685,8 @@ export class CanvasRoot implements RendererRoot {
     const construction = new RootConstructionScope(platform.onListenerError);
     this.#canvas = canvas;
     this.#platform = platform;
+    this.#textureInspection = resolvedOptions.textureInspection === undefined ? undefined
+      : construction.own(createTextureInspectionOwner(resolvedOptions.textureInspection));
     let creationContext: WebGL2RenderingContext | undefined;
     try {
       canvas.addEventListener("webglcontextlost", this.#onContextLost);
@@ -784,6 +760,10 @@ export class CanvasRoot implements RendererRoot {
         onListenerError: (error) => platform.onListenerError(error),
       }));
       this.#environmentAssets = construction.own(new PrefilteredEnvironmentAssetOwner({
+        ...(this.#textureInspection === undefined ? {} : { inspect: async (key: string, prepared: PreparedRoyalEnvironment, signal: AbortSignal) => {
+          const { inspectEnvironment } = await import("../environment/inspection-sample");
+          await inspectEnvironment(this.#textureInspection!, key, prepared, signal);
+        } }),
         onAssetChanged: () => {
           try {
             this.#refreshPrefilteredEnvironment();
@@ -833,8 +813,12 @@ export class CanvasRoot implements RendererRoot {
           },
         )
         : undefined;
+      const decode = platform.decodeTexture ?? browserTextureDecoder!.decode;
       this.#textureAssets = construction.own(new TextureAssetOwner({
-        decode: platform.decodeTexture ?? browserTextureDecoder!.decode,
+        decode: this.#textureInspection === undefined ? decode : async (asset, signal, maxBytes, retainAlpha) => {
+          const source = await decode(textureInspectionSource(asset), signal, maxBytes, retainAlpha);
+          return this.#textureInspection!.accept(asset, source, signal);
+        },
         ...(browserTextureDecoder === undefined
           ? {}
           : {
@@ -966,6 +950,7 @@ export class CanvasRoot implements RendererRoot {
     this.#overlay.dispose();
     this.#screenSpacePartitionPattern.dispose();
     this.#retainedPresentation.dispose();
+    this.#textureInspection?.dispose();
     this.#textureAssets.dispose();
     this.#asyncPreparation.dispose();
     for (const state of this.#instanceSubscriptions.values()) state.unsubscribe();
@@ -975,7 +960,6 @@ export class CanvasRoot implements RendererRoot {
     this.#unsubscribeContext();
     this.#listeners.clear();
     this.#sizeListeners.clear();
-    this.#virtualTextureListeners.clear();
   }
 
   /** @internal The optional capture module borrows readiness, not GPU ownership. */
@@ -1063,16 +1047,6 @@ export class CanvasRoot implements RendererRoot {
   /** Focused readiness for one exact decoded texture identity. */
   getTextureAssetSnapshot = (asset: TextureAssetRef): TextureAssetSnapshot =>
     this.#textureAssets.getSnapshot(asset);
-
-  /** Focused readiness and residency for one exact authored VT identity. */
-  getVirtualTextureAssetSnapshot = (asset: VirtualTextureAssetRef): VirtualTextureAssetSnapshot => {
-    if (this.#virtualTextureRuntime !== null) return this.#virtualTextureRuntime.snapshot(asset);
-    const key = virtualTextureAssetKey(asset);
-    const claimed = this.#surfaceScene?.virtualTextureAssets.some(
-      (candidate) => virtualTextureAssetKey(candidate) === key,
-    ) ?? false;
-    return claimed ? LOADING_VIRTUAL_TEXTURE : IDLE_VIRTUAL_TEXTURE;
-  };
 
   invalidate(): void {
     this.#assertLive("invalidate");
@@ -1289,19 +1263,6 @@ export class CanvasRoot implements RendererRoot {
       return () => undefined;
     }
     return this.#textureAssets.subscribe(asset, listener);
-  };
-
-  /** Subscribes only to one exact authored VT identity. */
-  subscribeVirtualTextureAsset = (
-    asset: VirtualTextureAssetRef,
-    listener: () => void,
-  ): (() => void) => {
-    if (this.#disposed) {
-      requireRetainedListener(listener);
-      return () => undefined;
-    }
-    const key = virtualTextureAssetKey(asset);
-    return this.#virtualTextureListeners.subscribe(key, listener);
   };
 
   #assertLive(operation: string): void {
@@ -1617,8 +1578,6 @@ export class CanvasRoot implements RendererRoot {
       size?.backingWidth ?? 1,
       size?.backingHeight ?? 1,
     );
-    const required = this.#virtualTextureRuntime?.authoredStorageRequired;
-    this.#authoredStorageRequired = required;
     this.#textureAssets.reconcile(
       assets,
       alphaMaskAssets,
@@ -1746,13 +1705,6 @@ export class CanvasRoot implements RendererRoot {
       if (activation === undefined) return;
       const runtime = module.createBrowserVirtualTextureRuntime(
         this.#gl,
-        (asset, presentationChanged) => {
-          if (this.#disposed) return;
-          if (this.#authoredStorageRequired !== this.#virtualTextureRuntime?.authoredStorageRequired) this.#reconcilePreparedGltfTextures();
-          this.#publishVirtualTexture(asset);
-          if (presentationChanged) this.#invalidatePresentation();
-          else this.#publish();
-        },
         this.#persistentGpuBudget,
         this.#asyncPreparation.runForeground,
         {
@@ -1767,7 +1719,6 @@ export class CanvasRoot implements RendererRoot {
           },
         },
         this.#frameUploadBudget,
-        this.#etc2Available,
         this.#asyncPreparation.run,
         this.#anisotropy,
       );
@@ -1788,13 +1739,6 @@ export class CanvasRoot implements RendererRoot {
       this.#releaseUploadedTextures();
       this.#captureScheduledFailure(error);
     });
-  }
-
-  #publishVirtualTexture(asset: VirtualTextureAssetRef): void {
-    this.#virtualTextureListeners.publish(
-      virtualTextureAssetKey(asset),
-      this.#platform.onListenerError,
-    );
   }
 
   #beginFrame(): void {

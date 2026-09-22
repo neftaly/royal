@@ -3,7 +3,7 @@ import {
   OrbitControls,
   useOrbitCamera,
   useOrbitCameraView,
-  useVirtualTextureAssetStatus,
+  useRendererSnapshot,
 } from '@royal/react';
 import {
   imageTexture,
@@ -11,7 +11,6 @@ import {
   planeGeometry,
   scene,
   unlitMaterial,
-  virtualTexture,
 } from '@royal/react/scene';
 import { useMemo, useState, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
@@ -19,9 +18,9 @@ import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { transparentViewportClearColor } from '../presentation';
 const fixtureRoot = import.meta.env.BASE_URL + 'fixtures/virtual-texture-stress/';
 const mapGeometry = planeGeometry([8, 8]);
-const mapTexture = virtualTexture({
+const mapTexture = imageTexture({
   sampler: { magFilter: 'nearest', minFilter: 'nearest', wrapS: 'clamp-to-edge', wrapT: 'clamp-to-edge' },
-  manifestUri: `${fixtureRoot}map.vt.json`,
+  src: `${fixtureRoot}map.png`,
 });
 const mapMaterial = unlitMaterial({
   texture: mapTexture,
@@ -49,12 +48,13 @@ type ViewName = keyof typeof views;
 const groundCloseView = { ...views.Ground, distance: 0.1 } as const;
 
 const VirtualTextureStatusLabel = (): ReactNode => {
-  const status = useVirtualTextureAssetStatus(mapTexture);
+  const status = useRendererSnapshot()?.resources.virtualTextures;
+  const phase = status === undefined ? "idle" : status.pendingPages > 0 ? "loading" : "ready";
   return (
     <>
-      <BenchmarkRendererSnapshot virtualTextureStatus={status} />
-      <output className="status" data-vt-status={status.status}>
-        {status.status} · {status.residentPages} resident · {status.pendingPages} pending · {status.failedPages} failed
+      <BenchmarkRendererSnapshot />
+      <output className="status" data-vt-status={phase}>
+        {phase} · {status?.residentPages ?? 0} resident · {status?.pendingPages ?? 0} pending · {status?.failedPages ?? 0} failed
       </output>
     </>
   );
@@ -110,7 +110,7 @@ export const VirtualTextureStress = (): ReactNode => {
         <div className="vt-stress-summary">
           <img alt="Map orientation reference" height="52" src={`${fixtureRoot}map-overview.svg`} width="52" />
           <div>
-            <strong>4096² virtual map · 85 logical pages</strong>
+            <strong>4096² map · automatic texture paging</strong>
             <span>Use a region preset, then orbit, pan, or zoom across the labeled atlas.</span>
           </div>
         </div>

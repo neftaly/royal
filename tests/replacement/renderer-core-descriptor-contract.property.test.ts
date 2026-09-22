@@ -11,7 +11,6 @@ import {
   studioEnvironment,
   textureAsset,
   unlitMaterial,
-  virtualTexture,
   wireframeMaterial,
 } from "@royal/renderer-core";
 import { forEachFuzzCase, type SeededRandom } from "../fuzz";
@@ -115,21 +114,6 @@ describe("renderer-core descriptor properties", () => {
       const material = random.boolean()
         ? standardMaterial({ texture })
         : unlitMaterial({ texture });
-      const virtualContentKey = `sha256:vt-${seed.toString(16)}`;
-      const virtualSampler = {
-        magFilter: sampler.magFilter,
-        wrapT: sampler.wrapS,
-      };
-      const virtual = virtualTexture({
-        contentKey: virtualContentKey,
-        sampler: virtualSampler,
-        manifestUri: `/textures/${seed.toString(16)}.vt.json`,
-        version: `vt-${seed.toString(16)}`,
-      });
-      const virtualMaterial = random.boolean()
-        ? standardMaterial({ texture: virtual })
-        : unlitMaterial({ texture: virtual });
-
       expect(texture.colorSpace, `${label} image texture srgb default`).toBe("srgb");
       expect(texture, `${label} friendly image texture omits cross-URI identity`).not.toHaveProperty("contentKey");
       expect(texture.sampler, `${label} sampler default merge`).toEqual({
@@ -151,14 +135,7 @@ describe("renderer-core descriptor properties", () => {
         version: seed,
       });
 
-      expect(virtual, `${label} virtual texture source alias`).toMatchObject({
-        contentKey: virtualContentKey,
-        kind: "virtual-asset",
-        manifestUri: `/textures/${seed.toString(16)}.vt.json`,
-        sampler: virtualSampler,
-        version: `vt-${seed.toString(16)}`,
-      });
-      expect(virtualMaterial.baseColor, `${label} material keeps virtual texture identity`).toBe(virtual);
+
     });
   });
 

@@ -3,7 +3,6 @@ import {
   gltfAsset,
   prefilteredEnvironment,
   textureAsset,
-  virtualTexture,
   type GltfAssetInput,
   type Scene,
 } from "@royal/renderer-core";
@@ -45,10 +44,6 @@ import {
   type TextureAssetStatusIdentity,
   type TextureAssetStatusInput,
   useTextureAssetStatus,
-  type VirtualTextureAssetStatus,
-  type VirtualTextureAssetStatusIdentity,
-  type VirtualTextureAssetStatusInput,
-  useVirtualTextureAssetStatus,
   useVisitGltfAssetGeometry,
   useOrbitCamera,
   useOrbitCameraView,
@@ -122,7 +117,6 @@ describe("replacement React public API", () => {
       "useRendererLifecycle",
       "useRendererSnapshot",
       "useTextureAssetStatus",
-      "useVirtualTextureAssetStatus",
       "useVisitGltfAssetGeometry",
     ]);
     expect(Object.keys(sceneApi).sort()).toEqual([
@@ -166,7 +160,6 @@ describe("replacement React public API", () => {
       "transformGltfAssetBounds",
       "triangleGeometry",
       "unlitMaterial",
-      "virtualTexture",
       "wireframeMaterial",
       "zoomOrbitCameraView",
     ]);
@@ -232,7 +225,6 @@ describe("replacement React public API", () => {
     expectTypeOf(useCanvasSize).toBeFunction();
     expectTypeOf(useGltfAssetStatus).toBeFunction();
     expectTypeOf(useTextureAssetStatus).toBeFunction();
-    expectTypeOf(useVirtualTextureAssetStatus).toBeFunction();
     expectTypeOf(usePrefilteredEnvironmentStatus).toBeFunction();
     expectTypeOf(createOrbitCameraController).toBeFunction();
     expectTypeOf(createOrbitCameraController({ initial: { distance: 3 } }).camera)
@@ -255,8 +247,6 @@ describe("replacement React public API", () => {
       .toMatchTypeOf<TextureAssetStatusIdentity>();
     expectTypeOf({ src: "/studio.ktx", version: "v2" })
       .toMatchTypeOf<PrefilteredEnvironmentStatusIdentity>();
-    expectTypeOf({ manifestUri: "/map.vt.json", version: "v2" })
-      .toMatchTypeOf<VirtualTextureAssetStatusIdentity>();
     expectTypeOf(gltf("/model.glb").asset).toMatchTypeOf<GltfAssetStatusInput>();
     expectTypeOf({ index: 2, name: "Interior Wine" })
       .toMatchTypeOf<GltfDocumentScene>();
@@ -264,8 +254,6 @@ describe("replacement React public API", () => {
       .toMatchTypeOf<TextureAssetStatusInput>();
     expectTypeOf(prefilteredEnvironment({ src: "/studio.ktx" }))
       .toMatchTypeOf<PrefilteredEnvironmentStatusInput>();
-    expectTypeOf(virtualTexture({ manifestUri: "/map.vt.json" }))
-      .toMatchTypeOf<VirtualTextureAssetStatusInput>();
   });
 
   it("keeps pure orbit authoring on the scene entrypoint", () => {
@@ -323,11 +311,9 @@ describe("replacement React public API", () => {
     expect(html).toContain("<output>idle</output>");
   });
 
-  it("server-renders authored VT status as idle before root mount", () => {
-    const Status = () => createElement(
-      "output",
-      null,
-      useVirtualTextureAssetStatus("/map.vt.json").status,
+  it("accepts plain texture status identities", () => {
+    const Status = () => createElement("output", null,
+      useTextureAssetStatus({ src: "/texture.png", version: 2 }).status,
     );
     const html = renderToStaticMarkup(createElement(
       Canvas,
@@ -335,20 +321,6 @@ describe("replacement React public API", () => {
       createElement(Status),
     ));
     expect(html).toContain("<output>idle</output>");
-  });
-
-  it("accepts plain texture and virtual-texture status identities", () => {
-    const Status = () => createElement("output", null,
-      useTextureAssetStatus({ src: "/texture.png", version: 2 }).status,
-      ":",
-      useVirtualTextureAssetStatus({ manifestUri: "/map.vt.json", version: 2 }).status,
-    );
-    const html = renderToStaticMarkup(createElement(
-      Canvas,
-      { scene: emptyScene },
-      createElement(Status),
-    ));
-    expect(html).toContain("<output>idle:idle</output>");
   });
 
   it("rejects misspelled focused-status identity fields", () => {
@@ -504,26 +476,6 @@ describe("replacement React public API", () => {
       { scene: emptyScene },
       createElement(Status),
     ))).toThrow("texture asset contentKey must be a non-empty string");
-  });
-
-  it("exposes one predictable error field for failed and unsupported VT", () => {
-    const message = (status: VirtualTextureAssetStatus): string | undefined =>
-      status.status === "error" || status.status === "unsupported"
-        ? status.error
-        : undefined;
-    expect(message({
-      error: "atlas is too large",
-      failedPages: 0,
-      pendingPages: 0,
-      residentPages: 0,
-      status: "unsupported",
-    })).toBe("atlas is too large");
-    expect(message({
-      failedPages: 0,
-      pendingPages: 0,
-      residentPages: 2,
-      status: "ready",
-    })).toBeUndefined();
   });
 
   it("makes every renderer creation default explicit", () => {

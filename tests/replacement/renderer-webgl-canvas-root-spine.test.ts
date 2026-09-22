@@ -20,7 +20,6 @@ import {
   standardMaterial,
   studioEnvironment,
   unlitMaterial,
-  virtualTexture,
   wireframeMaterial,
   type RenderObjectHandle,
   type Scene,
@@ -1879,10 +1878,6 @@ describe("clear-only canvas root", () => {
     )).toThrow("Royal subscriber must be a function");
     expect(() => root.subscribeTextureAsset(
       imageTexture("/disposed.png"),
-      null as unknown as () => void,
-    )).toThrow("Royal subscriber must be a function");
-    expect(() => root.subscribeVirtualTextureAsset(
-      virtualTexture("/disposed.vt.json"),
       null as unknown as () => void,
     )).toThrow("Royal subscriber must be a function");
   });

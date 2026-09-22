@@ -4,7 +4,6 @@ import {
   useGltfAssetStatus,
   type GltfAssetStatus,
   type RendererRootSnapshot,
-  type VirtualTextureAssetStatus,
 } from '@royal/react';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import {
@@ -16,7 +15,6 @@ import {
 export type BenchmarkRendererSnapshotProps = Readonly<{
   asset?: GltfAssetRef;
   status?: GltfAssetStatus;
-  virtualTextureStatus?: VirtualTextureAssetStatus;
 }>;
 
 /** Observes one glTF asset for examples that do not otherwise render its status. */
@@ -25,18 +23,6 @@ export const BenchmarkGltfRendererSnapshot = ({
 }: Readonly<{ asset: GltfAssetRef }>): ReactNode => {
   const status = useGltfAssetStatus(asset);
   return <BenchmarkRendererSnapshot asset={asset} status={status} />;
-};
-
-/** @internal Focused VT adapter; it does not poll the root frame snapshot. */
-export const benchmarkVirtualTextureDiagnostics = (
-  status: VirtualTextureAssetStatus | undefined,
-): Record<string, number> | null => status === undefined ? null : {
-  failedPages: status.failedPages,
-  manifestFailures: status.status === 'error' || status.status === 'unsupported' ? 1 : 0,
-  manifestRequests: status.status === 'idle' ? 0 : 1,
-  manifestsReady: status.status === 'ready' ? 1 : 0,
-  pendingPages: status.pendingPages,
-  residentPages: status.residentPages,
 };
 
 const benchmarkAutomaticVirtualTextureDiagnostics = (
@@ -101,13 +87,11 @@ export const benchmarkGltfDiagnostics = (
 export const BenchmarkRendererSnapshot = ({
   asset,
   status,
-  virtualTextureStatus,
 }: BenchmarkRendererSnapshotProps = {}): ReactNode => {
   const root = useCanvasRoot();
-  const observation = useRef({ asset, status, virtualTextureStatus });
+  const observation = useRef({ asset, status });
   observation.current.asset = asset;
   observation.current.status = status;
-  observation.current.virtualTextureStatus = virtualTextureStatus;
 
   useLayoutEffect(() => {
     if (root === null) return undefined;
@@ -161,8 +145,7 @@ export const BenchmarkRendererSnapshot = ({
           pendingSurfaceUploads: current.resources.geometryUploads.pendingSurfaces,
         },
         textureResidency: benchmarkTextureResidency(current.resources.imageTextures),
-        virtualTexturing: benchmarkVirtualTextureDiagnostics(observed.virtualTextureStatus)
-          ?? benchmarkAutomaticVirtualTextureDiagnostics(current.resources.virtualTextures),
+        virtualTexturing: benchmarkAutomaticVirtualTextureDiagnostics(current.resources.virtualTextures),
       };
     };
     const renderNow = (): void => {

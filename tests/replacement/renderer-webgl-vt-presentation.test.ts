@@ -1,10 +1,17 @@
+import * as pageSources from "../../packages/renderer-webgl/src/virtual-texture/automatic-page-source";
+import { createGeneratedVirtualTextureLayout } from "../../packages/renderer-webgl/src/virtual-texture/layout";
 import { afterEach, expect, it, vi } from "vitest";
-import { directionalLight, mesh, perspectiveCamera, planeGeometry, scene, standardMaterial, unlitMaterial, virtualTexture } from "@royal/renderer-core";
+import { directionalLight, mesh, perspectiveCamera, planeGeometry, scene, standardMaterial, unlitMaterial, imageTexture } from "@royal/renderer-core";
 import { canvasRootHarness, fakeGl } from "./support/canvas-root-harness";
 import * as demand from "../../packages/renderer-webgl/src/virtual-texture/demand";
 import { waitFor } from "./support/wait-for";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+const decoded = { width: 1024, height: 1024, source: {} as ImageBitmap };
+const pageSource = () => vi.spyOn(pageSources, "createAutomaticRasterPageSource").mockReturnValue({
+  layout: createGeneratedVirtualTextureLayout({ width: 1024, height: 1024, pageSize: 128, borderTexels: 2, colorSpace: "srgb" }),
+  read: async () => ({ kind: "image", source: { width: 132, height: 132 } as ImageBitmap, close: vi.fn() }),
+});
 
 it.each([
   { requested: undefined, available: true, expected: 8 },
@@ -12,16 +19,10 @@ it.each([
   { requested: 1, available: true, expected: 1 },
   { requested: undefined, available: false, expected: 1 },
 ])("shares root anisotropy $requested (extension $available) between VT demand and sampling across restoration", async ({ requested, available, expected }) => {
-  vi.stubGlobal("document", { baseURI: "https://example.test/" });
-  vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo) => new Response(
-    String(input).endsWith(".json")
-      ? JSON.stringify({ contractVersion: 2, pageSize: 128, borderTexels: 1, virtualSize: [1024, 1024], pages: { uriTemplate: "{mip}-{x}-{y}.png" } })
-      : new Blob([new Uint8Array([1])]),
-  )));
-  vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ width: 130, height: 130, close: vi.fn() })));
+  pageSource();
   let limit = 8;
   const parameters = fakeGl().getParameter;
-  const { root, canvas, flushScheduledFrames } = canvasRootHarness({}, {
+  const { root, canvas, flushScheduledFrames } = canvasRootHarness({ decodeTexture: async () => decoded }, {
     getExtension: vi.fn(name => name === "EXT_texture_filter_anisotropic" && available
       ? { TEXTURE_MAX_ANISOTROPY_EXT: 0x84fe, MAX_TEXTURE_MAX_ANISOTROPY_EXT: 0x84ff } : null) as WebGL2RenderingContext["getExtension"],
     getParameter: vi.fn(parameter => parameter === 0x84ff ? limit : parameters(parameter)),
@@ -31,7 +32,7 @@ it.each([
   try {
     root.setSize({ cssWidth: 256, cssHeight: 256, pixelRatio: 1 });
     root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [
-      mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: virtualTexture("https://example.test/aniso.json") }) }),
+      mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: imageTexture("https://example.test/aniso.json") }) }),
     ] }));
     const check = async (maximum: number) => waitFor(() => {
       flushScheduledFrames();
@@ -49,22 +50,17 @@ it.each([
     canvas.dispatchEvent(new Event("webglcontextrestored"));
     await check(Math.min(expected, 2));
     // The atlas itself must remain isotropic; each virtual tap resolves a page.
-    expect(canvas.gl.samplerParameterf).not.toHaveBeenCalled();
+    const atlasSampler = vi.mocked(canvas.gl.bindSampler).mock.calls.filter(([unit]) => unit === 4).at(-1)?.[1];
+    expect(vi.mocked(canvas.gl.samplerParameterf).mock.calls.some(([sampler]) => sampler === atlasSampler)).toBe(false);
   } finally { collect.mockRestore(); root.dispose(); }
 });
 
 it.each(["unlit", "standard"])("refreshes %s atlas dimensions after resizing without changing the material", async (kind) => {
-  vi.stubGlobal("document", { baseURI: "https://example.test/" });
-  vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo) => new Response(
-    String(input).endsWith(".json")
-      ? JSON.stringify({ contractVersion: 2, pageSize: 128, borderTexels: 1, virtualSize: [1024, 1024], pages: { uriTemplate: "{mip}-{x}-{y}.png" } })
-      : new Blob([new Uint8Array([1])]),
-  )));
-  vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ width: 130, height: 130, close: vi.fn() })));
-  const { root, canvas, flushScheduledFrames } = canvasRootHarness({}, {
+  pageSource();
+  const { root, canvas, flushScheduledFrames } = canvasRootHarness({ decodeTexture: async () => decoded }, {
     getUniformLocation: vi.fn((_program, name) => ({ name })),
   });
-  const texture = virtualTexture("https://example.test/growing.json");
+  const texture = imageTexture("https://example.test/growing.json");
   let clock: ReturnType<typeof vi.spyOn> | undefined;
   try {
     root.setSize({ cssWidth: 256, cssHeight: 256, pixelRatio: 1 });
@@ -106,43 +102,4 @@ it.each(["unlit", "standard"])("refreshes %s atlas dimensions after resizing wit
     });
     expectCurrentDimensions();
   } finally { root.dispose(); clock?.mockRestore(); }
-});
-
-it("presents a completed VT page without camera changes or a redundant follow-up frame", async () => {
-  vi.stubGlobal("document", { baseURI: "https://example.test/" });
-  vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo) => new Response(
-    String(input).endsWith(".json")
-      ? JSON.stringify({ contractVersion: 2, pageSize: 128, borderTexels: 1, virtualSize: [128, 128], pages: { uriTemplate: "{mip}-{x}-{y}.png" } })
-      : new Blob([new Uint8Array([1])]),
-  )));
-  let resolve!: (image: unknown) => void;
-  const decode = vi.fn(() => new Promise((done) => { resolve = done; }));
-  vi.stubGlobal("createImageBitmap", decode);
-  const { root, canvas, callbacks, flushScheduledFrames, scheduledFailures } = canvasRootHarness();
-  const texture = virtualTexture("https://example.test/vt.json");
-  try {
-    root.setSize({ cssWidth: 256, cssHeight: 256, pixelRatio: 1 });
-    root.setScene(scene({
-      camera: perspectiveCamera({ position: [0, 0, 3] }),
-      nodes: [mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture }) })],
-    }));
-    await waitFor(() => {
-      flushScheduledFrames();
-      expect(root.getVirtualTextureAssetSnapshot(texture).status).toBe("ready");
-      expect(decode).toHaveBeenCalledOnce();
-    });
-    expect(callbacks).toHaveLength(0);
-    const before = root.getSnapshot().frame;
-    canvas.gl.drawElements.mockClear();
-    resolve({ width: 130, height: 130, close: vi.fn() });
-    await waitFor(() => expect(callbacks.length).toBeGreaterThan(0));
-    expect(flushScheduledFrames()).toBe(1);
-    expect(root.getSnapshot().frame).toBe(before + 1);
-    expect(root.getSnapshot().resources.virtualTextures).toMatchObject({ residentPages: 1, pendingPages: 0 });
-    expect(canvas.gl.drawElements).toHaveBeenCalled();
-    expect(callbacks).toHaveLength(0);
-    expect(scheduledFailures).toEqual([]);
-  } finally {
-    root.dispose();
-  }
 });

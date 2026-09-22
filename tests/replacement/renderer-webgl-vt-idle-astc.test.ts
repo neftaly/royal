@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { imageTexture, mesh, perspectiveCamera, planeGeometry, scene, unlitMaterial, virtualTexture } from "@royal/renderer-core";
+import { imageTexture, mesh, perspectiveCamera, planeGeometry, scene, unlitMaterial } from "@royal/renderer-core";
 import { createBrowserVirtualTextureRuntime } from "../../packages/renderer-webgl/src/virtual-texture/runtime";
-import { parseVirtualTextureManifest } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
+import { createGeneratedVirtualTextureLayout } from "../../packages/renderer-webgl/src/virtual-texture/layout";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
 import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
@@ -37,21 +37,20 @@ const harness = async (failAstcProbe = false) => {
   vi.stubGlobal("Worker", EncoderWorker);
   vi.stubGlobal("document", { baseURI: "https://example.test/" });
   vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ width: 132, height: 132, close: vi.fn() })));
-  const manifest = parseVirtualTextureManifest({ contractVersion: 2, pageSize: 128, borderTexels: 2,
-    virtualSize: [1024, 1024], pages: { uriTemplate: "{mip}-{x}-{y}.png" } });
+  const manifest = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", pageSize: 128, borderTexels: 2, width: 1024, height: 1024 });
   let held = false;
   const gates: (() => void)[] = [];
   const read = vi.fn(async () => {
     if (held) await new Promise<void>(resolve => gates.push(resolve));
     return { kind: "image" as const, source: { width: 132, height: 132 } as HTMLCanvasElement, close: vi.fn() };
   });
-  vi.spyOn(sources, "createAutomaticRasterPageSource").mockReturnValue({ manifest, read });
+  vi.spyOn(sources, "createAutomaticRasterPageSource").mockImplementation((_source, _sampler, colorSpace) => ({ layout: { ...manifest, colorSpace }, read }));
   const decoded = { width: 1024, height: 1024, source: {} as ImageBitmap };
   const asset = imageTexture("https://example.test/art.png");
   const gl = fakeGl();
   Object.assign(gl, { getExtension: vi.fn(() => ({ getSupportedProfiles: () => { if (failAstcProbe) throw new Error("ASTC profile query failed"); return ["ldr"]; } })), compressedTexSubImage2D: vi.fn() });
   const budget = new PersistentGpuBudgetOwner();
-  const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn(), budget, undefined, {
+  const runtime = createBrowserVirtualTextureRuntime(gl, budget, undefined, {
     decoded: () => decoded, acquireDecoded: () => ({ source: decoded, release: vi.fn() }), onChanged: vi.fn(),
   });
   const matrix = identityMat4();
@@ -105,8 +104,7 @@ it("grants no encoder steps while newly demanded pages are being prepared", asyn
 });
 
 it("encodes the atlas selector independently of inherited mip coverage", () => {
-  const manifest = parseVirtualTextureManifest({ contractVersion: 2, pageSize: 128, borderTexels: 2,
-    virtualSize: [256, 256], pages: { uriTemplate: "{mip}-{x}-{y}.png" } });
+  const manifest = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", pageSize: 128, borderTexels: 2, width: 256, height: 256 });
   const bytes = new Uint8Array(manifest.tableByteLength);
   writeVirtualTexturePageTable(manifest, new Map([[1, COMPRESSED_SLOT_BASE + 3], [0, 1]]), 2, bytes, 4);
   expect(Array.from(bytes.subarray(0, 4))).toEqual([1, 0, 0, 255]);
@@ -319,19 +317,12 @@ it("keeps another pool streaming while automatic atlas validation stalls", async
     h.runtime.update([h.view]);
     for (let i = 0; i < 100; i++) await Promise.resolve();
     expect(h.runtime.runtimeSnapshot().pendingPages).toBe(2);
-    vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo) => new Response(
-      String(input).endsWith(".json") ? JSON.stringify({
-        contractVersion: 2, pageSize: 128, borderTexels: 1, virtualSize: [256, 256],
-        pages: { uriTemplate: "{mip}-{x}-{y}.png" },
-      }) : new Blob([new Uint8Array([1])]),
-    )));
-    vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ width: 130, height: 130, close: vi.fn() })));
-    const other = virtualTexture("https://example.test/other.json");
+    const other = imageTexture({ src: "https://example.test/other.png", colorSpace: "linear" });
     h.runtime.setScene(prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}), nodes: [h.asset, other].map(texture =>
       mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture }) })),
     })));
     for (let i = 0; i < 30; i++) await h.frame();
-    expect(h.runtime.snapshot(other).residentPages).toBeGreaterThan(0);
+    expect(h.runtime.automaticBinding(other)).toBeDefined();
     expect(h.runtime.automaticBinding(h.asset)?.atlas.texture).toBe(oldAtlas);
     expect(h.runtime.runtimeSnapshot().pendingPageBytes).toBeLessThanOrEqual(2 * 132 * 132 * 4);
   } finally { h.runtime.dispose(); }

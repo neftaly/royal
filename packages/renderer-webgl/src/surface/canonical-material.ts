@@ -4,7 +4,6 @@ import {
   type ScreenSpacePartition,
   type TextureAssetRef,
   type TextureColorSpace,
-  type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import {
   decodedTextureKey,
@@ -32,7 +31,6 @@ export type CanonicalUnlitMaterial = Readonly<{
   alphaCutoff?: number;
   baseColor: LinearRgba;
   baseColorAsset?: TextureSourceRef;
-  baseColorVirtualAsset?: VirtualTextureAssetRef;
   baseColorTexture?: CanonicalTextureBinding;
   baseColorTextureCoordinates?: CanonicalTextureCoordinates;
   coverage?: ScreenSpacePartition;
@@ -48,7 +46,6 @@ export type CanonicalStandardMaterial = Readonly<{
   attenuationDistance?: number;
   baseColor: LinearRgba;
   baseColorAsset?: TextureSourceRef;
-  baseColorVirtualAsset?: VirtualTextureAssetRef;
   baseColorTexture?: CanonicalTextureBinding;
   baseColorTextureCoordinates?: CanonicalTextureCoordinates;
   doubleSided?: true;
@@ -140,7 +137,7 @@ export const canonicalMaterialUsesTextureCoordinateSet = (
   set: 0 | 1,
 ): boolean => {
   if (
-    (material.baseColorAsset !== undefined || material.baseColorVirtualAsset !== undefined)
+    material.baseColorAsset !== undefined
     && (material.baseColorTextureCoordinates?.row0[3] ?? 0) === set
   ) return true;
   if (material.kind === "unlit") return false;
@@ -268,7 +265,6 @@ export const prepareCanonicalMaterialSource = (material: Material): CanonicalSur
     ...(baseColor[3] < 1 ? { alphaBlend: true as const } : {}),
     baseColor,
     ...(source.kind === "asset" ? { baseColorAsset: source } : {}),
-    ...(source.kind === "virtual-asset" ? { baseColorVirtualAsset: source } : {}),
     requiresTextureCoordinates: source.kind !== "solid",
   };
   return material.kind !== "standard"

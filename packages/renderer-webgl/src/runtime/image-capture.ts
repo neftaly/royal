@@ -184,11 +184,6 @@ const captureRootImage = (host: RootImageCaptureHost, options: RendererImageCapt
       if (asset.status === "error") throw new Error(asset.error);
       if (asset.status !== "ready") return false;
     }
-    for (const texture of scene.virtualTextureAssets) {
-      const asset = root.getVirtualTextureAssetSnapshot(texture);
-      if (asset.status === "error" || asset.status === "unsupported") throw new Error(asset.error);
-      if (asset.status !== "ready") return false;
-    }
     const resources = root.getSnapshot().resources;
     if (resources.geometryUploads.pendingSurfaces > 0) return false;
     const vt = resources.virtualTextures;

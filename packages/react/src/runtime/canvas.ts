@@ -12,6 +12,7 @@ import {
   RendererContextCreationError,
   resolveRendererRootOptions,
   type RendererRootOptions,
+  type TextureInspection,
   type ResolvedRendererRootOptions,
   type RendererRoot,
   type GltfAssetGeometryVisitor,
@@ -74,6 +75,8 @@ export interface CanvasProps
   readonly gltfAssetClaims?: readonly GltfAssetInput[];
   /** Immutable WebGL creation options. A semantic change replaces the canvas and root. */
   readonly rendererOptions?: RendererRootOptions;
+  /** Asynchronous texture policy; key changes replace the root and invalidate decisions. */
+  readonly textureInspection?: TextureInspection;
   /** Active root, or `null` before mount and after release. */
   readonly rendererRef?: Ref<RendererRoot>;
   /** React handlers keyed by one stable `pickingId` declared in the scene. */
@@ -143,7 +146,7 @@ export const createCanvasRootRecovery = (
 
 /** Private identity for exact immutable root-creation semantics. */
 const rendererRootOptionsKey = (options: ResolvedRendererRootOptions): string =>
-  `${options.alpha ? 1 : 0}${options.antialias ? 1 : 0}:${options.persistentGpuByteBudget}:${options.anisotropy}`;
+  `${options.alpha ? 1 : 0}${options.antialias ? 1 : 0}:${options.persistentGpuByteBudget}:${options.anisotropy}:${JSON.stringify(options.textureInspection?.key ?? null)}`;
 
 /** A root belongs only to the exact canvas generation that created it. */
 const activeCanvasRuntime = (
@@ -282,13 +285,27 @@ export const Canvas = ({
   pixelRatio,
   ref,
   rendererOptions,
+  textureInspection,
   rendererRef,
   scene,
   scenePointerEvents,
   ...canvasProps
 }: CanvasProps): ReactNode => {
   const resolvedPixelRatio = resolveCanvasPixelRatio(pixelRatio);
-  const resolvedOptions = resolveRendererRootOptions(rendererOptions);
+  const configuredOptions = resolveRendererRootOptions({ ...rendererOptions,
+    ...(textureInspection === undefined ? {} : { textureInspection }) });
+  const policy = configuredOptions.textureInspection;
+  const policyRef = useRef(policy);
+  useLayoutEffect(() => { policyRef.current = policy; });
+  const stablePolicy = useMemo(() => policy === undefined ? undefined : {
+    key: policy.key,
+    allow: (image: HTMLCanvasElement, signal: AbortSignal) => {
+      const current = policyRef.current;
+      if (current === undefined || current.key !== policy.key) return Promise.reject(new Error("Royal texture inspection policy changed"));
+      return current.allow(image, signal);
+    },
+  }, [policy?.key]);
+  const resolvedOptions = { ...configuredOptions, ...(stablePolicy === undefined ? {} : { textureInspection: stablePolicy }) };
   const optionsKey = rendererRootOptionsKey(resolvedOptions);
   const scenePickingIndex = useMemo(() => createScenePickingIndex(scene), [scene]);
   const resolvedGltfAssetClaims = useMemo(

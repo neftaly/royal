@@ -110,15 +110,11 @@ export type {
   TextureSampler,
   TextureSamplerFilter,
   TextureSamplerWrap,
-  VirtualTextureAssetOptions,
-  VirtualTextureAssetRef,
-  VirtualTextureInput
 } from './texture';
 export {
   imageTexture,
   solidTexture,
   textureAsset,
-  virtualTexture
 } from './texture';
 export type { DirectionalLightNode, DirectionalLightOptions } from './directional-light';
 export { directionalLight } from './directional-light';

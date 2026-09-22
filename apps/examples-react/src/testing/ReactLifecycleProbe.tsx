@@ -3,7 +3,6 @@ import {
   useGltfAssetStatus,
   useInvalidate,
   useRendererLifecycle,
-  useVirtualTextureAssetStatus,
 } from '@royal/react';
 import {
   boxGeometry,
@@ -13,7 +12,7 @@ import {
   scene,
   solidTexture,
   unlitMaterial,
-  virtualTexture,
+  imageTexture,
 } from '@royal/react/scene';
 import { Component, useCallback, useRef, useState, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../examples/BenchmarkRendererSnapshot';
@@ -37,7 +36,7 @@ const ordinaryScene = scene({
 const lifecycleScenePointerEvents = {
   'lifecycle-probe': { onPointerMove: (): void => undefined },
 } as const;
-const probeVirtualTexture = virtualTexture({ manifestUri: `${fixtureRoot}map.vt.json` });
+const probeVirtualTexture = imageTexture({ src: `${fixtureRoot}map.png` });
 const virtualTextureScene = scene({
   camera,
   nodes: [mesh({
@@ -55,9 +54,7 @@ const ActiveFrameProbe = (): ReactNode => {
 };
 
 const RendererBenchmarkProbe = (): ReactNode => (
-  <BenchmarkRendererSnapshot
-    virtualTextureStatus={useVirtualTextureAssetStatus(probeVirtualTexture)}
-  />
+  <BenchmarkRendererSnapshot />
 );
 
 const FailingFrameProbe = (): ReactNode => {

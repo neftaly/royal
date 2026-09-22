@@ -24,6 +24,7 @@ export type PrefilteredEnvironmentAssetSnapshot =
 export type PrefilteredEnvironmentAssetOwnerOptions = Readonly<{
   onAssetChanged: () => void;
   onListenerError: (error: unknown) => void;
+  inspect?: (key: string, prepared: PreparedRoyalEnvironment, signal: AbortSignal) => Promise<void>;
   prepare?: (source: ArrayBuffer) => Promise<PreparedRoyalEnvironment>;
   read?: (src: string, signal: AbortSignal) => Promise<ArrayBuffer>;
   schedule?: AsyncPreparationScheduler;
@@ -72,7 +73,7 @@ export class PrefilteredEnvironmentAssetOwner {
   #active: ActiveEnvironment | undefined;
   #disposed = false;
   readonly #listeners = new KeyedRetainedListeners<string>();
-  readonly #options: Required<PrefilteredEnvironmentAssetOwnerOptions>;
+  readonly #options: Required<Omit<PrefilteredEnvironmentAssetOwnerOptions, "inspect">> & Pick<PrefilteredEnvironmentAssetOwnerOptions, "inspect">;
 
   constructor(options: PrefilteredEnvironmentAssetOwnerOptions) {
     this.#options = {
@@ -153,6 +154,8 @@ export class PrefilteredEnvironmentAssetOwner {
         const source = await this.#options.read(src, active.controller.signal);
         return this.#options.prepare(source);
       });
+      if (this.#disposed || this.#active !== active || active.controller.signal.aborted) return;
+      if (this.#options.inspect !== undefined) await this.#options.inspect(active.key, result, active.controller.signal);
       if (this.#disposed || this.#active !== active || active.controller.signal.aborted) return;
       active.prepared = result;
       active.snapshot = {

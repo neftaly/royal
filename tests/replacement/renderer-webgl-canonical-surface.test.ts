@@ -16,7 +16,6 @@ import {
   studioEnvironment,
   triangleGeometry,
   unlitMaterial,
-  virtualTexture,
   wireframeMaterial,
   type RenderObjectHandle,
 } from "@royal/renderer-core";
@@ -401,27 +400,6 @@ describe("canonical direct surface lowering", () => {
     expect(prepared.pickSurfaces[0]).not.toHaveProperty("materialSource");
     expect(prepared.pickSurfaces[0]).not.toHaveProperty("alphaMaskSampler");
     expect(prepared.alphaMaskTextureAssets).toEqual([]);
-  });
-
-  it("retains authored virtual textures as an optional canonical binding", () => {
-    const texture = virtualTexture({
-      manifestUri: "/map.vt.json",
-      sampler: { wrapS: "repeat", wrapT: "mirrored-repeat" },
-    });
-    const prepared = prepareCanonicalSurfaceScene(scene({
-      camera: perspectiveCamera({}),
-      nodes: [mesh({
-        geometry: planeGeometry(2),
-        material: unlitMaterial({ texture }),
-      })],
-    }));
-    expect(prepared.textureAssets).toEqual([]);
-    expect(prepared.virtualTextureAssets).toEqual([texture]);
-    expect(prepared.surfaces[0]!.material).toMatchObject({
-      baseColorVirtualAsset: texture,
-      requiresTextureCoordinates: true,
-    });
-    expect(prepared.surfaces[0]!.geometry.textureCoordinates0).toBeInstanceOf(Float32Array);
   });
 
   it("publishes one decoded texture without rebuilding unrelated scene structure", () => {

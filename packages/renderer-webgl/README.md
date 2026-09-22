@@ -214,16 +214,7 @@ const info = inspectNativeKtx2(encodedBytes);
 console.log(info.format, info.colorSpace, info.width, info.height, info.storageBytes);
 ```
 
-Native ETC2 RGBA, ASTC LDR 6x6/8x8, and BC1 RGBA/BC3/BC7 KTX2 use one
-texture and virtual-texture upload path. `inspectEtc2Ktx2` remains available
-for strict ETC2 tooling. Ordinary sources use `.ktx2` or `image/ktx2`; VT
-manifests choose `ktx2-etc2`, `ktx2-astc-6x6`, `ktx2-astc-8x8`, `ktx2-bc1`,
-`ktx2-bc3`, or `ktx2-bc7`. Native KTX2 is not a glTF
-extension. Royal does not attach it to glTF through a private extension and
-does not reinterpret `KHR_texture_basisu`; the latter remains unsupported
-while Royal ships no Basis runtime transcoder. Unsupported native textures
-use the neutral material fallback without crashing rendering; unsupported VT
-settles without downloading pages. Automatic raster pages remain RGBA.
+Native ETC2 RGBA, ASTC LDR 6x6/8x8, and BC1 RGBA/BC3/BC7 KTX2 use the ordinary texture upload path. `inspectEtc2Ktx2` remains available for strict ETC2 tooling. Native KTX2 is not a glTF extension and does not reinterpret `KHR_texture_basisu`; Royal ships no Basis runtime transcoder. Unsupported native textures use the neutral material fallback. Automatic pages derive from decoded raster sources and initially use RGBA storage.
 Native ASTC/BC sources that need retained CPU alpha for exact MASK picking fail
 preparation; use ETC2/raster or an explicit picking proxy for those materials.
 See the [texture contract](../../docs/specs/textures-and-virtual-texturing.md)
@@ -237,3 +228,7 @@ uses maximum coverage across the views, upload admission remains root-wide, and
 Royal re-establishes its GL state after browser runtime work. The session host
 still owns `session.requestAnimationFrame`; React applications should use the
 higher-level `@royal/react/xr` lifecycle instead.
+
+### Consumer texture inspection
+
+An optional `textureInspection: { key, allow }` policy gates image publication on a consumer-owned async predicate. React accepts it directly on `<Canvas>`; the renderer accepts it in root options. See [texture inspection](../../docs/specs/texture-inspection.md) for pixel-based caching, SVG raster freezing, authored mip inspection, and the full contract.

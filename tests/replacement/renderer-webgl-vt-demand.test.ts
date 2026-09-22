@@ -14,17 +14,10 @@ import {
   resetVirtualTextureDemand,
   truncateVirtualTextureDemand,
 } from "../../packages/renderer-webgl/src/virtual-texture/demand";
-import { parseVirtualTextureManifest } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
+import { createGeneratedVirtualTextureLayout } from "../../packages/renderer-webgl/src/virtual-texture/layout";
 import { virtualTextureFootprintSquared } from "../../packages/renderer-webgl/src/virtual-texture/footprint";
 
-const manifest = parseVirtualTextureManifest({
-  borderTexels: 1,
-  contractVersion: 2,
-  mipCount: 3,
-  pageSize: 256,
-  pages: { uriTemplate: "{mip}/{x}/{y}.png" },
-  virtualSize: [1024, 1024],
-});
+const manifest = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", borderTexels: 1, pageSize: 256, width: 1024, height: 1024 });
 const sampler: CanonicalTextureSampler = {
   magFilter: "linear",
   minFilter: "linear-mipmap-linear",
@@ -58,10 +51,9 @@ describe("VT2 clipped projected demand", () => {
   });
 
   it("requests finer oblique detail, preserves face-on demand and still respects budget coarsening", () => {
-    const source = parseVirtualTextureManifest({ borderTexels: 2, contractVersion: 2, pageSize: 128,
-      pages: { uriTemplate: "{mip}/{x}/{y}.png" }, virtualSize: [4096, 4096] });
-    const isotropic = createVirtualTextureDemandWorkspace(512, "coarsest");
-    const anisotropic = createVirtualTextureDemandWorkspace(512, "coarsest");
+    const source = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", borderTexels: 2, pageSize: 128, width: 4096, height: 4096 });
+    const isotropic = createVirtualTextureDemandWorkspace(512);
+    const anisotropic = createVirtualTextureDemandWorkspace(512);
     collectVirtualTextureDemand(isotropic, source, [surface], [view()], sampler, 0, 1);
     collectVirtualTextureDemand(anisotropic, source, [surface], [view()], sampler, 0, 16);
     expect(anisotropic.keys).toEqual(isotropic.keys);
@@ -80,9 +72,8 @@ describe("VT2 clipped projected demand", () => {
   });
 
   it.each(["clamp-to-edge", "repeat", "mirrored-repeat"] as const)("includes directional taps across page and %s boundaries", (wrapS) => {
-    const source = parseVirtualTextureManifest({ borderTexels: 2, contractVersion: 2, pageSize: 128,
-      pages: { uriTemplate: "{mip}/{x}/{y}.png" }, virtualSize: [1024, 1024] });
-    const workspace = createVirtualTextureDemandWorkspace(128, "coarsest");
+    const source = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", borderTexels: 2, pageSize: 128, width: 1024, height: 1024 });
+    const workspace = createVirtualTextureDemandWorkspace(128);
     const slice = { ...surface, textureCoordinates: {
       row0: [0.4998, 0, 0.0001, 0] as const, row1: [0, 1, 0, 0] as const,
     } };
@@ -101,7 +92,7 @@ describe("VT2 clipped projected demand", () => {
   });
 
   it("accumulates bounded visible contribution and preserves it through coarsening", () => {
-    const workspace = createVirtualTextureDemandWorkspace(64, "coarsest");
+    const workspace = createVirtualTextureDemandWorkspace(64);
     collectVirtualTextureDemand(workspace, manifest, [surface], [view()], sampler);
     const total = () => [...workspace.keys].reduce<number>((sum, key) => sum + (workspace.importance.get(key) ?? 0), 0);
     const once = total();
@@ -183,8 +174,8 @@ describe("VT2 clipped projected demand", () => {
     expect([...workspace.keys]).toEqual([...visible.keys]);
   });
 
-  it.each(["all", "coarsest"] as const)("keeps repeated %s demand idempotent after capacity truncation", (ancestors) => {
-    const workspace = createVirtualTextureDemandWorkspace(64, ancestors);
+  it("keeps repeated demand idempotent after capacity truncation", () => {
+    const workspace = createVirtualTextureDemandWorkspace(64);
     const surfaces = [surface];
     const views = [view()];
     const entries = () => Array.from({ length: workspace.count }, (_, index) => [
@@ -200,11 +191,8 @@ describe("VT2 clipped projected demand", () => {
     expect(entries()).toEqual(restored);
   });
   it("requests target pages and one fallback without intermediate levels", () => {
-    const source = parseVirtualTextureManifest({
-      borderTexels: 2, contractVersion: 2, pageSize: 128,
-      pages: { uriTemplate: "{mip}/{x}/{y}.png" }, virtualSize: [16384, 16384],
-    });
-    const workspace = createVirtualTextureDemandWorkspace(512, "coarsest");
+    const source = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", borderTexels: 2, pageSize: 128, width: 16384, height: 16384 });
+    const workspace = createVirtualTextureDemandWorkspace(512);
     collectVirtualTextureDemand(workspace, source, [surface], [view()], { ...sampler, minFilter: "linear-mipmap-nearest" });
     // This plane covers 512 backing pixels: sixteen 128px pages plus coverage.
     expect(workspace.count).toBe(17);
@@ -221,11 +209,8 @@ describe("VT2 clipped projected demand", () => {
     expect(new Set(workspace.mips.slice(0, workspace.count))).toEqual(new Set([7, 6]));
   });
   it("adds only the adjacent blending level to automatic trilinear demand", () => {
-    const source = parseVirtualTextureManifest({
-      borderTexels: 2, contractVersion: 2, pageSize: 128,
-      pages: { uriTemplate: "{mip}/{x}/{y}.png" }, virtualSize: [16384, 16384],
-    });
-    const workspace = createVirtualTextureDemandWorkspace(512, "coarsest");
+    const source = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", borderTexels: 2, pageSize: 128, width: 16384, height: 16384 });
+    const workspace = createVirtualTextureDemandWorkspace(512);
     collectVirtualTextureDemand(workspace, source, [surface], [view()], sampler);
     expect(workspace.count).toBe(21);
     expect(new Set(workspace.mips.slice(0, workspace.count))).toEqual(new Set([7, 6, 5]));
@@ -374,14 +359,7 @@ describe("VT2 clipped projected demand", () => {
   });
 
   it("localizes fine demand on a large oblique ground plane", () => {
-    const groundManifest = parseVirtualTextureManifest({
-      borderTexels: 1,
-      contractVersion: 2,
-      mipCount: 4,
-      pageSize: 256,
-      pages: { uriTemplate: "{mip}/{x}/{y}.png" },
-      virtualSize: [2048, 2048],
-    });
+    const groundManifest = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", borderTexels: 1, pageSize: 256, width: 2048, height: 2048 });
     const geometry = {
       bounds: { max: [0.4, 0.4, -1] as const, min: [-0.4, -0.4, -8] as const },
       indices: new Uint8Array([0, 1, 2, 0, 2, 3]),
@@ -494,25 +472,6 @@ describe("VT2 clipped projected demand", () => {
       expect(workspace.xs[0]).toBe(0);
       expect(workspace.ys[0]).toBe(0);
     }
-  });
-
-  it("bounds malformed coverage work when the coarsest authored mip is still large", () => {
-    let lookups = 0;
-    class CountingKeys extends Set<number | string> {
-      override has(key: number | string): boolean { lookups++; return super.has(key); }
-    }
-    const workspace = { ...createVirtualTextureDemandWorkspace(4), keys: new CountingKeys() };
-    const partial = parseVirtualTextureManifest({ contractVersion: 2, pageSize: 256,
-      borderTexels: 1, mipCount: 1, virtualSize: [262144, 262144],
-      pages: { uriTemplate: "{mip}/{x}/{y}.png" } });
-    collectVirtualTextureDemand(workspace, partial, [{ ...surface, textureCoordinates: {
-      row0: [Number.NaN, 0, 0, 0], row1: [0, 1, 0, 0],
-    } }], [view()], sampler);
-    expect(workspace.count).toBe(4);
-    expect(workspace.overflow).toBe(true);
-    expect([...workspace.xs]).toEqual([0, 1, 2, 3]);
-    expect([...workspace.ys]).toEqual([0, 0, 0, 0]);
-    expect(lookups).toBeLessThanOrEqual(5);
   });
 
   it("rejects offscreen surfaces before visiting malformed triangle channels", () => {

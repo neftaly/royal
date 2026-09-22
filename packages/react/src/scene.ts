@@ -39,7 +39,6 @@ export {
   triangleGeometry,
   transformGltfAssetBounds,
   unlitMaterial,
-  virtualTexture,
   wireframeMaterial,
   zoomOrbitCameraView,
 } from '@royal/renderer-core';
@@ -167,9 +166,6 @@ export type {
   Vec4,
   WorldPosition3,
   WorldSize3,
-  VirtualTextureAssetOptions,
-  VirtualTextureAssetRef,
-  VirtualTextureInput,
   VolumeDensityPoint,
   WireframeMaterial,
   WireframeMaterialOptions,

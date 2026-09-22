@@ -1,14 +1,11 @@
 # Textures and virtual texturing
 
-For offline PNG and native ASTC VT2 page generation, see the
-[page authoring recipe](../../research/vt-comparison/README.md#offline-page-authoring)
-and `scripts/bake-vt-pages.py`. The tool produces complete mip/page trees without
-adding runtime encoding or transcoding dependencies.
+Royal derives virtual-texture pages from ordinary decoded image sources. There is no public authored-page or manifest input.
 
 ## Canonical texture semantics
 
 Royal has one authored texture orientation: upper-left source origin. Ordinary
-images, glTF images, generated VT pages, and authored VT pages
+images, glTF images, and generated VT pages
 MUST produce the same visible U/V orientation. Upload-time or ingestion-time
 normalization happens once; there is no public `flipY` policy and no shader path
 may compensate differently by source kind.
@@ -33,12 +30,7 @@ sentence does not add a format to glTF or promise that every browser decodes it.
 Resource reconciliation consumes the contract; material binding and draw
 submission MUST NOT branch on source file format.
 
-A VT page is an independently scheduled region, not a complete texture or mip
-chain. It therefore lowers to the narrower page-transport contract, while
-sharing the same storage-class, color-space, orientation, native KTX2 parser, block
-layout, and WebGL-format authorities. Forcing page identity/residency into the
-complete-texture union would couple two lifecycles without simplifying binding
-or drawing and is rejected.
+A VT page is a scheduled raster region derived from the retained decoded source. Its page source owns rasterization; the runtime owns demand, residency, and GPU publication.
 
 Royal standardizes on the portable ETC2/EAC family for retained GPU-compressed
 WebGL2 data. It does not force every texture into one physical format. The
@@ -153,8 +145,7 @@ An unsupported native source settles as a local texture error, releases its
 preparation/handoff reservation, and uses the neutral material-slot fallback;
 it does not throw out of rendering or block other textures. Custom decoded
 native sources receive an empty GPU binding if unsupported. Capability caches
-are cleared on context loss. Authored compressed VT pages settle as
-unsupported without requesting page payloads or allocating an invalid atlas.
+are cleared on context loss.
 
 Native ASTC/BC remain unsupported for retained CPU alpha queries: a pickable
 MASK source requiring exact alpha fails preparation coherently instead of
@@ -165,8 +156,7 @@ and ETC1S/UASTC transcoding are outside this direct LDR profile.
 
 ## Representation choice
 
-Authored `virtualTexture(...)` always requests the authored VT path. Automatic
-VT is selected automatically for eligible sources. The current raster policy
+Automatic VT is selected for eligible ordinary sources. The current raster policy
 considers base-color triangle textures whose decoded
 RGBA texel count exceeds the default 24-slot atlas payload and whose longest
 edge spans more than two 128-texel pages. This prevents the representation from
@@ -181,34 +171,6 @@ Automatic VT is progressive: the ordinary texture remains the drawable source
 until generated VT coverage is valid. Transition occurs through one material
 binding policy and MUST NOT expose an uninitialized page table, white frame, or
 debug-color frame.
-
-## VT manifest contract version 2
-
-An authored manifest is JSON with `contractVersion: 2` and:
-
-- positive `virtualSize: [width, height]`, `pageSize`, and `borderTexels`;
-- optional `colorSpace` of `srgb` or `linear`;
-- optional positive `mipCount` no larger than the derived full chain;
-- optional `pageEncoding` of `image` (default), `ktx2-etc2`,
-  `ktx2-astc-6x6`, `ktx2-astc-8x8`, `ktx2-bc1`, `ktx2-bc3`, or `ktx2-bc7`;
-- `pages.entries`, a URI template, or both;
-- optional positive `physicalSlots` and `physicalByteBudget` quality ceilings.
-
-An explicit entry wins over the template for the same page. Template tokens are
-`{page}`, `{mip}`, `{x}`, `{y}`, and `{key}`. Entries MUST be unique, in bounds,
-and well formed. A template denotes complete addressing; entries alone denote
-sparse addressing. Native KTX2 page extent including both gutters MUST be a
-multiple of the format's block extent: 4 for ETC2/BC, 6 or 8 for ASTC. For a
-128-texel page, two-texel borders produce a 132-texel ETC2/BC/ASTC-6x6 extent;
-four-texel borders produce a 136-texel ASTC-8x8 extent. Each page contains
-exactly one level matching its manifest format. Compatible atlases are keyed
-by stored extent, page encoding, and color space; distinct formats never share
-storage. Both allocation and pending-page admission charge exact block bytes,
-including BC1's eight-byte blocks. Pages are authored offline; Royal does not
-ship a runtime encoder or Basis WASM transcoder.
-
-Manifest ceilings do not preallocate memory and do not override stricter root
-budgets or hardware limits.
 
 ## Demand and coverage
 
@@ -235,12 +197,10 @@ The coarsest usable ancestor SHOULD be requested first. A finer page MUST NOT be
 published to the page table until its atlas upload is complete. Missing fine
 pages sample the closest resident ancestor. Added pages patch only their
 affected descendants in the CPU table, preserving finer resident mappings;
-eviction and changes to atlas columns require a full rebuild. Sparse-addressing holes use the
-nearest authored ancestor when one exists and otherwise use the ordinary or
-neutral fallback—never stale atlas contents.
+eviction and changes to atlas columns require a full rebuild.
 
 When current demand exceeds physical capacity, Royal coarsens direct automatic
-targets or drops complete fine levels from authored ancestor chains until the
+targets until the
 retained working set fits. It does not keep an arbitrary
 spatial prefix at fine detail, because a stable uniformly coarser image is
 preferred to a hard moving boundary between sharp and ancestor-resolved areas.
@@ -318,21 +278,9 @@ ordinary bindings and matching shader features, poll only nonblocking
 completion status, and schedule another presentation frame. Completion MUST
 publish the VT variant without requiring a camera or asset update. Pending
 variants are discarded on shader-source replacement, disposal, and context
-loss. This does not require asynchronous first draw for authored-only VT or
-on devices without the parallel compilation extension.
+loss. Devices without the parallel compilation extension compile synchronously.
 
-Automatic raster sources use 128px pages with 2px gutters; authored VT retains its declared page size.
-
-Authored page downloads and response-body reads may overlap without occupying
-the detail-preparation lane. Decode and ETC2 parsing enter that lane only after
-bytes arrive. At most four pages may be in flight or ready per root.
-At most one detail preparation executes per root. Pending page work reserves
-its decoded-pixel upper bound before starting, with a 16 MiB ceiling shared by
-in-flight and ready pages. Rejected, cancelled, stale and uploaded pages release
-that reservation.
-
-A page source owns fetch/decode/raster only. It MUST NOT own atlas slots, page
-tables, shader bindings, demand selection, or render scheduling.
+Automatic raster sources use 128px pages with 2px gutters.
 
 ## Residency and eviction
 
@@ -349,16 +297,11 @@ This reuses existing GPU detail without requesting extra pages or preventing
 budget-driven eviction and delayed shrinking.
 
 Declaring or preparing a VT source does not itself allocate an atlas. The first
-non-empty projected demand does, so off-screen automatic and authored assets do
+non-empty projected demand does, so off-screen assets do
 not each reserve the default physical working set merely by existing in a scene.
 
 Compatible logical textures share one root-owned physical atlas pool. Pool
-compatibility is exact stored-page extent, compression class, and color space;
-samplers and page tables remain per logical texture. Manifest `physicalSlots`
-and `physicalByteBudget` cap that texture's resident working set rather than
-causing another atlas allocation. At its ceiling, a texture replaces its own
-unprotected cached pages as the view changes, even if the shared pool has free
-slots. RGBA pools start from visible demand rounded
+compatibility is exact stored-page extent and color space; samplers and page tables remain per logical texture. RGBA pools start from visible demand rounded
 toward a power-of-two slot count, bounded by legal rectangular atlas dimensions.
 They grow as demand increases, within the remaining root GPU budget and a
 combined atlas allowance of 75% of that budget. The default root budget remains
@@ -367,49 +310,18 @@ when growth is blocked by that overlap, a pool can first compact to resident
 coarse roots, then grow. This requires a resident root for every visible resource
 and proof that the final allocation fits beside the intermediate atlas. Missing
 roots or insufficient space can still prevent growth. Temporary compaction
-reduces detail and may require reloading discarded pages. Compressed native pools remain fixed after allocation, with an upper
-limit of 32 MiB. New native pools share the initial allowance with known visible
-pools. Automatic sources still waiting for decode reserve one generated RGBA
-page each in that allowance, so a fast native source can render while leaving
-room for their later coarse coverage. This is conservative: pending sources
-can later prove ineligible for VT. Terminal decode failures release their
-pending reservation and count as ineligible; they do not wait indefinitely.
-It does not guarantee room for new source
-classes introduced after a fixed native atlas has already been allocated.
-Unspecified per-texture limits allow use of the shared pool; they do not impose
-an additional 24-page ceiling.
+reduces detail and may require reloading discarded pages. Automatic sources still waiting for decode reserve one generated RGBA page each in that allowance for later coarse coverage. Terminal decode failures release that reservation.
 
-Ordinary texture planning reserves the shared VT allowance only for referenced
-authored sources that are supported or still awaiting manifest validation.
-Unused declarations and settled unsupported sources reserve nothing. Preparation
-continues while manifests load. When the allowance increases, fitted ordinary
-sources can be decoded again at higher resolution; native sources reread their
-offline mip levels without transcoding. Fitted raster VT leases are released
-only when a larger representation can be prepared. The previous ordinary GPU
-texture remains usable until replacement storage is admitted. Vector-backed VT
-and explicit native previews retain their full-source refinement paths.
-Native format validation happens when manifests arrive and again when GPU
-storage is created, so restored contexts re-enable their native extensions.
-Validation is deferred if a manifest arrives during context loss.
+Ordinary fitting accounts for scene storage and the current shared GPU budget. When the allowance increases, fitted sources can be prepared at higher resolution while the previous GPU texture remains usable until replacement storage is admitted. With texture inspection enabled, every newly decoded raster passes the same inspection gate before publication.
 
 Preparation queues unlink cancelled jobs in constant time, including jobs
 behind live queued work. Their intrusive links reuse the existing job record;
 no cancellation scan or additional queue-node allocation is required.
 
-Decoded native pages copy their blocks into exact-size buffers before entering
-the ready queue, so retained block storage matches page-byte reservations.
-Container metadata and trailing data are not retained with the queued page.
-This does not cap the temporary response-body allocation during transport.
-
-Native pages whose encoded color space disagrees with the effective binding
-(asset override, otherwise manifest color space) fail during read completion,
-before upload admission. They follow the same bounded failure policy as malformed
-page containers and do not interrupt healthy page rendering.
-
 When a resource has no resident pages and every page in its current demand is
 known to have failed, the runtime clears that demand and releases its empty GPU
 resource. A shared atlas remains alive for healthy neighbors. Failure records
-remain, preventing repeated allocation and transport for unchanged failed
+remain, preventing repeated allocation and page preparation for unchanged failed
 demand. A changed view can request previously untested pages and allocate again;
 a new source version also permits retry. Failed-page counts remain observable
 even when fully failed demand is suppressed.
@@ -458,7 +370,7 @@ again. It never bypasses the persistent root budget.
 
 Visible logical textures also share the slots within each pool, reserving one
 coarse slot each where possible and distributing the remainder up to per-texture
-demand and authored limits. Demand is refitted when those shares change, so an
+demand. Demand is refitted when those shares change, so an
 earlier texture cannot protect every slot from later textures indefinitely.
 Unused resident detail may remain cached until another texture needs its slot;
 resident counts therefore need not be equal even when admission is balanced.
@@ -495,17 +407,4 @@ governor.
 
 ## Observable readiness
 
-For an authored VT, `ready` means the manifest and runtime representation are
-accepted; visible detail may still stream. `pendingPages` reports pages loading,
-decoding, or queued for GPU publication. It is not a promise that all possible
-pages will ever become resident.
-
-`unsupported` means the requested VT representation cannot be used on this
-root. Automatic VT falls back to ordinary rendering. An explicitly authored VT
-without a legal ordinary fallback reports the unsupported state and renders a
-neutral fallback rather than hanging.
-
-The React observation is `useVirtualTextureAssetStatus(manifestUriOrRef)`. Its
-snapshot reports lifecycle state plus `residentPages`, `pendingPages`, and
-`failedPages`; observation is identity-focused and does not subscribe the
-component to every renderer frame.
+Ordinary sources expose `useTextureAssetStatus(srcOrRef)`. Automatic VT progress is available through `root.getSnapshot().resources.virtualTextures` or React `useRendererSnapshot()` for diagnostics. `pendingPages` includes generated pages waiting for GPU publication; it is not a promise that every source page will become resident. Ineligible sources keep ordinary rendering.

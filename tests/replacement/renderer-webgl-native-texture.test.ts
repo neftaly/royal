@@ -4,28 +4,21 @@ import { parseKtx2Native } from "../../packages/renderer-webgl/src/texture/ktx2-
 import { createBrowserTextureDecoder } from "../../packages/renderer-webgl/src/texture/browser-decode";
 import { TextureGpuOwner } from "../../packages/renderer-webgl/src/texture/gpu-owner";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
-import { parseVirtualTextureManifest } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
-import { planVirtualTextureAtlasStorage } from "../../packages/renderer-webgl/src/virtual-texture/storage-plan";
-import { readVirtualTexturePage } from "../../packages/renderer-webgl/src/virtual-texture/browser-page-source";
 import type { CanonicalTextureBinding } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import { createKtx2Fixture } from "./support/ktx2-fixture";
 import { fakeGl } from "./support/canvas-root-harness";
 
 const formats = [
-  { vk: 165, format: "astc-6x6", block: 6, bytes: 16, linear: 0x93b4, srgb: 0x93d4, encoding: "ktx2-astc-6x6" },
-  { vk: 171, format: "astc-8x8", block: 8, bytes: 16, linear: 0x93b7, srgb: 0x93d7, encoding: "ktx2-astc-8x8" },
-  { vk: 133, format: "bc1-rgba", block: 4, bytes: 8, linear: 0x83f1, srgb: 0x8c4d, encoding: "ktx2-bc1" },
-  { vk: 137, format: "bc3-rgba", block: 4, bytes: 16, linear: 0x83f3, srgb: 0x8c4f, encoding: "ktx2-bc3" },
-  { vk: 145, format: "bc7-rgba", block: 4, bytes: 16, linear: 0x8e8c, srgb: 0x8e8d, encoding: "ktx2-bc7" },
+  { vk: 165, format: "astc-6x6", block: 6, bytes: 16, linear: 0x93b4, srgb: 0x93d4 },
+  { vk: 171, format: "astc-8x8", block: 8, bytes: 16, linear: 0x93b7, srgb: 0x93d7 },
+  { vk: 133, format: "bc1-rgba", block: 4, bytes: 8, linear: 0x83f1, srgb: 0x8c4d },
+  { vk: 137, format: "bc3-rgba", block: 4, bytes: 16, linear: 0x83f3, srgb: 0x8c4f },
+  { vk: 145, format: "bc7-rgba", block: 4, bytes: 16, linear: 0x8e8c, srgb: 0x8e8d },
 ] as const;
 const sampler = { magFilter: "linear", minFilter: "linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" } as const;
-const manifestFor = (encoding: string, borderTexels = 2) => parseVirtualTextureManifest({
-  contractVersion: 2, pageSize: 128, borderTexels, virtualSize: [128, 128],
-  pageEncoding: encoding, pages: { uriTemplate: "{mip}-{x}-{y}.ktx2" },
-});
 afterEach(() => vi.unstubAllGlobals());
 
-describe.each(formats)("native $format", ({ vk, format, block, bytes, linear, srgb, encoding }) => {
+describe.each(formats)("native $format", ({ vk, format, block, bytes, linear, srgb }) => {
   it("keeps mip views inside a nonzero-offset KTX2 container", () => {
     const source = createKtx2Fixture(vk, 16, 16, 3, [["KTXorientation", "rd"], ["KTXswizzle", "rgba"]]);
     const backing = new Uint8Array(source.length + 23).fill(0xa5);
@@ -156,19 +149,6 @@ describe.each(formats)("native $format", ({ vk, format, block, bytes, linear, sr
     expect(gl.compressedTexImage2D).not.toHaveBeenCalled();
     expect(budget.snapshot().retainedBytes).toBe(64);
     owner.dispose();
-  });
-
-  it("validates VT gutters, exact atlas bytes and mismatched page formats", async () => {
-    const extent = block === 8 ? 136 : 132;
-    const manifest = manifestFor(encoding, (extent - 128) / 2);
-    const plan = planVirtualTextureAtlasStorage(manifest, 2048, 1024 * 1024);
-    expect(plan.allocationBytes).toBe(plan.slotCount * (extent / block) ** 2 * bytes);
-    expect(() => manifestFor(encoding, 1)).toThrow("block-compatible");
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(createKtx2Fixture(vk + 1, extent, extent).slice().buffer as ArrayBuffer)));
-    const page = await readVirtualTexturePage("https://test.invalid/test.json", manifest, { mip: 0, x: 0, y: 0 }, new AbortController().signal);
-    expect(page).toMatchObject({ kind: format, colorSpace: "srgb" });
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(createKtx2Fixture(152, extent, extent).slice().buffer as ArrayBuffer)));
-    await expect(readVirtualTexturePage("https://test.invalid/test.json", manifest, { mip: 0, x: 0, y: 0 }, new AbortController().signal)).rejects.toThrow("format does not match");
   });
 });
 

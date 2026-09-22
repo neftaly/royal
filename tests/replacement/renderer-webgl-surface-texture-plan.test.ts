@@ -269,16 +269,7 @@ describe("surface texture planning core", () => {
     ]);
     expect(presentableBaseColorInto(output, ordinary, true)).toBe(ordinary.baseColor);
 
-    const virtual = standard({
-      baseColor: [0.5, 0.75, 1, 0.6],
-      baseColorVirtualAsset: { kind: "virtual-asset", manifestUri: "/albedo.vt.json" },
-    });
-    expect(Array.from(presentableBaseColorInto(output, virtual, false))).toEqual([
-      expect.closeTo(0.5 * 0.214_041, 6),
-      expect.closeTo(0.75 * 0.214_041, 6),
-      expect.closeTo(0.214_041, 6),
-      expect.closeTo(0.6, 6),
-    ]);
+
   });
 
   it("composes the fixed unit ABI without moving ordinary material slots", () => {

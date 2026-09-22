@@ -1,3 +1,4 @@
+import type { TextureInspection } from "../texture/inspection-policy";
 import { DEFAULT_TEXTURE_ANISOTROPY } from "../texture/anisotropy";
 import { DEFAULT_PERSISTENT_GPU_BYTE_BUDGET } from "../resource/persistent-gpu-budget";
 
@@ -5,6 +6,8 @@ import { DEFAULT_PERSISTENT_GPU_BYTE_BUDGET } from "../resource/persistent-gpu-b
 export type RendererRootOptions = Readonly<{
   /** Requests an alpha channel when creating the WebGL2 context. @defaultValue `false` */
   alpha?: boolean;
+  /** Optional asynchronous image policy, shared by all loaded material textures. */
+  textureInspection?: TextureInspection;
   /** Maximum texture anisotropy, 1–16; 1 disables it. Capped by the device; unavailable extensions use 1. @defaultValue `16` */
   anisotropy?: number;
   /** Requests browser antialiasing when creating the WebGL2 context. @defaultValue `false` */
@@ -16,6 +19,7 @@ export type RendererRootOptions = Readonly<{
 /** Fully validated renderer creation policy with every default made explicit. */
 export type ResolvedRendererRootOptions = Readonly<{
   alpha: boolean;
+  textureInspection?: TextureInspection;
   anisotropy: number;
   antialias: boolean;
   persistentGpuByteBudget: number;
@@ -30,7 +34,8 @@ export const resolveRendererRootOptions = (
   }
   for (const key of Reflect.ownKeys(options)) {
     if (
-      key !== "alpha"
+      key !== "textureInspection"
+      && key !== "alpha"
       && key !== "anisotropy"
       && key !== "antialias"
       && key !== "persistentGpuByteBudget"
@@ -53,7 +58,13 @@ export const resolveRendererRootOptions = (
   if (!Number.isSafeInteger(persistentGpuByteBudget) || persistentGpuByteBudget < 1) {
     throw new RangeError("Royal renderer option persistentGpuByteBudget must be a positive safe integer");
   }
+  const inspection = options.textureInspection;
+  if (inspection !== undefined && (typeof inspection !== "object" || inspection === null
+    || typeof inspection.key !== "string" || inspection.key.length === 0 || typeof inspection.allow !== "function")) {
+    throw new TypeError("Royal textureInspection requires a non-empty key and an allow predicate");
+  }
   return {
+    ...(inspection === undefined ? {} : { textureInspection: { key: inspection.key, allow: inspection.allow } }),
     alpha: options.alpha === true,
     anisotropy,
     antialias: options.antialias === true,

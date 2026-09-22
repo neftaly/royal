@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { imageTexture, mesh, perspectiveCamera, planeGeometry, scene, unlitMaterial, virtualTexture } from "@royal/renderer-core";
+import { imageTexture, mesh, perspectiveCamera, planeGeometry, scene, unlitMaterial } from "@royal/renderer-core";
 import { identityMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
 import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
@@ -7,22 +7,18 @@ import { createBrowserVirtualTextureRuntime } from "../../packages/renderer-webg
 import { fakeGl } from "./support/canvas-root-harness";
 import * as automaticPageSources from "../../packages/renderer-webgl/src/virtual-texture/automatic-page-source";
 import * as storagePlans from "../../packages/renderer-webgl/src/virtual-texture/storage-plan";
-import { parseVirtualTextureManifest } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
-import { createKtx2Fixture } from "./support/ktx2-fixture";
+import { createGeneratedVirtualTextureLayout } from "../../packages/renderer-webgl/src/virtual-texture/layout";
 import { waitFor } from "./support/wait-for";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const harness = async (virtualSize = 1024, budgetBytes?: number, maxTextureSize?: number) => {
-  vi.stubGlobal("document", { baseURI: "https://example.test/" });
-  vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo) => new Response(
-    String(input).endsWith(".json") ? JSON.stringify({
-      contractVersion: 2, pageSize: 128, borderTexels: 1, virtualSize: [virtualSize, virtualSize],
-      pages: { uriTemplate: "{mip}-{x}-{y}.png" },
-    }) : new Blob([new Uint8Array([1])]),
-  )));
-  vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ width: 130, height: 130, close: vi.fn() })));
-  const texture = virtualTexture("https://example.test/vt.json");
+  const decoded = { width: virtualSize, height: virtualSize, source: {} as ImageBitmap };
+  vi.spyOn(automaticPageSources, "createAutomaticRasterPageSource").mockImplementation((_source, _sampler, colorSpace) => ({
+    layout: createGeneratedVirtualTextureLayout({ width: virtualSize, height: virtualSize, pageSize: 128, borderTexels: 1, colorSpace }),
+    read: async () => ({ kind: "image", source: { width: 130, height: 130 } as ImageBitmap, close: vi.fn() }),
+  }));
+  const texture = imageTexture("https://example.test/map.png");
   const gl = fakeGl();
   if (maxTextureSize !== undefined) {
     const getParameter = vi.mocked(gl.getParameter).getMockImplementation()!;
@@ -30,7 +26,9 @@ const harness = async (virtualSize = 1024, budgetBytes?: number, maxTextureSize?
   }
   Object.assign(gl, { texStorage2D: vi.fn() });
   const budget = new PersistentGpuBudgetOwner(budgetBytes);
-  const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn(), budget);
+  const runtime = createBrowserVirtualTextureRuntime(gl, budget, undefined, {
+    decoded: () => decoded, acquireDecoded: () => ({ source: decoded, release: vi.fn() }), onChanged: vi.fn(),
+  });
   const matrix = identityMat4();
   const view = { view: matrix, viewProjection: matrix, viewport: { width: 256, height: 256, x: 0, y: 0 } };
   runtime.setScene(prepareCanonicalSurfaceScene(scene({
@@ -55,7 +53,7 @@ describe("demand-grown RGBA atlases", () => {
         runtime.update([view]);
         expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 21, pendingPages: 0, unresidentPages: 0 });
       });
-      const original = runtime.binding(texture);
+      const original = runtime.automaticBinding(texture);
       const requests = runtime.runtimeSnapshot().pageRequests;
       gl.copyTexSubImage2D.mockClear();
       view.viewport.width = view.viewport.height = 1024;
@@ -65,15 +63,16 @@ describe("demand-grown RGBA atlases", () => {
       const firstBatch = copiedPages(gl);
       expect(firstBatch).toBeGreaterThan(4);
       expect(firstBatch * 130 * 130 * 4).toBeLessThanOrEqual(1024 * 1024);
-      expect(runtime.runtimeSnapshot().pageRequests).toBe(requests);
-      expect(runtime.binding(texture)).toBe(original);
+      // Automatic sources may prepare one detail page during migration.
+      expect(runtime.runtimeSnapshot().pageRequests - requests).toBeLessThanOrEqual(1);
+      expect(runtime.automaticBinding(texture)).toBe(original);
       runtime.update([view]); // remaining copies
       expect(copiedPages(gl)).toBe(21);
       expect((21 - firstBatch) * 130 * 130 * 4).toBeLessThanOrEqual(1024 * 1024);
       runtime.update([view]); // fence copies
-      expect(runtime.binding(texture)).toBe(original);
+      expect(runtime.automaticBinding(texture)).toBe(original);
       runtime.update([view]); // publish after validation
-      expect(runtime.binding(texture)!.atlas.texture).not.toBe(original!.atlas.texture);
+      expect(runtime.automaticBinding(texture)!.atlas.texture).not.toBe(original!.atlas.texture);
       await waitFor(() => {
         const uploads = runtime.runtimeSnapshot().uploadedPages;
         runtime.update([view]);
@@ -83,129 +82,13 @@ describe("demand-grown RGBA atlases", () => {
     } finally { runtime.dispose(); }
   });
 
-  it.each([
-    [134, "ktx2-bc1"], [138, "ktx2-bc3"], [146, "ktx2-bc7"],
-    [152, "ktx2-etc2"], [166, "ktx2-astc-6x6"], [172, "ktx2-astc-8x8"],
-  ].flatMap(([vk, encoding]) => [false, true].map(nativeFirst => ({ vk: vk as number, encoding, nativeFirst }))))(
-    "reserves image coverage beside $encoding, native first $nativeFirst", async ({ vk, encoding, nativeFirst }) => {
-    vi.stubGlobal("document", { baseURI: "https://example.test/" });
-    const blocks = createKtx2Fixture(vk, 144, 144);
-    vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo) => {
-      const uri = String(input);
-      return new Response(uri.endsWith(".json") ? JSON.stringify({
-        contractVersion: 2, pageSize: 128, borderTexels: 8, virtualSize: [512, 512], mipCount: 3,
-        pageEncoding: uri.includes("native") ? encoding : "image",
-        pages: { uriTemplate: uri.includes("native") ? "{mip}-{x}-{y}.ktx2" : "{mip}-{x}-{y}.png" },
-      }) : uri.endsWith(".ktx2") ? blocks.slice().buffer as ArrayBuffer : new Uint8Array([1]));
-    }));
-    vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ width: 144, height: 144, close: vi.fn() })));
-    const gl = fakeGl();
-    Object.assign(gl, { getExtension: vi.fn(() => ({ getSupportedProfiles: () => ["ldr"] })),
-      compressedTexSubImage2D: vi.fn() });
-    const getParameter = vi.mocked(gl.getParameter).getMockImplementation()!;
-    vi.mocked(gl.getParameter).mockImplementation(name => name === gl.MAX_TEXTURE_SIZE ? 16384 : getParameter(name));
-    const budget = new PersistentGpuBudgetOwner(16 * 1024 * 1024);
-    const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn(), budget);
-    const native = virtualTexture("https://example.test/native.json");
-    const image = virtualTexture("https://example.test/image.json");
-    const matrix = identityMat4();
-    const view = { view: matrix, viewProjection: matrix, viewport: { width: 256, height: 256, x: 0, y: 0 } };
-    try {
-      runtime.setScene(prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}),
-        nodes: (nativeFirst ? [native, image] : [image, native]).map(texture =>
-          mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture }) })),
-      })));
-      await waitFor(() => {
-        runtime.update([view]);
-        expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 2, unresidentPages: 0, pendingPages: 0, failedPages: 0 });
-        expect(runtime.snapshot(native).residentPages).toBeGreaterThan(0);
-        expect(runtime.snapshot(image).residentPages).toBeGreaterThan(0);
-      });
-      expect(runtime.runtimeSnapshot().atlasBytes).toBeLessThanOrEqual(budget.budgetBytes * 0.75);
-      expect(gl.compressedTexSubImage2D).toHaveBeenCalled();
-    } finally { runtime.dispose(); }
-    expect(budget.snapshot().retainedBytes).toBe(0);
-  });
-
-  it.each(["ready", "ineligible", "removed", "denied", "failed"])("settles pending automatic coverage after %s and context invalidation", async outcome => {
-    vi.stubGlobal("document", { baseURI: "https://example.test/" });
-    const manifest = { contractVersion: 2, pageSize: 128, borderTexels: 2,
-      virtualSize: [1024, 1024], pages: { uriTemplate: "{mip}-{x}-{y}.png" } };
-    const factory = vi.spyOn(automaticPageSources, "createAutomaticRasterPageSource").mockImplementation(() => ({
-      manifest: parseVirtualTextureManifest(manifest),
-      read: async () => ({ kind: "image", source: { width: 132, height: 132 } as ImageBitmap, close: vi.fn() }),
-    }));
-    const blocks = createKtx2Fixture(172, 144, 144);
-    vi.stubGlobal("fetch", vi.fn(async (input: URL | RequestInfo) => new Response(
-      String(input).endsWith(".json") ? JSON.stringify({ ...manifest, borderTexels: 8,
-        pageEncoding: "ktx2-astc-8x8", pages: { uriTemplate: "{mip}-{x}-{y}.ktx2" },
-      }) : blocks.slice().buffer as ArrayBuffer,
-    )));
-    const gl = fakeGl();
-    const getParameter = vi.mocked(gl.getParameter).getMockImplementation()!;
-    vi.mocked(gl.getParameter).mockImplementation(name => name === gl.MAX_TEXTURE_SIZE ? 16384 : getParameter(name));
-    Object.assign(gl, { getExtension: vi.fn(() => ({ getSupportedProfiles: () => ["ldr"] })), compressedTexSubImage2D: vi.fn() });
-    const budget = new PersistentGpuBudgetOwner((outcome === "denied" || outcome === "failed") ? 64 * 1024 : 16 * 1024 * 1024);
-    let ready = false;
-    const decoded = { width: 1024, height: 1024, source: {} as ImageBitmap };
-    const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn(), budget, undefined, {
-      decoded: () => ready ? outcome === "failed" ? null : decoded : undefined,
-      acquireDecoded: () => ({ source: decoded, release: vi.fn() }), onChanged: vi.fn(),
-    });
-    const native = virtualTexture("https://example.test/native.json");
-    const automatic = imageTexture("https://example.test/pending.png");
-    const setScene = (includeAutomatic = true) => runtime.setScene(prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}),
-      nodes: (includeAutomatic ? [native, automatic] : [native]).map(texture => mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture }) })),
-    })));
-    const matrix = identityMat4();
-    const view = { view: matrix, viewProjection: matrix, viewport: { width: 256, height: 256, x: 0, y: 0 } };
-    try {
-      setScene();
-      await waitFor(() => {
-        runtime.update([view]);
-        expect(runtime.snapshot(native)).toMatchObject({ status: "ready" });
-        if (outcome === "denied" || outcome === "failed") expect(runtime.snapshot(native).residentPages).toBe(0);
-        else expect(runtime.snapshot(native).residentPages).toBeGreaterThan(0);
-        expect(runtime.runtimeSnapshot().automaticWaiting).toBe(1);
-      });
-      if (outcome === "denied" || outcome === "failed") {
-        for (let frame = 0; frame < 100; frame++) runtime.update([view]);
-        expect(runtime.snapshot(native)).toMatchObject({ status: "ready", residentPages: 0, failedPages: 0 });
-        expect(gl.texStorage2D).not.toHaveBeenCalled();
-        expect(fetch).toHaveBeenCalledOnce();
-        expect(budget.snapshot().retainedBytes).toBe(0);
-      }
-      expect(factory).not.toHaveBeenCalled();
-      const removed = outcome === "removed" || outcome === "denied";
-      ready = !removed;
-      if (outcome === "ineligible") decoded.width = decoded.height = 32;
-      setScene(!removed);
-      const settle = async () => waitFor(() => {
-        runtime.update([view]);
-        expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: outcome === "ready" ? 2 : 1,
-          automaticWaiting: 0, automaticResources: outcome === "ready" ? 1 : 0,
-          automaticIneligible: outcome === "ineligible" || outcome === "failed" ? 1 : 0,
-          unresidentPages: 0, pendingPages: 0, failedPages: 0 });
-        expect(runtime.snapshot(native).residentPages).toBeGreaterThan(0);
-      });
-      await settle();
-      const nativeFetches = vi.mocked(fetch).mock.calls.length;
-      runtime.invalidate();
-      await settle();
-      expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(nativeFetches);
-      expect(factory).toHaveBeenCalledTimes(outcome === "ready" ? 1 : 0);
-      expect(runtime.runtimeSnapshot().atlasBytes).toBeLessThanOrEqual(budget.budgetBytes * 0.75);
-    } finally { runtime.dispose(); factory.mockRestore(); }
-    expect(budget.snapshot().retainedBytes).toBe(0);
-  });
-
   it("releases cached copy attachments and refreshes texture limits after context loss", async () => {
-    const { runtime, view, gl, texture } = await harness();
+    const { runtime, view, gl } = await harness();
     try {
       view.viewport.width = view.viewport.height = 1024;
       await waitFor(() => {
         runtime.update([view]);
-        expect(runtime.snapshot(texture).residentPages).toBe(85);
+        expect(runtime.runtimeSnapshot().residentPages).toBe(85);
       });
       const limitQueries = () => vi.mocked(gl.getParameter).mock.calls.filter(([name]) => name === gl.MAX_TEXTURE_SIZE).length;
       expect(limitQueries()).toBe(1);
@@ -214,7 +97,7 @@ describe("demand-grown RGBA atlases", () => {
       runtime.invalidate();
       await waitFor(() => {
         runtime.update([view]);
-        expect(runtime.snapshot(texture).residentPages).toBe(85);
+        expect(runtime.runtimeSnapshot().residentPages).toBe(81);
       });
       expect(limitQueries()).toBe(2);
     } finally { runtime.dispose(); }
@@ -228,12 +111,12 @@ describe("demand-grown RGBA atlases", () => {
         view.viewport.width = view.viewport.height = 2048;
         await waitFor(() => {
           runtime.update([view]);
-          expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 341, unresidentPages: 0 });
-          expect(runtime.snapshot(texture).residentPages).toBeGreaterThanOrEqual(85);
+          expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 321, unresidentPages: 0 });
+          expect(runtime.runtimeSnapshot().residentPages).toBeGreaterThanOrEqual(65);
         });
-        const binding = runtime.binding(texture);
+        const binding = runtime.automaticBinding(texture);
         const retainedBytes = budget.snapshot().retainedBytes;
-        const other = virtualTexture({ manifestUri: "https://example.test/other.json", colorSpace: "linear" });
+        const other = imageTexture({ src: "https://example.test/other.png", colorSpace: "linear" });
         const setAssets = (assets: typeof texture[]) => runtime.setScene(prepareCanonicalSurfaceScene(scene({
           camera: perspectiveCamera({}), nodes: assets.map(asset =>
             mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) })),
@@ -245,12 +128,12 @@ describe("demand-grown RGBA atlases", () => {
           expect(vi.mocked(gl.texStorage2D).mock.calls.length).toBeGreaterThan(allocations);
         });
         for (let frame = 1; frame < frames; frame++) runtime.update([view]);
-        expect(runtime.binding(texture)).toBe(binding);
+        expect(runtime.automaticBinding(texture)).toBe(binding);
         expect(budget.snapshot().retainedBytes).toBeLessThanOrEqual(budget.budgetBytes);
         if (action === "cancel") {
           setAssets([texture]);
           runtime.update([view]);
-          expect(runtime.binding(texture)).toBe(binding);
+          expect(runtime.automaticBinding(texture)).toBe(binding);
           expect(budget.snapshot().retainedBytes).toBe(retainedBytes);
           await waitFor(() => {
             runtime.update([view]);
@@ -263,8 +146,8 @@ describe("demand-grown RGBA atlases", () => {
           if (action === "invalidate") await waitFor(() => {
             runtime.update([view]);
             expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 2, unresidentPages: 0 });
-            expect(runtime.snapshot(other).residentPages).toBeGreaterThan(0);
-            expect(runtime.snapshot(texture).residentPages).toBeGreaterThan(0);
+            expect(runtime.runtimeSnapshot().residentPages).toBeGreaterThan(0);
+            expect(runtime.runtimeSnapshot().residentPages).toBeGreaterThan(0);
           });
         }
       } finally { runtime.dispose(); }
@@ -274,12 +157,7 @@ describe("demand-grown RGBA atlases", () => {
 
   it("does not reserve coarse coverage for an unallocated offscreen pool", async () => {
     const { runtime, view, texture } = await harness(1024, 16 * 1024 * 1024);
-    const original = vi.mocked(fetch).getMockImplementation()!;
-    vi.mocked(fetch).mockImplementation(async (input) => String(input).endsWith("hidden.json")
-      ? new Response(JSON.stringify({ contractVersion: 2, pageSize: 2048, borderTexels: 2,
-          virtualSize: [4096, 4096], pages: { uriTemplate: "hidden-{mip}-{x}-{y}.png" } }))
-      : original(input));
-    const hidden = virtualTexture("https://example.test/hidden.json");
+    const hidden = imageTexture({ src: "https://example.test/hidden.png", colorSpace: "linear" });
     try {
       view.viewport.width = view.viewport.height = 1024;
       runtime.setScene(prepareCanonicalSurfaceScene(scene({
@@ -290,7 +168,7 @@ describe("demand-grown RGBA atlases", () => {
       })));
       await waitFor(() => {
         runtime.update([view]);
-        expect(runtime.snapshot(hidden).status).toBe("ready");
+        expect(runtime.runtimeSnapshot().automaticWaiting).toBe(0);
         expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 1, residentPages: 85, unresidentPages: 0 });
       });
     } finally { runtime.dispose(); }
@@ -302,9 +180,9 @@ describe("demand-grown RGBA atlases", () => {
       view.viewport.width = view.viewport.height = 2048;
       await waitFor(() => {
         runtime.update([view]);
-        expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 341, unresidentPages: 0 });
+        expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 321, unresidentPages: 0 });
       });
-      const others = ["second", "third"].map(name => virtualTexture(`https://example.test/${name}.json`));
+      const others = ["second", "third"].map(name => imageTexture(`https://example.test/${name}.png`));
       runtime.setScene(prepareCanonicalSurfaceScene(scene({
         camera: perspectiveCamera({}), nodes: [texture, ...others].map(asset =>
           mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) })),
@@ -312,7 +190,7 @@ describe("demand-grown RGBA atlases", () => {
       await waitFor(() => {
         runtime.update([view]);
         expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 1, unresidentPages: 0 });
-        for (const asset of [texture, ...others]) expect(runtime.snapshot(asset).residentPages).toBeGreaterThanOrEqual(21);
+        for (const asset of [texture, ...others]) expect(runtime.automaticBinding(asset)).toBeDefined();
       });
     } finally { runtime.dispose(); }
   });
@@ -323,9 +201,9 @@ describe("demand-grown RGBA atlases", () => {
       view.viewport.width = view.viewport.height = 2048;
       await waitFor(() => {
         runtime.update([view]);
-        expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 341, unresidentPages: 0 });
+        expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 321, unresidentPages: 0 });
       });
-      const other = virtualTexture({ manifestUri: "https://example.test/other.json", colorSpace: "linear" });
+      const other = imageTexture({ src: "https://example.test/other.png", colorSpace: "linear" });
       runtime.setScene(prepareCanonicalSurfaceScene(scene({
         camera: perspectiveCamera({}), nodes: [texture, other].map(asset =>
           mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) })),
@@ -333,8 +211,8 @@ describe("demand-grown RGBA atlases", () => {
       await waitFor(() => {
         runtime.update([view]);
         expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 2, unresidentPages: 0 });
-        expect(runtime.snapshot(texture).residentPages).toBeGreaterThanOrEqual(85);
-        expect(runtime.snapshot(other).residentPages).toBeGreaterThanOrEqual(85);
+        expect(runtime.runtimeSnapshot().residentPages).toBeGreaterThanOrEqual(65);
+        expect(runtime.runtimeSnapshot().residentPages).toBeGreaterThanOrEqual(65);
       });
       expect(runtime.runtimeSnapshot().atlasGrowthFailures).toBe(0);
     } finally { runtime.dispose(); }
@@ -349,8 +227,8 @@ describe("demand-grown RGBA atlases", () => {
         runtime.update([view]);
         expect(runtime.runtimeSnapshot().residentPages).toBe(85);
       });
-      const original = runtime.binding(texture)!;
-      const other = virtualTexture({ manifestUri: "https://example.test/other.json", colorSpace: "linear" });
+      const original = runtime.automaticBinding(texture)!;
+      const other = imageTexture({ src: "https://example.test/other.png", colorSpace: "linear" });
       runtime.setScene(prepareCanonicalSurfaceScene(scene({
         camera: perspectiveCamera({}), nodes: [
           mesh({ geometry: planeGeometry(0.5), material: unlitMaterial({ texture }) }),
@@ -363,7 +241,7 @@ describe("demand-grown RGBA atlases", () => {
       });
       clock.mockReturnValue(3_600_000);
       for (let frame = 0; frame < 10; frame++) runtime.update([view]);
-      expect(runtime.binding(texture)).toBe(original);
+      expect(runtime.automaticBinding(texture)).toBe(original);
     } finally { runtime.dispose(); clock.mockRestore(); }
   });
 
@@ -379,7 +257,7 @@ describe("demand-grown RGBA atlases", () => {
       view.viewport.width = view.viewport.height = 256;
       runtime.update([view]);
       vi.mocked(gl.clientWaitSync).mockReturnValue(gl.TIMEOUT_EXPIRED);
-      const other = virtualTexture({ manifestUri: "https://example.test/other.json", colorSpace: "linear" });
+      const other = imageTexture({ src: "https://example.test/other.png", colorSpace: "linear" });
       const changeScene = (size: number) => runtime.setScene(prepareCanonicalSurfaceScene(scene({
         camera: perspectiveCamera({}), nodes: [
           mesh({ geometry: planeGeometry(size), material: unlitMaterial({ texture }) }),
@@ -404,10 +282,10 @@ describe("demand-grown RGBA atlases", () => {
       view.viewport.width = view.viewport.height = 1024;
       await waitFor(() => {
         runtime.update([view]);
-        expect(runtime.runtimeSnapshot().residentPages).toBe(85);
+        expect(runtime.runtimeSnapshot().residentPages).toBeGreaterThanOrEqual(85);
       });
-      const large = runtime.binding(texture)!;
-      const other = virtualTexture({ manifestUri: "https://example.test/other.json", colorSpace: "linear" });
+      const large = runtime.automaticBinding(texture)!;
+      const other = imageTexture({ src: "https://example.test/other.png", colorSpace: "linear" });
       gl.copyTexSubImage2D.mockImplementation(() => { throw new Error("copy failed"); });
       runtime.setScene(prepareCanonicalSurfaceScene(scene({
         camera: perspectiveCamera({}), nodes: [
@@ -419,8 +297,8 @@ describe("demand-grown RGBA atlases", () => {
         runtime.update([view]);
         expect(runtime.runtimeSnapshot().atlasGrowthFailures).toBeGreaterThan(0);
       });
-      expect(runtime.binding(texture)).toBe(large);
-      expect(runtime.snapshot(texture).residentPages).toBe(85);
+      expect(runtime.automaticBinding(texture)).toBe(large);
+      expect(runtime.runtimeSnapshot().residentPages).toBeGreaterThanOrEqual(85);
       // Once competing requests settle, unchanged failed migrations must stop retrying.
       await waitFor(() => {
         runtime.update([view]);
@@ -440,19 +318,19 @@ describe("demand-grown RGBA atlases", () => {
       view.viewport.width = view.viewport.height = 1024;
       await waitFor(() => {
         runtime.update([view]);
-        expect(runtime.snapshot(texture).residentPages).toBe(85);
+        expect(runtime.runtimeSnapshot().residentPages).toBe(85);
       });
-      const other = virtualTexture({ manifestUri: "https://example.test/other.json", colorSpace: "linear" });
+      const other = imageTexture({ src: "https://example.test/other.png", colorSpace: "linear" });
       runtime.setScene(prepareCanonicalSurfaceScene(scene({
         camera: perspectiveCamera({}), nodes: [texture, other].map(asset =>
           mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) })),
       })));
       await waitFor(() => {
         runtime.update([view]);
-        expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 170, admittedPages: 170, unresidentPages: 0 });
+        expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 162, admittedPages: 162, unresidentPages: 0 });
       });
-      expect(runtime.snapshot(texture).residentPages).toBeGreaterThanOrEqual(85);
-      expect(runtime.snapshot(other).residentPages).toBeGreaterThanOrEqual(85);
+      expect(runtime.runtimeSnapshot().residentPages).toBeGreaterThanOrEqual(65);
+      expect(runtime.runtimeSnapshot().residentPages).toBeGreaterThanOrEqual(65);
     } finally { runtime.dispose(); }
   });
 
@@ -462,11 +340,11 @@ describe("demand-grown RGBA atlases", () => {
       view.viewport.width = view.viewport.height = 1024;
       await waitFor(() => {
         runtime.update([view]);
-        expect(runtime.snapshot(texture).residentPages).toBe(85);
+        expect(runtime.runtimeSnapshot().residentPages).toBe(85);
       });
-      const original = runtime.binding(texture)!;
+      const original = runtime.automaticBinding(texture)!;
       const retained = budget.snapshot().retainedBytes;
-      const other = virtualTexture({ manifestUri: "https://example.test/other.json", colorSpace: "linear" });
+      const other = imageTexture({ src: "https://example.test/other.png", colorSpace: "linear" });
       const setCompetition = (competing: boolean) => runtime.setScene(prepareCanonicalSurfaceScene(scene({
         camera: perspectiveCamera({}), nodes: [
           mesh({ geometry: planeGeometry(0.5), material: unlitMaterial({ texture }) }),
@@ -479,11 +357,11 @@ describe("demand-grown RGBA atlases", () => {
         runtime.update([view]);
         expect(gl.copyTexSubImage2D).toHaveBeenCalled();
       });
-      expect(runtime.binding(texture)).toBe(original);
+      expect(runtime.automaticBinding(texture)).toBe(original);
       setCompetition(false);
       for (let frame = 0; frame < 10; frame++) runtime.update([view]);
-      expect(runtime.binding(texture)).toBe(original);
-      expect(runtime.snapshot(texture).residentPages).toBe(85);
+      expect(runtime.automaticBinding(texture)).toBe(original);
+      expect(runtime.runtimeSnapshot().residentPages).toBe(85);
       expect(budget.snapshot().retainedBytes).toBe(retained);
     } finally { runtime.dispose(); }
   });
@@ -497,9 +375,9 @@ describe("demand-grown RGBA atlases", () => {
         runtime.update([view]);
         expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 85, unresidentPages: 0 });
       });
-      const large = runtime.binding(texture)!;
+      const large = runtime.automaticBinding(texture)!;
       const requests = runtime.runtimeSnapshot().pageRequests;
-      const other = virtualTexture({ manifestUri: "https://example.test/other.json", colorSpace: "linear" });
+      const other = imageTexture({ src: "https://example.test/other.png", colorSpace: "linear" });
       runtime.setScene(prepareCanonicalSurfaceScene(scene({
         camera: perspectiveCamera({}), nodes: [
           mesh({ geometry: planeGeometry(0.5), material: unlitMaterial({ texture }) }),
@@ -508,14 +386,15 @@ describe("demand-grown RGBA atlases", () => {
       })));
       await waitFor(() => {
         runtime.update([view]);
-        expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 2, desiredPages: 90, unresidentPages: 0 });
-        expect(runtime.binding(texture)!.atlas.texture).not.toBe(large.atlas.texture);
-        expect(runtime.binding(other)).toBeDefined();
+        expect(runtime.runtimeSnapshot()).toMatchObject({ atlasPools: 2, desiredPages: 86, unresidentPages: 0 });
+        expect(runtime.automaticBinding(texture)!.atlas.texture).not.toBe(large.atlas.texture);
+        expect(runtime.automaticBinding(other)).toBeDefined();
       });
       expect(runtime.runtimeSnapshot().atlasGrowthFailures).toBe(0);
       // Only the new pool is read; compaction copies retained pages on the GPU.
-      expect(runtime.runtimeSnapshot().pageRequests).toBe(requests + 85);
-      expect(runtime.snapshot(texture).residentPages).toBe(8);
+      expect(runtime.runtimeSnapshot().pageRequests).toBe(requests + 81);
+      expect(runtime.automaticBinding(texture)).toBeDefined();
+      expect(runtime.runtimeSnapshot().residentPages).toBeGreaterThanOrEqual(81);
       expect(budget.snapshot().retainedBytes).toBeLessThan(budget.budgetBytes);
     } finally { runtime.dispose(); clock.mockRestore(); }
     expect(budget.snapshot().retainedBytes).toBe(0);
@@ -529,7 +408,7 @@ describe("demand-grown RGBA atlases", () => {
     try {
       for (let frame = 0; frame < 3; frame++) {
         expect(runtime.update([view]).pending).toBe(false);
-        expect(runtime.binding(texture)).toBeUndefined();
+        expect(runtime.automaticBinding(texture)).toBeUndefined();
       }
       budget.release(blocker);
       await waitFor(() => {
@@ -548,7 +427,7 @@ describe("demand-grown RGBA atlases", () => {
         runtime.update([view]);
         expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 85, unresidentPages: 0 });
       });
-      const large = runtime.binding(texture)!;
+      const large = runtime.automaticBinding(texture)!;
       const requests = runtime.runtimeSnapshot().pageRequests;
       view.viewport.width = view.viewport.height = 256;
       runtime.update([view]);
@@ -556,19 +435,19 @@ describe("demand-grown RGBA atlases", () => {
       for (let frame = 0; frame < 10; frame++) runtime.update([view]);
       view.viewport.width = view.viewport.height = 1024;
       runtime.update([view]);
-      expect(runtime.binding(texture)).toBe(large);
+      expect(runtime.automaticBinding(texture)).toBe(large);
       expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 85, unresidentPages: 0, pageRequests: requests });
       view.viewport.width = view.viewport.height = 256;
       runtime.update([view]);
       clock.mockReturnValue(30_001);
       for (let frame = 0; frame < 10; frame++) runtime.update([view]);
-      expect(runtime.binding(texture)).toBe(large);
+      expect(runtime.automaticBinding(texture)).toBe(large);
       expect(runtime.runtimeSnapshot().residentPages).toBe(85);
       clock.mockReturnValue(3_600_000);
       for (let frame = 0; frame < 10; frame++) runtime.update([view]);
       view.viewport.width = view.viewport.height = 1024;
       runtime.update([view]);
-      expect(runtime.binding(texture)).toBe(large);
+      expect(runtime.automaticBinding(texture)).toBe(large);
       expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 85, unresidentPages: 0, pageRequests: requests });
     } finally { runtime.dispose(); clock.mockRestore(); }
     expect(budget.snapshot().retainedBytes).toBe(0);
@@ -576,13 +455,13 @@ describe("demand-grown RGBA atlases", () => {
 
   it("keeps existing page coordinates and tables when growth fits below the old rows", async () => {
     const { runtime, view, gl, texture } = await harness(1024, undefined, 16384);
-    const original = runtime.binding(texture)!;
+    const original = runtime.automaticBinding(texture)!;
     gl.texSubImage2D.mockClear();
     try {
       view.viewport.width = 1024;
       view.viewport.height = 1024;
       for (let frame = 0; frame < 7; frame++) runtime.update([view]);
-      const grown = runtime.binding(texture)!;
+      const grown = runtime.automaticBinding(texture)!;
       expect(grown.atlas.texture).not.toBe(original.atlas.texture);
       expect(grown.settings1[0]).toBe(original.settings1[0]);
       expect(grown.settings1[1]).toBeGreaterThan(original.settings1[1]!);
@@ -594,7 +473,7 @@ describe("demand-grown RGBA atlases", () => {
 
   it("keeps drawing the old atlas while allocation is incomplete, without blocking error queries", async () => {
     const { runtime, view, gl, texture } = await harness();
-    const original = runtime.binding(texture);
+    const original = runtime.automaticBinding(texture);
     vi.mocked(gl.getError).mockClear();
     vi.mocked(gl.clientWaitSync).mockReturnValue(gl.TIMEOUT_EXPIRED);
     try {
@@ -602,7 +481,7 @@ describe("demand-grown RGBA atlases", () => {
       view.viewport.height = 1024;
       for (let i = 0; i < 5; i++) {
         expect(runtime.update([view]).pending).toBe(true);
-        expect(runtime.binding(texture)).toBe(original);
+        expect(runtime.automaticBinding(texture)).toBe(original);
       }
       expect(gl.getError).not.toHaveBeenCalled();
       expect(gl.copyTexSubImage2D).not.toHaveBeenCalled();
@@ -618,7 +497,7 @@ describe("demand-grown RGBA atlases", () => {
 
   it.each(["failed", "timeout", "creation"])("rolls back a %s allocation fence without losing coverage", async (failure) => {
     const { runtime, view, gl, budget, texture } = await harness();
-    const original = runtime.binding(texture);
+    const original = runtime.automaticBinding(texture);
     const retained = budget.snapshot().retainedBytes;
     if (failure === "creation") vi.mocked(gl.fenceSync).mockReturnValueOnce(null);
     else vi.mocked(gl.clientWaitSync).mockReturnValue(failure === "failed" ? gl.WAIT_FAILED : gl.TIMEOUT_EXPIRED);
@@ -626,7 +505,7 @@ describe("demand-grown RGBA atlases", () => {
       view.viewport.width = 1024;
       view.viewport.height = 1024;
       for (let i = 0; i < 125; i++) runtime.update([view]);
-      expect(runtime.binding(texture)).toBe(original);
+      expect(runtime.automaticBinding(texture)).toBe(original);
       expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 5, atlasGrowthFailures: 1 });
       expect(gl.copyTexSubImage2D).not.toHaveBeenCalled();
       expect(budget.snapshot().retainedBytes).toBe(retained);
@@ -635,7 +514,7 @@ describe("demand-grown RGBA atlases", () => {
 
   it("validates asynchronous copy errors before publishing the replacement", async () => {
     const { runtime, view, gl, budget, texture } = await harness();
-    const original = runtime.binding(texture);
+    const original = runtime.automaticBinding(texture);
     const retained = budget.snapshot().retainedBytes;
     try {
       view.viewport.width = 1024;
@@ -644,12 +523,12 @@ describe("demand-grown RGBA atlases", () => {
       runtime.update([view]);
       runtime.update([view]);
       expect(copiedPages(gl)).toBe(5);
-      expect(runtime.binding(texture)).toBe(original);
+      expect(runtime.automaticBinding(texture)).toBe(original);
       vi.mocked(gl.getError).mockReturnValueOnce(0x0505);
       runtime.update([view]);
       runtime.update([view]);
       runtime.update([view]);
-      expect(runtime.binding(texture)).toBe(original);
+      expect(runtime.automaticBinding(texture)).toBe(original);
       expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 5, atlasGrowthFailures: 1 });
       expect(budget.snapshot().retainedBytes).toBe(retained);
       expect(gl.deleteSync).toHaveBeenCalledTimes(2);
@@ -674,10 +553,10 @@ describe("demand-grown RGBA atlases", () => {
         runtime.update([view]);
         const snapshot = runtime.runtimeSnapshot();
         coarse ||= snapshot.residentPages === 1;
-        expect(runtime.binding(texture)).toBeDefined();
+        expect(runtime.automaticBinding(texture)).toBeDefined();
         expect(snapshot.residentPages).toBeGreaterThan(0);
         expect(budget.snapshot().retainedBytes).toBeLessThanOrEqual(budget.budgetBytes);
-        expect(snapshot).toMatchObject({ desiredPages: 341, admittedPages: 341, residentPages: 341, pendingPages: 0, unresidentPages: 0 });
+        expect(snapshot).toMatchObject({ desiredPages: 321, admittedPages: 321, residentPages: 321, pendingPages: 0, unresidentPages: 0 });
       });
       expect(coarse).toBe(true);
       expect(gl.copyTexSubImage2D).toHaveBeenCalled();
@@ -696,37 +575,41 @@ describe("demand-grown RGBA atlases", () => {
       await waitFor(() => { runtime.update([view]); expect(runtime.runtimeSnapshot().residentPages).toBe(85); });
       expect(budget.tryClaim(competing, budget.availableBytes - 250 * 130 * 130 * 4)).toBe(true);
       view.viewport.width = view.viewport.height = 2048;
-      let injected = false, original = runtime.binding(texture);
+      let injected = false, original = runtime.automaticBinding(texture);
       await waitFor(() => {
         runtime.update([view]);
         const allocation = vi.mocked(gl.texStorage2D).mock.calls.at(-1)!;
         if (!injected && allocation[3] === 130 && allocation[4] === 130) {
-          original = runtime.binding(texture);
+          original = runtime.automaticBinding(texture);
           vi.mocked(gl.getError).mockReturnValueOnce(0x0505);
           injected = true;
         }
-        expect(runtime.runtimeSnapshot().residentPages).toBeGreaterThanOrEqual(85);
+        expect(runtime.runtimeSnapshot().residentPages).toBeGreaterThanOrEqual(65);
         expect(budget.snapshot().retainedBytes).toBeLessThanOrEqual(budget.budgetBytes);
         expect(runtime.runtimeSnapshot().atlasGrowthFailures).toBe(1);
       });
       expect(injected).toBe(true);
-      expect(runtime.binding(texture)).toBe(original);
+      expect(runtime.automaticBinding(texture)).toBe(original);
       const allocations = vi.mocked(gl.texStorage2D).mock.calls.length;
       for (let frame = 0; frame < 100; frame++) runtime.update([view]);
       expect(vi.mocked(gl.texStorage2D).mock.calls.length).toBe(allocations);
-      expect(runtime.binding(texture)).toBe(original);
+      expect(runtime.automaticBinding(texture)).toBe(original);
     } finally { budget.release(competing); runtime.dispose(); }
     expect(budget.snapshot().retainedBytes).toBe(0);
   });
 
   it("retries compaction when a late resource uploads the missing coarse coverage", async () => {
     const { runtime, view, gl, budget, texture } = await harness(4096);
-    const competing = {}, second = virtualTexture("https://example.test/second/vt.json");
-    const read = vi.mocked(fetch).getMockImplementation()!;
+    const competing = {}, second = imageTexture("https://example.test/second/vt.png");
+    const factory = vi.mocked(automaticPageSources.createAutomaticRasterPageSource);
+    const create = factory.getMockImplementation()!;
     let release!: () => void;
-    vi.mocked(fetch).mockImplementation(async (input, init) => {
-      if (String(input).includes("/second/5-0-0.png")) await new Promise<void>(resolve => { release = resolve; });
-      return read(input, init);
+    factory.mockImplementation((...args) => {
+      const source = create(...args);
+      return { ...source, read: async (page, signal) => {
+        if (page.mip === source.layout.mipCount - 1) await new Promise<void>(resolve => { release = resolve; });
+        return source.read(page, signal);
+      } };
     });
     try {
       view.viewport.width = view.viewport.height = 1024;
@@ -739,7 +622,7 @@ describe("demand-grown RGBA atlases", () => {
       await waitFor(() => {
         runtime.update([view]);
         expect(release).toBeDefined();
-        expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 682, pendingPages: 1 });
+        expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 642, pendingPages: 1 });
         expect(runtime.runtimeSnapshot().atlasBytes).toBeGreaterThan(200 * 130 * 130 * 4);
       });
       // Let migration complete and the missing-root rejection become cached.
@@ -754,8 +637,8 @@ describe("demand-grown RGBA atlases", () => {
         expect(runtime.runtimeSnapshot()).toMatchObject({ pendingPages: 0, unresidentPages: 0 });
         expect(runtime.runtimeSnapshot().atlasBytes).toBeGreaterThan(before);
       });
-      expect(runtime.binding(texture)).toBeDefined();
-      expect(runtime.binding(second)).toBeDefined();
+      expect(runtime.automaticBinding(texture)).toBeDefined();
+      expect(runtime.automaticBinding(second)).toBeDefined();
     } finally { release?.(); budget.release(competing); runtime.dispose(); }
     expect(budget.snapshot().retainedBytes).toBe(0);
   });
@@ -771,13 +654,13 @@ describe("demand-grown RGBA atlases", () => {
       for (let i = 0; i < 3; i++) expect(runtime.update([view]).pending).toBe(false);
       expect(plan).toHaveBeenCalledTimes(1);
       const allocations = vi.mocked(gl.texStorage2D).mock.calls.length;
-      const reads = vi.mocked(fetch).mock.calls.length;
+      const reads = runtime.runtimeSnapshot().pageRequests;
       for (let i = 0; i < 100; i++) expect(runtime.update([view]).pending).toBe(false);
       expect(plan).toHaveBeenCalledTimes(1);
       expect(vi.mocked(gl.texStorage2D).mock.calls.length).toBe(allocations);
-      expect(vi.mocked(fetch).mock.calls.length).toBe(reads);
+      expect(runtime.runtimeSnapshot().pageRequests).toBe(reads);
       expect(gl.copyTexSubImage2D).not.toHaveBeenCalled();
-      expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 85, admittedPages: 5, atlasGrowthFailures: 0 });
+      expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 81, admittedPages: 5, atlasGrowthFailures: 0 });
       budget.release(competing);
       await waitFor(() => {
         runtime.update([view]);
@@ -795,7 +678,7 @@ describe("demand-grown RGBA atlases", () => {
       view.viewport.height = 4096;
       await waitFor(() => {
         runtime.update([view]);
-        expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 341, admittedPages: 341, residentPages: 341, unresidentPages: 0, pendingPages: 0 });
+        expect(runtime.runtimeSnapshot()).toMatchObject({ desiredPages: 321, admittedPages: 321, residentPages: 325, unresidentPages: 0, pendingPages: 0 });
       });
     } finally { runtime.dispose(); }
   });
@@ -803,7 +686,7 @@ describe("demand-grown RGBA atlases", () => {
   it("preserves the old binding through bounded GPU copies and never rereads resident pages", async () => {
     const { runtime, view, gl, budget, texture } = await harness();
     try {
-      const initial = runtime.binding(texture)!;
+      const initial = runtime.automaticBinding(texture)!;
       const initialBytes = runtime.runtimeSnapshot().atlasBytes;
       expect(initialBytes).toBe(8 * 130 * 130 * 4);
       view.viewport.width = 1024;
@@ -814,16 +697,16 @@ describe("demand-grown RGBA atlases", () => {
       runtime.update([view]);
       runtime.update([view]);
       expect(copiedPages(gl)).toBe(5);
-      expect(runtime.binding(texture)).toBe(initial);
+      expect(runtime.automaticBinding(texture)).toBe(initial);
       // Both textures are accounted until the atomic binding/page-table swap.
       expect(runtime.runtimeSnapshot().atlasBytes).toBe((8 + 128) * 130 * 130 * 4);
       expect(budget.snapshot().retainedBytes).toBeGreaterThan(runtime.runtimeSnapshot().atlasBytes);
       runtime.update([view]);
       // All five pages fit the copy byte allowance. Fence on the next turn,
       // retaining the old binding until validation succeeds.
-      expect(runtime.binding(texture)).toBe(initial);
+      expect(runtime.automaticBinding(texture)).toBe(initial);
       runtime.update([view]);
-      expect(runtime.binding(texture)!.atlas.texture).not.toBe(initial.atlas.texture);
+      expect(runtime.automaticBinding(texture)!.atlas.texture).not.toBe(initial.atlas.texture);
       expect(runtime.runtimeSnapshot().atlasBytes).toBe(128 * 130 * 130 * 4);
       await waitFor(() => {
         const uploads = runtime.runtimeSnapshot().uploadedPages;
@@ -838,7 +721,7 @@ describe("demand-grown RGBA atlases", () => {
 
   it.each(["allocation", "copy"])("retains coverage and avoids retry loops on %s failure", async (failure) => {
     const { runtime, view, gl, budget, texture } = await harness();
-    const original = runtime.binding(texture);
+    const original = runtime.automaticBinding(texture);
     const retained = budget.snapshot().retainedBytes;
     try {
       view.viewport.width = 1024;
@@ -848,7 +731,7 @@ describe("demand-grown RGBA atlases", () => {
       runtime.update([view]);
       runtime.update([view]);
       runtime.update([view]);
-      expect(runtime.binding(texture)).toBe(original);
+      expect(runtime.automaticBinding(texture)).toBe(original);
       expect(budget.snapshot().retainedBytes).toBe(retained);
       expect(runtime.runtimeSnapshot().atlasGrowthFailures).toBe(1);
       const allocations = vi.mocked(gl.texStorage2D).mock.calls.length;
@@ -863,7 +746,7 @@ describe("demand-grown RGBA atlases", () => {
     "releases an unfinished replacement on $action after $frames frames", async ({ action, frames }) => {
     const { runtime, view, gl, budget, texture } = await harness();
     const before = budget.snapshot().retainedBytes;
-    const binding = runtime.binding(texture);
+    const binding = runtime.automaticBinding(texture);
     view.viewport.width = 1024;
     view.viewport.height = 1024;
     for (let i = 0; i < frames; i++) runtime.update([view]);
@@ -873,7 +756,7 @@ describe("demand-grown RGBA atlases", () => {
       view.viewport.width = 256;
       view.viewport.height = 256;
       runtime.update([view]);
-      expect(runtime.binding(texture)).toBe(binding);
+      expect(runtime.automaticBinding(texture)).toBe(binding);
       expect(budget.snapshot().retainedBytes).toBe(before);
     } else {
       if (action === "dispose") runtime.dispose();

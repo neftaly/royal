@@ -1,18 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseVirtualTextureManifest } from "../../packages/renderer-webgl/src/virtual-texture/manifest";
+import { createGeneratedVirtualTextureLayout } from "../../packages/renderer-webgl/src/virtual-texture/layout";
 import {
   planVirtualTextureAtlasStorage,
   virtualTextureResidentPageCapacity,
 } from "../../packages/renderer-webgl/src/virtual-texture/storage-plan";
 
-const manifest = (overrides: Record<string, unknown> = {}) => parseVirtualTextureManifest({
-  borderTexels: 1,
-  contractVersion: 2,
-  pageSize: 128,
-  pages: { uriTemplate: "pages/{mip}-{x}-{y}.png" },
-  virtualSize: [512, 512],
-  ...overrides,
-});
+const manifest = (overrides: Record<string, unknown> = {}) => createGeneratedVirtualTextureLayout({ colorSpace: "srgb", borderTexels: 1, pageSize: 128, width: 512, height: 512, ...overrides });
 
 describe("VT storage planning core", () => {
   it("uses already-accounted migration headroom without reserving page tables twice", () => {
@@ -33,14 +26,13 @@ describe("VT storage planning core", () => {
     expect(grown.allocationBytes).toBeGreaterThan(32 * 1024 * 1024);
     expect(grown.allocationBytes).toBeLessThanOrEqual(available * 0.75);
   });
-  it("sizes shared capacity from bytes while preserving authored limits", () => {
+  it("sizes shared capacity from bytes within the root budget", () => {
     const source = manifest({ borderTexels: 2 });
     const plan = planVirtualTextureAtlasStorage(source, 4096, 256 * 1024 * 1024);
     expect(plan.slotCount).toBe(480);
     expect(plan.allocationBytes).toBe(480 * 132 * 132 * 4);
     expect(plan.allocationBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
     expect(virtualTextureResidentPageCapacity(source, 4096, plan)).toBe(480);
-    expect(virtualTextureResidentPageCapacity(manifest({ physicalSlots: 8 }), 4096, plan)).toBe(8);
   });
 
   it("caps atlas dimensions on small GPUs", () => {
@@ -98,14 +90,12 @@ describe("VT storage planning core", () => {
     )).toThrow("cannot hold one physical page");
   });
 
-  it("bounds each logical resource by authored slots, bytes, atlas, and page-table size", () => {
+  it("bounds each logical resource by atlas and page-table size", () => {
     const source = manifest({
-      physicalByteBudget: 130 * 130 * 4 * 5,
-      physicalSlots: 8,
     });
     const atlas = planVirtualTextureAtlasStorage(source, 4096, 32 * 1024 * 1024);
 
-    expect(virtualTextureResidentPageCapacity(source, 4096, atlas)).toBe(5);
+    expect(virtualTextureResidentPageCapacity(source, 4096, atlas)).toBe(atlas.slotCount);
     expect(() => virtualTextureResidentPageCapacity(source, 2, atlas))
       .toThrow("page table exceeds");
   });

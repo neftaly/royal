@@ -2,9 +2,9 @@
 export const COMPRESSED_SLOT_BASE = 65_536;
 import {
   virtualTexturePageKeyParts,
-  type VirtualTextureManifest,
+  type VirtualTextureLayout,
   type VirtualTexturePageId,
-} from "./manifest";
+} from "./layout";
 
 export type VirtualTexturePageKey = number | string;
 
@@ -19,7 +19,7 @@ export interface ProtectedVirtualTexturePoolPages {
 
 /** Patches only descendants affected by an added page, preserving finer mappings. */
 export const addVirtualTexturePageTablePage = (
-  manifest: VirtualTextureManifest,
+  textureLayout: VirtualTextureLayout,
   page: VirtualTexturePageId,
   slot: number,
   atlasColumns: number,
@@ -33,8 +33,8 @@ export const addVirtualTexturePageTablePage = (
   const slotY = Math.floor(physical / columns);
   for (let mip = page.mip; mip >= 0; mip -= 1) {
     const scale = 2 ** (page.mip - mip);
-    const layout = manifest.mipLayouts[mip]!;
-    const stride = Math.max(1, manifest.tableWidth / 2 ** mip);
+    const layout = textureLayout.mipLayouts[mip]!;
+    const stride = Math.max(1, textureLayout.tableWidth / 2 ** mip);
     const endX = Math.min(layout.width, (page.x + 1) * scale);
     const endY = Math.min(layout.height, (page.y + 1) * scale);
     for (let y = page.y * scale; y < endY; y += 1) {
@@ -98,7 +98,7 @@ export const selectVirtualTexturePoolSlot = (
  * is therefore never visible before its complete atlas cell is committed.
  */
 export const writeVirtualTexturePageTable = (
-  manifest: VirtualTextureManifest,
+  textureLayout: VirtualTextureLayout,
   residentSlots: ReadonlyMap<VirtualTexturePageKey, number>,
   atlasColumns: number,
   target: Uint8Array,
@@ -107,18 +107,18 @@ export const writeVirtualTexturePageTable = (
   if (!Number.isSafeInteger(atlasColumns) || atlasColumns < 1 || atlasColumns > 256) {
     throw new RangeError("Royal VT atlas columns must be within 1..256");
   }
-  if (target.byteLength !== manifest.tableByteLength) {
+  if (target.byteLength !== textureLayout.tableByteLength) {
     throw new RangeError("Royal VT page-table storage has the wrong byte length");
   }
   target.fill(0);
   // Coarse entries are complete before their children. A missing child can
   // therefore inherit its parent's already-resolved closest ancestor instead
   // of searching the complete ancestor chain again.
-  for (let mip = manifest.mipCount - 1; mip >= 0; mip -= 1) {
-    const layout = manifest.mipLayouts[mip]!;
-    const storageWidth = Math.max(1, manifest.tableWidth / 2 ** mip);
-    const parentLayout = manifest.mipLayouts[mip + 1];
-    const parentWidth = Math.max(1, manifest.tableWidth / 2 ** (mip + 1));
+  for (let mip = textureLayout.mipCount - 1; mip >= 0; mip -= 1) {
+    const layout = textureLayout.mipLayouts[mip]!;
+    const storageWidth = Math.max(1, textureLayout.tableWidth / 2 ** mip);
+    const parentLayout = textureLayout.mipLayouts[mip + 1];
+    const parentWidth = Math.max(1, textureLayout.tableWidth / 2 ** (mip + 1));
     for (let y = 0; y < layout.height; y += 1) {
       for (let x = 0; x < layout.width; x += 1) {
         const offset = layout.byteOffset + (y * storageWidth + x) * 4;

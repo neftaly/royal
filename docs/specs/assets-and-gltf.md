@@ -312,4 +312,4 @@ handles. This deferred slice MUST NOT add overhead to scenes without animation.
 
 ## Raster image sources
 
-Royal provides no dedicated SVG texture handling. Direct image assets and authored virtual-texture pages use the browser image decoder without SVG-specific validation. Optional `GS_texture_svg` payloads are ignored using normal unknown-extension fallback rules; required use fails preflight. Convert vector artwork to a supported raster format before loading it.
+Royal provides no dedicated SVG texture handling. Direct image assets use the browser image decoder without SVG-specific validation. Optional `GS_texture_svg` payloads are ignored using normal unknown-extension fallback rules; required use fails preflight. Convert vector artwork to a supported raster format before loading it.

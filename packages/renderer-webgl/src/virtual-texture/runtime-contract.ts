@@ -1,5 +1,4 @@
 import { automaticVirtualTextureEligible, automaticVirtualTextureHasPreview } from "./automatic-policy";
-import type { VirtualTextureAssetRef } from "@royal/renderer-core";
 import type { SurfaceFrameView } from "../frame/surface-frame";
 import { decodedTextureKey, type DecodedTextureSource, type TextureSourceRef } from "../texture/source";
 import {
@@ -8,17 +7,6 @@ import {
 } from "../texture/sampler";
 import type { CanonicalSurfaceScene } from "../surface/scene-lowering";
 import type { TextureUnitBinding } from "../webgl/draw-state-transition";
-
-export const virtualTextureAssetKey = (asset: VirtualTextureAssetRef): string => {
-  const sampler = canonicalTextureSampler(asset);
-  return JSON.stringify([
-    asset.contentKey === undefined ? "manifest" : typeof asset.contentKey,
-    asset.contentKey === undefined ? asset.manifestUri : asset.contentKey,
-    typeof asset.version, asset.version,
-    asset.colorSpace ?? "srgb",
-    sampler.magFilter, sampler.minFilter, sampler.wrapS, sampler.wrapT,
-  ]);
-};
 
 export const automaticVirtualTextureAssetKey = (asset: TextureSourceRef): string => JSON.stringify([
   decodedTextureKey(asset),
@@ -30,15 +18,13 @@ export type VirtualTextureSceneDemand = Readonly<{
   surfaces: readonly Readonly<{
     material: Readonly<{ baseColorAsset?: TextureSourceRef }>;
   }>[];
-  virtualTextureAssets: readonly VirtualTextureAssetRef[];
 }>;
 
 /** Pure lazy-feature activation shared by root setup and stale import guards. */
 export const virtualTextureRuntimeRequired = (
   scene: VirtualTextureSceneDemand,
   decoded: (asset: TextureSourceRef) => DecodedTextureSource | undefined,
-): boolean => scene.virtualTextureAssets.length > 0
-  || scene.surfaces.some((surface) => {
+): boolean => scene.surfaces.some((surface) => {
     const asset = surface.material.baseColorAsset;
     const source = asset === undefined ? undefined : decoded(asset);
     return source !== undefined
@@ -156,42 +142,16 @@ export const idleVirtualTextureRuntimeSnapshot = (
   uploadBudgetBytes,
 });
 
-/**
- * Focused manifest lifecycle plus current bounded page residency. `status` is
- * the shared focused-lifecycle discriminant.
- */
-export type VirtualTextureAssetSnapshot = Readonly<{
-  /** Page requests that ended in failure for the retained asset generation. */
-  failedPages: number;
-  /** Requested pages without usable coverage yet. */
-  pendingPages: number;
-  /** Currently resident physical atlas pages. */
-  residentPages: number;
-}> & (
-  | Readonly<{
-    error?: never;
-    status: "idle" | "loading" | "ready";
-  }>
-  | Readonly<{
-    error: string;
-    status: "error" | "unsupported";
-  }>
-);
-
 /** Narrow optional-feature seam; implementation and shader body remain lazy. */
 export interface VirtualTextureRuntime {
-  /** Undefined while a referenced authored manifest is pending; false when none can allocate. */
-  readonly authoredStorageRequired: boolean | undefined;
   readonly bindingRevision: number;
   readonly shaderSource: VirtualTextureShaderSource;
   automaticBinding(asset: TextureSourceRef): VirtualTextureGpuBinding | undefined;
-  binding(asset: VirtualTextureAssetRef): VirtualTextureGpuBinding | undefined;
   dispose(): void;
   invalidate(): void;
   invalidateSceneGeometry(): void;
   releaseRasterSource(asset: TextureSourceRef): void;
   runtimeSnapshot(): VirtualTextureRuntimeSnapshot;
-  snapshot(asset: VirtualTextureAssetRef): VirtualTextureAssetSnapshot;
   setScene(scene: CanonicalSurfaceScene | null): void;
   /** Embedded surface frames already reset the shared upload authority. */
   update(views: readonly SurfaceFrameView[], beginUploadFrame?: boolean): VirtualTextureFrameUpdate;

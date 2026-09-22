@@ -10,7 +10,6 @@ import type {
   Material,
   MeshNode,
   Scene,
-  VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import {
   affineSurfaceNormalTransformInto,
@@ -181,7 +180,6 @@ export type CanonicalSurfaceScene = Readonly<{
   surfaces: readonly CanonicalDrawSurface[];
   textureAssets: readonly TextureSourceRef[];
   textureSurfaceIndices: ReadonlyMap<string, readonly number[]>;
-  virtualTextureAssets: readonly VirtualTextureAssetRef[];
   toneMapping: "linear-clamp" | "pbr-neutral";
   volumes: readonly CanonicalBoundedVolume[];
 }>;
@@ -448,7 +446,6 @@ export const prepareCanonicalSurfaceScene = (
   }>> = [];
   const emittedSurfaces: CanonicalDrawSurface[] = [];
   let surfaces: readonly CanonicalDrawSurface[] = emittedSurfaces;
-  const virtualTextureAssets: VirtualTextureAssetRef[] = [];
   const lodBounds: ReturnType<typeof emptyWorldBounds>[] = [];
   const geometryLodGroupIds: LodGroupId[] = [];
   const directMaterials = new WeakMap<Material, CanonicalSurfaceMaterial>();
@@ -874,9 +871,6 @@ export const prepareCanonicalSurfaceScene = (
       directMaterials.set(node.material, materialSource);
     }
     const material = resolveMaterial(materialSource);
-    if (node.material.baseColor.kind === "virtual-asset") {
-      virtualTextureAssets.push(node.material.baseColor);
-    }
     const wireframe = node.material.kind === "wireframe";
     const geometry = wireframe
       ? wireframeGeometry(node.geometry)
@@ -977,7 +971,6 @@ export const prepareCanonicalSurfaceScene = (
     surfaces,
     textureAssets: collectCanonicalSurfaceTextureAssets(surfaces),
     textureSurfaceIndices: indexSurfaceTextures(surfaces),
-    virtualTextureAssets,
     toneMapping: scene.toneMapping ?? "pbr-neutral",
     volumes,
   };

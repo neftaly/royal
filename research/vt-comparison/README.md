@@ -1,3 +1,7 @@
+# Archived VT measurements
+
+These are historical measurements from the authored-VT implementation. Its executable probes have been removed with authored VT; use the current automatic paging tests and `pnpm bench:vt-pages` for current behavior.
+
 # VT follow-up — 2026-09-12
 
 For retained behavior, current limitations, and how to interpret the evidence, start with the [current worktree guide](CURRENT.md).

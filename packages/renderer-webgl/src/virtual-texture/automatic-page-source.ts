@@ -7,13 +7,13 @@ import type {
   TexturePreviewSource,
 } from "../texture/source";
 import {
-  createGeneratedVirtualTextureManifest,
+  createGeneratedVirtualTextureLayout,
   type VirtualTexturePageId,
-} from "./manifest";
+} from "./layout";
 import type {
   DecodedVirtualTexturePage,
   VirtualTexturePageSource,
-} from "./browser-page-source";
+} from "./page-source";
 
 type AxisSegment = Readonly<{
   destinationExtent: number;
@@ -128,7 +128,7 @@ const drawSegment = (
 };
 
 const renderAutomaticPage = (
-  manifest: ReturnType<typeof createGeneratedVirtualTextureManifest>,
+  layout: ReturnType<typeof createGeneratedVirtualTextureLayout>,
   sampler: CanonicalTextureSampler,
   image: CanvasImageSource,
   sourceScaleX: number,
@@ -138,7 +138,7 @@ const renderAutomaticPage = (
 ): DecodedVirtualTexturePage => {
   if (signal.aborted) throw new DOMException("VT page generation was aborted", "AbortError");
   const canvas = document.createElement("canvas");
-  const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
+  const storedPageSize = layout.pageSize + layout.borderTexels * 2;
   canvas.width = storedPageSize;
   canvas.height = storedPageSize;
   const context = canvas.getContext("2d", { alpha: true });
@@ -147,22 +147,22 @@ const renderAutomaticPage = (
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
   const sourceTexelsPerMipTexel = 2 ** page.mip;
-  const sourceX = (page.x * manifest.pageSize - manifest.borderTexels)
+  const sourceX = (page.x * layout.pageSize - layout.borderTexels)
     * sourceTexelsPerMipTexel;
-  const sourceY = (page.y * manifest.pageSize - manifest.borderTexels)
+  const sourceY = (page.y * layout.pageSize - layout.borderTexels)
     * sourceTexelsPerMipTexel;
   const sourceSpan = storedPageSize * sourceTexelsPerMipTexel;
   const xs = planAutomaticVirtualTextureAxis(
     sourceX,
     sourceSpan,
-    manifest.width,
+    layout.width,
     storedPageSize,
     sampler.wrapS,
   );
   const ys = planAutomaticVirtualTextureAxis(
     sourceY,
     sourceSpan,
-    manifest.height,
+    layout.height,
     storedPageSize,
     sampler.wrapT,
   );
@@ -191,7 +191,7 @@ export const createAutomaticRasterPageSource = (
   colorSpace: "linear" | "srgb",
   size: Readonly<{ width: number; height: number }> = source,
 ): VirtualTexturePageSource => {
-  const manifest = createGeneratedVirtualTextureManifest({
+  const layout = createGeneratedVirtualTextureLayout({
     borderTexels: AUTOMATIC_VT_BORDER_TEXELS,
     colorSpace,
     height: size.height,
@@ -199,9 +199,9 @@ export const createAutomaticRasterPageSource = (
     width: size.width,
   });
   return {
-    manifest,
+    layout,
     read: async (page, signal) => renderAutomaticPage(
-      manifest,
+      layout,
       sampler,
       source.source as CanvasImageSource,
       source.width / size.width,
@@ -219,12 +219,12 @@ export const createAutomaticPreviewPageSource = (
   colorSpace: "linear" | "srgb",
 ): VirtualTexturePageSource => {
   const size = preview.size;
-  const manifest = createGeneratedVirtualTextureManifest({ ...size, colorSpace,
+  const layout = createGeneratedVirtualTextureLayout({ ...size, colorSpace,
       pageSize: AUTOMATIC_VT_PAGE_SIZE, borderTexels: AUTOMATIC_VT_BORDER_TEXELS });
   let detailPages: VirtualTexturePageSource | undefined;
   let closed = false;
   return {
-    manifest,
+    layout,
     close: () => {
       closed = true;
       detailPages?.close?.();

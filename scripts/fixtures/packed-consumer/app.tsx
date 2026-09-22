@@ -14,7 +14,6 @@ import {
   useRendererLifecycle,
   useRendererSnapshot,
   useTextureAssetStatus,
-  useVirtualTextureAssetStatus,
   useVisitGltfAssetGeometry,
   type CanvasProps,
   type RendererContextSnapshot,
@@ -46,7 +45,6 @@ import {
   standardMaterial,
   triangleGeometry,
   unlitMaterial,
-  virtualTexture,
   type RenderObjectHandle,
   type Scene,
   type WorldPosition3,
@@ -110,8 +108,8 @@ const metadataAsset = gltfAsset({
 });
 const gltfAssetClaims = [metadataAsset] as const;
 const albedo = imageTexture({ src: '/albedo.webp', version: 2 });
-const authoredVirtualTexture = virtualTexture({
-  manifestUri: '/terrain.vt.json',
+const terrainTexture = imageTexture({
+  src: '/terrain.png',
   version: 'terrain-sha256',
 });
 const environment = prefilteredEnvironment({
@@ -152,7 +150,7 @@ const renderScene: Scene = scene({
     }),
     mesh({
       geometry: pickingGeometry,
-      material: unlitMaterial({ texture: authoredVirtualTexture }),
+      material: unlitMaterial({ texture: terrainTexture }),
     }),
     boundedVolume({
       color: [0.1, 1.2, 0.4, 0.8],
@@ -188,7 +186,6 @@ const Status = ({ root }: { readonly root?: RendererRoot | null }): ReactNode =>
   const modelStatus = useGltfAssetStatus(model.asset, options);
   const textureStatus = useTextureAssetStatus(albedo, options);
   const environmentStatus = usePrefilteredEnvironmentStatus(environment, options);
-  const virtualTextureStatus = useVirtualTextureAssetStatus(authoredVirtualTexture, options);
   const renderer = lifecycle.status === 'failed' ? lifecycle.error : lifecycle.status;
   const variants = modelStatus.status === 'ready'
     || modelStatus.status === 'streaming'
@@ -213,7 +210,6 @@ const Status = ({ root }: { readonly root?: RendererRoot | null }): ReactNode =>
       {size?.cssHeight ?? 0}; model {modelStatus.status} ({documentScenes.length} scenes,{' '}
       {variants}); texture{' '}
       {textureStatus.status}; environment {environmentStatus.status}; VT{' '}
-      {virtualTextureStatus.status}
     </output>
   );
 };

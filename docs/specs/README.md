@@ -93,3 +93,5 @@ path cannot represent it.
 
 The [conformance ledger](conformance-and-review.md) records known mismatches and
 review results. It is not a backlog for speculative features.
+
+- [Consumer texture inspection](texture-inspection.md): optional root policy, raster sampling, and publication gating.

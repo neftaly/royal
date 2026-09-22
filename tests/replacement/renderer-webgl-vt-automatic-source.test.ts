@@ -117,7 +117,7 @@ describe("automatic virtual texture page source", () => {
     ]);
   });
 
-  it("derives one complete generated manifest from decoded dimensions", () => {
+  it("derives one complete generated layout from decoded dimensions", () => {
     const source = createAutomaticRasterPageSource({
       height: 1024,
       source: {} as ImageBitmap,
@@ -128,13 +128,11 @@ describe("automatic virtual texture page source", () => {
       wrapS: "repeat",
       wrapT: "clamp-to-edge",
     }, "srgb");
-    expect(source.manifest).toMatchObject({
+    expect(source.layout).toMatchObject({
       borderTexels: 2,
       colorSpace: "srgb",
       height: 1024,
       mipCount: 5,
-      pageAddressing: "complete",
-      pageEncoding: "image",
       pageSize: 128,
       width: 2048,
     });

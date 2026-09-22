@@ -4,7 +4,6 @@ import {
   canonicalTextureSamplerKey,
 } from "../texture/sampler";
 import { textureStorageKey, type TextureSourceRef } from "../texture/source";
-import { virtualTextureAssetKey } from "../virtual-texture/runtime-contract";
 import {
   canonicalMaterialHasTransmission,
   type CanonicalSurfaceMaterial,
@@ -100,9 +99,6 @@ export const canonicalMaterialInstanceIdentityKey = (
     material.alphaCutoff ?? null,
     material.baseColor,
     ordinaryTextureIdentity(material.baseColorAsset),
-    material.baseColorVirtualAsset === undefined
-      ? null
-      : virtualTextureAssetKey(material.baseColorVirtualAsset),
     textureCoordinatesIdentity(material.baseColorTextureCoordinates),
     material.doubleSided === true,
     material.requiresTextureCoordinates,

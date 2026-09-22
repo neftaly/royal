@@ -11,9 +11,9 @@ import {
 } from "../../packages/renderer-webgl/src/virtual-texture/demand";
 import {
   derivedVirtualTextureMipCount,
-  parseVirtualTextureManifest,
+  createGeneratedVirtualTextureLayout,
   virtualTexturePageKeyParts,
-} from "../../packages/renderer-webgl/src/virtual-texture/manifest";
+} from "../../packages/renderer-webgl/src/virtual-texture/layout";
 import { addVirtualTexturePageTablePage, writeVirtualTexturePageTable } from "../../packages/renderer-webgl/src/virtual-texture/residency";
 import { assertFuzz, forEachFuzzCase } from "../fuzz";
 
@@ -31,7 +31,7 @@ describe("VT2 bounded planning properties", () => {
         }
       }
       for (const capacity of [1, 4, random.int(1, original.length), original.length]) {
-        const workspace = createVirtualTextureDemandWorkspace(512, "coarsest");
+        const workspace = createVirtualTextureDemandWorkspace(512);
         original.forEach((page, index) => {
           workspace.mips[index] = page.mip; workspace.xs[index] = page.x; workspace.ys[index] = page.y;
           workspace.keys.add(virtualTexturePageKeyParts(page.mip, page.x, page.y));
@@ -61,11 +61,7 @@ describe("VT2 bounded planning properties", () => {
 
   it("clears stale ancestors through randomized replacement and empty-table cycles", () => {
     forEachFuzzCase({ cases: 24, seed: 0x76_74_32_03 }, ({ random }) => {
-      const manifest = parseVirtualTextureManifest({
-        borderTexels: 1, contractVersion: 2, pageSize: 128,
-        pages: { uriTemplate: "{page}.png" },
-        virtualSize: [random.int(1, 1025), random.int(1, 1025)],
-      });
+      const manifest = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", borderTexels: 1, pageSize: 128, width: random.int(1, 1025), height: random.int(1, 1025) });
       const pages = manifest.mipLayouts.flatMap((layout, mip) => Array.from(
         { length: layout.width * layout.height }, (_, index) =>
           ({ mip, x: index % layout.width, y: Math.floor(index / layout.width) })));
@@ -117,14 +113,7 @@ describe("VT2 bounded planning properties", () => {
       const width = random.int(1, 8193);
       const height = random.int(1, 8193);
       const mipCount = derivedVirtualTextureMipCount(width, height, pageSize);
-      const manifest = parseVirtualTextureManifest({
-        borderTexels: 2,
-        contractVersion: 2,
-        mipCount,
-        pageSize,
-        pages: { uriTemplate: "{mip}/{x}/{y}.png" },
-        virtualSize: [width, height],
-      });
+      const manifest = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", borderTexels: 2, pageSize, width: width, height: height });
       const capacity = random.int(1, 65);
       const workspace = createVirtualTextureDemandWorkspace(capacity);
       const projection = identityMat4();
@@ -167,13 +156,7 @@ describe("VT2 bounded planning properties", () => {
 
   it("maps randomized missing pages only to resident ancestors", () => {
     forEachFuzzCase({ cases: 24, seed: 0x76_74_32_02 }, ({ random }) => {
-      const manifest = parseVirtualTextureManifest({
-        borderTexels: 1,
-        contractVersion: 2,
-        pageSize: 128,
-        pages: { uriTemplate: "{page}.png" },
-        virtualSize: [random.int(129, 2049), random.int(129, 2049)],
-      });
+      const manifest = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", borderTexels: 1, pageSize: 128, width: random.int(129, 2049), height: random.int(129, 2049) });
       const residents = new Map<number | string, number>();
       let slot = 0;
       for (let mip = manifest.mipCount - 1; mip >= 0 && slot < 32; mip -= 1) {

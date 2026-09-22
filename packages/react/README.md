@@ -142,10 +142,7 @@ environment `src` and typed `version`. It reports `idle`, `loading`, `ready`, or
 `error`; ready state includes the cubemap face size, mip count, and recorded
 provenance. The scene remains drawable with Royal's studio environment while
 the artifact loads or cannot be admitted to the GPU budget.
-`useVirtualTextureAssetStatus(manifestUriOrAsset)` observes one exact authored
-virtual-texture identity and its bounded page residency. The `Asset` name is
-deliberate: automatic VT policy remains root diagnostics rather than a second
-asset descriptor.
+Automatic texture paging is visible through the broad `useRendererSnapshot()` diagnostics.
 Scenes may also use `createCameraViewResource(...)`; committed camera changes
 flow directly to the root without a React render or geometry rebuild.
 Pure orbit view/camera helpers such as `orbitPerspectiveCamera` and
@@ -230,3 +227,7 @@ replace that ordered fallback explicitly. Pass
 request an advertised session rate without making unsupported browsers fail.
 `renderer.depthRange` installs one explicit positive `near`/`far` interval into
 the browser-owned XR projection; omission preserves WebXR's defaults.
+
+### Consumer texture inspection
+
+An optional `textureInspection: { key, allow }` policy gates image publication on a consumer-owned async predicate. React accepts it directly on `<Canvas>`; the renderer accepts it in root options. See [texture inspection](../../docs/specs/texture-inspection.md) for pixel-based caching, SVG raster freezing, authored mip inspection, and the full contract.

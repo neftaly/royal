@@ -288,7 +288,6 @@ describe("source architecture fitness", () => {
       "/gltf/texture-coordinates.ts",
       "/surface/surface-depth-prepass-owner.ts",
       "/virtual-texture/automatic-page-source.ts",
-      "/virtual-texture/browser-page-source.ts",
       "/virtual-texture/runtime.ts",
       "/xr/",
       "/xr.ts",

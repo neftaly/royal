@@ -631,11 +631,8 @@ export class SurfaceGpuOwner {
   ): number {
     const scene = this.#scene;
     if (scene === null) return ordinaryTextureStorageBudget(persistentBudgetBytes, 0);
-    const referenced = scene.surfaces.some(surface => surface.material.baseColorVirtualAsset !== undefined);
-    const required = referenced ? this.#virtualTexture?.authoredStorageRequired : false;
     let plannedNonTextureBytes = this.#geometryGpu.plannedRetainedBytes(scene.surfaces)
-      + this.#largeLights.plannedByteLength
-      + (required !== false ? Math.floor(persistentBudgetBytes * 0.75) : 0);
+      + this.#largeLights.plannedByteLength;
     for (const volume of scene.volumes) {
       plannedNonTextureBytes += volume.geometry.positions.byteLength
         + volume.geometry.indices.byteLength;
@@ -759,7 +756,7 @@ export class SurfaceGpuOwner {
         && canonicalMaterialHasTransmission(material)
       ) {
         this.#transmissionCandidateIndices.push(index);
-      } else if (material.baseColorVirtualAsset === undefined) {
+      } else {
         const authoredMask = authoredOrdinaryTextureMask(material);
         const variantCount = authoredMask === 0 ? 1 : 2;
         for (let variant = 0; variant < variantCount; variant += 1) {
@@ -1926,9 +1923,7 @@ export class SurfaceGpuOwner {
     sceneIndex: number,
   ): GpuSurface {
     const material = geometrySurface.surface.material;
-    let virtualTexture = material.baseColorVirtualAsset !== undefined
-      ? this.#virtualTexture?.binding(material.baseColorVirtualAsset)
-      : material.baseColorAsset === undefined
+    let virtualTexture = material.baseColorAsset === undefined
         ? undefined
         : this.#virtualTexture?.automaticBinding(material.baseColorAsset);
     let features = plannedSurfaceProgramFeatures(
@@ -1943,8 +1938,8 @@ export class SurfaceGpuOwner {
       ),
     );
     // Automatic VT has an ordinary preview to keep drawing while optional
-    // detail shaders link. Authored-only surfaces keep their existing semantics.
-    if (virtualTexture !== undefined && material.baseColorVirtualAsset === undefined
+    // detail shaders link.
+    if (virtualTexture !== undefined
       && ordinaryBindings[bindingOffset]!.texture !== null
       && !this.#programs.virtualReady(
         material.kind, features, geometrySurface.instanceCount > 0,

@@ -1,5 +1,5 @@
-import { virtualTexturePageBytes } from "./page-format";
-import type { VirtualTextureManifest } from "./manifest";
+import { virtualTexturePageBytes } from "./layout";
+import type { VirtualTextureLayout } from "./layout";
 
 const DEFAULT_PHYSICAL_BYTES = 32 * 1024 * 1024;
 const MAX_ATLAS_AXIS_SLOTS = 256;
@@ -8,7 +8,6 @@ export type VirtualTextureAtlasStoragePlan = Readonly<{
   allocationBytes: number;
   atlasColumns: number;
   atlasRows: number;
-  compressed: boolean;
   slotCount: number;
   storedPageSize: number;
 }>;
@@ -45,7 +44,7 @@ const atlasDimensions = (
  * axis limit or the bytes available to the atlas.
  */
 export const planVirtualTextureAtlasStorage = (
-  manifest: VirtualTextureManifest,
+  layout: VirtualTextureLayout,
   maxTextureSizeInput: number,
   availableBytesInput: number,
   targetSlots = Infinity,
@@ -56,7 +55,7 @@ export const planVirtualTextureAtlasStorage = (
     throw new RangeError("Royal VT received an invalid WebGL2 texture limit");
   }
   const maxTextureSize = maxTextureSizeInput;
-  const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
+  const storedPageSize = layout.pageSize + layout.borderTexels * 2;
   const maximumAxisSlots = Math.min(
     MAX_ATLAS_AXIS_SLOTS,
     Math.floor(maxTextureSize / storedPageSize),
@@ -64,9 +63,8 @@ export const planVirtualTextureAtlasStorage = (
   if (maximumAxisSlots < 1) {
     throw new RangeError("Royal VT stored page exceeds this WebGL2 context's texture limit");
   }
-  const compressed = manifest.pageEncoding !== "image";
-  const bytesPerPage = virtualTexturePageBytes(manifest);
-  const availableAtlasBytes = Math.max(0, availableBytesInput - (allocation === "initial" ? manifest.tableByteLength : 0));
+  const bytesPerPage = virtualTexturePageBytes(layout);
+  const availableAtlasBytes = Math.max(0, availableBytesInput - (allocation === "initial" ? layout.tableByteLength : 0));
   // This atlas serves all compatible textures, not just the first asset.
   const atlasByteLimit = Math.min(
     physicalByteLimit,
@@ -85,7 +83,6 @@ export const planVirtualTextureAtlasStorage = (
     allocationBytes: slotCount * bytesPerPage,
     atlasColumns,
     atlasRows,
-    compressed,
     slotCount,
     storedPageSize,
   };
@@ -93,22 +90,12 @@ export const planVirtualTextureAtlasStorage = (
 
 /** Validates one page table and returns its bounded share of a shared atlas. */
 export const virtualTextureResidentPageCapacity = (
-  manifest: VirtualTextureManifest,
+  layout: VirtualTextureLayout,
   maxTextureSizeInput: number,
   atlas: Pick<VirtualTextureAtlasStoragePlan, "allocationBytes" | "slotCount">,
 ): number => {
-  if (manifest.tableWidth > maxTextureSizeInput || manifest.tableHeight > maxTextureSizeInput) {
+  if (layout.tableWidth > maxTextureSizeInput || layout.tableHeight > maxTextureSizeInput) {
     throw new RangeError("Royal VT page table exceeds this WebGL2 context's texture limit");
   }
-  const bytesPerPage = atlas.allocationBytes / atlas.slotCount;
-  const byteSlots = manifest.physicalByteBudget === undefined
-    ? Infinity
-    : Math.floor(manifest.physicalByteBudget / bytesPerPage);
-  const maxResidentPages = Math.min(
-    manifest.physicalSlots ?? atlas.slotCount,
-    byteSlots,
-    atlas.slotCount,
-  );
-  if (maxResidentPages < 1) throw new RangeError("Royal VT budget cannot hold one physical page");
-  return maxResidentPages;
+  return atlas.slotCount;
 };

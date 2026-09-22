@@ -1,7 +1,6 @@
 import type {
   TextureSamplerFilter,
   TextureSamplerWrap,
-  VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import type { TextureSourceRef } from "./source";
 
@@ -15,7 +14,7 @@ export type CanonicalTextureSampler = Readonly<{
 
 /** Resolves omitted public sampler fields exactly once at the texture boundary. */
 export const canonicalTextureSampler = (
-  asset: Pick<TextureSourceRef | VirtualTextureAssetRef, "sampler">,
+  asset: Pick<TextureSourceRef, "sampler">,
 ): CanonicalTextureSampler => ({
   magFilter: asset.sampler?.magFilter ?? "linear",
   minFilter: asset.sampler?.minFilter ?? "linear-mipmap-linear",

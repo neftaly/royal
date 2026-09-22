@@ -133,7 +133,6 @@ self-documenting field names:
 
 - `src` for glTF and ordinary image bytes;
 - `sceneIndex` for an exact zero-based glTF document scene, omitted for the document default;
-- `manifestUri` for an authored VT manifest;
 - `materialVariant` for an exact authored variant name;
 - `pickingId` for logical interaction identity;
 - `pickingGeometry` for an exact local-space triangle proxy;
@@ -241,8 +240,6 @@ status:
 - glTF: `idle`, `loading`, `streaming`, `ready`, `degraded`, `error`;
 - ordinary texture: `idle`, `loading`, `ready`, `error`;
 - prefiltered environment: `idle`, `loading`, `ready`, `error`;
-- authored VT through `useVirtualTextureAssetStatus` additionally exposes
-  `unsupported` and `pendingPages`;
 - renderer lifecycle: `available`, `unavailable`, `failed`, `disposed`.
 
 ## Borrowed prepared glTF geometry
@@ -272,7 +269,7 @@ geometry. Consumers which need those semantics derive an owned fit-for-purpose
 representation through the borrowed geometry visitor.
 
 Focused status identity objects do not require scene-descriptor discriminator
-fields. For example, `{ src, version }` and `{ manifestUri, version }` are
+fields. For example, `{ src, version }` is
 enough for ordinary-texture and authored-VT observation respectively. Passing
 a complete valid descriptor variable remains supported.
 
@@ -309,7 +306,7 @@ mutable renderer state. Reporting the inventory or extras does not prepare or
 fetch unselected scene content.
 
 Royal owns a bounded asynchronous CPU-preparation scheduler shared across
-glTF, authored VT, and prefiltered environments. External image-texture
+glTF and prefiltered environments. External image-texture
 transport, bitmap decode, and decoded handoff use a separate bounded source
 lifecycle, so network wait cannot occupy a glTF worker slot. These limits and
 policies are renderer implementation details rather than consumer creation
@@ -422,8 +419,7 @@ one prepared material share Royal's canonical material identity.
 
 `imageTexture(src)` defaults to sRGB color interpretation and the ordinary image
 sampler. `textureAsset` is the explicit form when `contentKey` is needed.
-`virtualTexture(manifestUri)` names authored VT; automatic VT remains a renderer
-creation policy, not a different material constructor.
+Automatic VT is an internal representation of eligible ordinary textures.
 
 Source selection, fallback, compression, and VT are not
 different material APIs. Materials receive a texture reference with one visible
@@ -453,7 +449,7 @@ by the caller and can be reused for subsequent captures.
 be resident; this is budget- and view-dependent, not a promise of maximum source
 resolution. `refinement: "current"` skips that detail wait after source/GPU
 preparation and may capture preview or fallback coverage. It is not a guarantee
-that all authored VT target pages have arrived.
+that all admitted VT detail pages have arrived.
 
 `timings` reports `preparationMs`, `drawSubmissionMs`,
 `readbackAndEncodingMs`, and `totalMs` from capture invocation. Draw submission is

@@ -95,8 +95,7 @@ const smokeExpectations = {
   },
   'virtual-texture-stress': {
     resourceSubstrings: [
-      '/fixtures/virtual-texture-stress/map.vt.json',
-      '/fixtures/virtual-texture-stress/map-pages/m3-0-0.png',
+      '/fixtures/virtual-texture-stress/map.png',
     ],
     minColorBuckets: 8,
     minPaintedRatio: 0.02,
@@ -823,7 +822,7 @@ const assertRoute = (expected, state) => {
         failures.push('virtual texture map presets did not center and settle in Overview/NW/NE/SW/SE/Overview order');
       }
       if ((interaction.presets?.[1]?.pageCount ?? 0) <= (interaction.presets?.[0]?.pageCount ?? 0)) {
-        failures.push('virtual texture map focus did not request finer public pages');
+        failures.push('virtual texture map focus did not request finer generated pages');
       }
       const settledSamples = [
         ...(interaction.presets ?? []),
@@ -837,8 +836,7 @@ const assertRoute = (expected, state) => {
         && sample.lifecycleState === 'available'
         && sample.lifecycleError === null
         && sample.failedPages === 0
-        && sample.manifestFailures === 0
-        && sample.manifestsReady === 1
+        && sample.automaticResources === 1
         && sample.pendingPages === 0
         && sample.residentPages > 0
         && sample.persistentGpuDeniedClaims === 0
@@ -998,8 +996,7 @@ const assertRoute = (expected, state) => {
             sample?.lifecycleState !== 'available'
             || sample?.lifecycleError !== null
             || sample?.failedPages !== 0
-            || sample?.manifestFailures !== 0
-            || sample?.manifestsReady !== 1
+            || sample?.automaticResources !== 1
             || sample?.pendingPages !== 0
             || !(sample?.residentPages > 0)
           ) {
@@ -1007,33 +1004,9 @@ const assertRoute = (expected, state) => {
           }
         }
       }
-      const focusedRegions = [
-        { label: 'NW', preset: 1, u: 0.25, v: 0.25 },
-        { label: 'NE', preset: 2, u: 0.75, v: 0.25 },
-        { label: 'SW', preset: 3, u: 0.25, v: 0.75 },
-        { label: 'SE', preset: 4, u: 0.75, v: 0.75 },
-      ];
-      for (const region of focusedRegions) {
-        const pageUrls = interaction.presets?.[region.preset]?.pageUrls ?? [];
-        const pages = pageUrls.flatMap((url) => {
-          const match = /\/map-pages\/m(\d+)-(\d+)-(\d+)\.png(?:$|\?)/.exec(url);
-          if (match === null) return [];
-          const mip = Number(match[1]);
-          const grid = 2 ** Math.max(0, 3 - mip);
-          return [{
-            maxU: (Number(match[2]) + 1) / grid,
-            maxV: (Number(match[3]) + 1) / grid,
-            mip,
-            minU: Number(match[2]) / grid,
-            minV: Number(match[3]) / grid,
-          }];
-        });
-        if (!pages.some((page) => (
-          page.mip < 3
-          && page.minU <= region.u && region.u <= page.maxU
-          && page.minV <= region.v && region.v <= page.maxV
-        ))) {
-          failures.push(`virtual texture map ${region.label} focus did not refine the target UV beyond the coarse root`);
+      for (const [index, region] of ['NW', 'NE', 'SW', 'SE'].entries()) {
+        if (!(interaction.presets?.[index + 1]?.residentPages > 1)) {
+          failures.push(`virtual texture ${region} focus did not retain detail beyond its coarse root`);
         }
       }
     }
@@ -1186,8 +1159,8 @@ const runVirtualTextureViewportConvergence = async (session, previous = null) =>
       lifecycleError: renderer?.lifecycle?.error ?? null,
       lifecycleState: renderer?.lifecycle?.state ?? null,
       failedPages: vt?.failedPages ?? null,
-      manifestFailures: vt?.manifestFailures ?? null,
-      manifestsReady: vt?.manifestsReady ?? null,
+      failedPages: vt?.failedPages ?? null,
+      automaticResources: vt?.automaticResources ?? null,
       pendingPages: vt?.pendingPages ?? null,
       residentPages: vt?.residentPages ?? null,
     };
@@ -1205,8 +1178,8 @@ const runVirtualTextureViewportConvergence = async (session, previous = null) =>
       && sample.lifecycleState === 'available'
       && sample.lifecycleError === null
       && sample.failedPages === 0
-      && sample.manifestFailures === 0
-      && sample.manifestsReady === 1
+      && sample.failedPages === 0
+      && sample.automaticResources === 1
       && sample.pendingPages === 0
       && sample.residentPages > 0
       && state === lastState
@@ -1237,20 +1210,18 @@ const runVirtualTextureInteractionSmoke = async (session) => {
   if (buttons.some((button) => !(button instanceof HTMLButtonElement))) {
     return { error: 'missing virtual texture camera presets' };
   }
-  const pageUrls = () => performance.getEntriesByType('resource')
-    .map((entry) => entry.name)
-    .filter((url) => url.includes('/fixtures/virtual-texture-stress/map-pages/'));
   const rendererSnapshot = () => ${rendererSnapshotExpression};
-  const waitForConvergence = async (afterFrame = null, previousPageUrls = []) => {
+  const pageRequests = () => rendererSnapshot()?.virtualTexturing?.pageRequests ?? 0;
+  const waitForConvergence = async (afterFrame = null, previousPageRequests = 0) => {
     const deadline = performance.now() + 8000;
-    let currentPages = pageUrls().length;
+    let currentPages = pageRequests();
     let lastPages = -1;
     let lastResidentPages = -1;
     let stableFrames = 0;
     let renderer = rendererSnapshot();
     while (performance.now() < deadline && stableFrames < 8) {
       await new Promise((resolve) => requestAnimationFrame(() => resolve()));
-      currentPages = pageUrls().length;
+      currentPages = pageRequests();
       renderer = rendererSnapshot();
       const vt = renderer?.virtualTexturing;
       if (
@@ -1258,8 +1229,7 @@ const runVirtualTextureInteractionSmoke = async (session) => {
         vt?.residentPages === lastResidentPages &&
         (afterFrame === null || (renderer?.frame ?? -1) > afterFrame) &&
         vt?.failedPages === 0 &&
-        vt?.manifestFailures === 0 &&
-        vt?.manifestsReady === 1 &&
+        vt?.automaticResources === 1 &&
         vt?.pendingPages === 0 &&
         vt?.residentPages > 0
       ) stableFrames += 1;
@@ -1268,8 +1238,7 @@ const runVirtualTextureInteractionSmoke = async (session) => {
       lastResidentPages = vt?.residentPages ?? -1;
     }
     const vt = renderer?.virtualTexturing;
-    const currentPageUrls = pageUrls();
-    const previousPages = new Set(previousPageUrls);
+
     const canvasRect = canvas.getBoundingClientRect();
     const pressure = renderer?.resourcePressure;
     return {
@@ -1283,12 +1252,9 @@ const runVirtualTextureInteractionSmoke = async (session) => {
       devicePixelRatio: window.devicePixelRatio,
       distance: Number(canvas.dataset.mapDistance),
       frame: renderer?.frame ?? null,
-      manifestFailures: vt?.manifestFailures ?? null,
-      manifestsReady: vt?.manifestsReady ?? null,
+      automaticResources: vt?.automaticResources ?? null,
       pageCount: currentPages,
-      pageUrls: currentPageUrls,
-      newPageUrls: currentPageUrls.filter((url) => !previousPages.has(url)),
-      newPageRequestCount: Math.max(0, currentPageUrls.length - previousPageUrls.length),
+      newPageRequestCount: Math.max(0, currentPages - previousPageRequests),
       pendingPages: vt?.pendingPages ?? null,
       persistentGpuDeniedClaims: pressure?.persistentGpuDeniedClaims ?? null,
       residentPages: vt?.residentPages ?? null,
@@ -1297,19 +1263,19 @@ const runVirtualTextureInteractionSmoke = async (session) => {
       targetY: Number(canvas.dataset.mapTargetY),
     };
   };
-  const presets = [await waitForConvergence(null, [])];
+  const presets = [await waitForConvergence(null, 0)];
   for (const button of buttons.slice(1)) {
     const frame = rendererSnapshot()?.frame ?? null;
-    const previousPageUrls = pageUrls();
+    const previousPageRequests = pageRequests();
     button.click();
-    presets.push(await waitForConvergence(frame, previousPageUrls));
+    presets.push(await waitForConvergence(frame, previousPageRequests));
   }
   const overviewFrame = rendererSnapshot()?.frame ?? null;
-  const previousOverviewPageUrls = pageUrls();
+  const previousOverviewPageRequests = pageRequests();
   buttons[0].click();
-  presets.push(await waitForConvergence(overviewFrame, previousOverviewPageUrls));
+  presets.push(await waitForConvergence(overviewFrame, previousOverviewPageRequests));
   const zoomFrame = rendererSnapshot()?.frame ?? null;
-  const previousZoomPageUrls = pageUrls();
+  const previousZoomPageRequests = pageRequests();
   for (let step = 0; step < 8; step += 1) {
     canvas.dispatchEvent(new WheelEvent('wheel', {
       bubbles: true,
@@ -1320,7 +1286,7 @@ const runVirtualTextureInteractionSmoke = async (session) => {
     await new Promise((resolve) => requestAnimationFrame(() => resolve()));
   }
   await globalThis.__royalExamplesRenderNow?.();
-  const zoom = await waitForConvergence(zoomFrame, previousZoomPageUrls);
+  const zoom = await waitForConvergence(zoomFrame, previousZoomPageRequests);
   for (let step = 0; step < 8; step += 1) {
     canvas.dispatchEvent(new WheelEvent('wheel', {
       bubbles: true,
@@ -1330,7 +1296,7 @@ const runVirtualTextureInteractionSmoke = async (session) => {
     }));
     await new Promise((resolve) => requestAnimationFrame(() => resolve()));
   }
-  await waitForConvergence(rendererSnapshot()?.frame ?? null, pageUrls());
+  await waitForConvergence(rendererSnapshot()?.frame ?? null, pageRequests());
   const farFrame = rendererSnapshot()?.frame ?? null;
   canvas.dispatchEvent(new WheelEvent('wheel', {
     bubbles: true,
@@ -1339,9 +1305,9 @@ const runVirtualTextureInteractionSmoke = async (session) => {
     deltaY: 2000,
   }));
   await globalThis.__royalExamplesRenderNow?.();
-  const far = await waitForConvergence(farFrame, pageUrls());
+  const far = await waitForConvergence(farFrame, pageRequests());
   const reactivationFrame = rendererSnapshot()?.frame ?? null;
-  const previousReactivationPageUrls = pageUrls();
+  const previousReactivationPageRequests = pageRequests();
   canvas.dispatchEvent(new WheelEvent('wheel', {
     bubbles: true,
     cancelable: true,
@@ -1349,7 +1315,7 @@ const runVirtualTextureInteractionSmoke = async (session) => {
     deltaY: -2000,
   }));
   await globalThis.__royalExamplesRenderNow?.();
-  const reactivation = await waitForConvergence(reactivationFrame, previousReactivationPageUrls);
+  const reactivation = await waitForConvergence(reactivationFrame, previousReactivationPageRequests);
   const resizeContainer = canvas.closest('.vt-stress-canvas');
   let resize = { error: 'missing virtual texture resize container' };
   if (resizeContainer instanceof HTMLElement) {
@@ -1365,10 +1331,10 @@ const runVirtualTextureInteractionSmoke = async (session) => {
       residentPages: rendererSnapshot()?.virtualTexturing?.residentPages ?? null,
     };
     resizeContainer.style.inlineSize = '62%';
-    const narrow = await waitForConvergence(rendererSnapshot()?.frame ?? null, pageUrls());
+    const narrow = await waitForConvergence(rendererSnapshot()?.frame ?? null, pageRequests());
     const narrowBackingWidth = canvas.width;
     resizeContainer.style.inlineSize = originalInlineSize;
-    const restored = await waitForConvergence(rendererSnapshot()?.frame ?? null, pageUrls());
+    const restored = await waitForConvergence(rendererSnapshot()?.frame ?? null, pageRequests());
     resize = {
       before,
       narrow: { ...narrow, backingHeight: canvas.height, backingWidth: narrowBackingWidth },
@@ -1387,7 +1353,7 @@ const runVirtualTextureInteractionSmoke = async (session) => {
   const startTargetX = Number(canvas.dataset.mapTargetX);
   const startTargetY = Number(canvas.dataset.mapTargetY);
   const frameBefore = rendererSnapshot()?.frame ?? null;
-  const previousPanPageUrls = pageUrls();
+  const previousPanPageRequests = pageRequests();
   const dispatchPan = (type) => canvas.dispatchEvent(new PointerEvent(type, {
     bubbles: true,
     button: 1,
@@ -1411,10 +1377,9 @@ const runVirtualTextureInteractionSmoke = async (session) => {
     dispatchPan('pointerup');
     pointerDown = false;
     await globalThis.__royalExamplesRenderNow?.();
-    const settled = await waitForConvergence(frameBefore, previousPanPageUrls);
+    const settled = await waitForConvergence(frameBefore, previousPanPageRequests);
     return {
       far,
-      pageUrls: pageUrls(),
       pan: {
         ...settled,
         errors: panErrors,
@@ -1656,13 +1621,13 @@ const runContextLossSmoke = async (session, expectVirtualTexturing) => evaluate(
   if (hadVirtualTexturing) {
     const vt = recoveredResources?.virtualTexturing;
     const beforeVt = before?.virtualTexturing;
-    const cumulativeFailureCounters = ['failedPages', 'manifestFailures'];
+    const cumulativeFailureCounters = ['failedPages'];
     const newFailures = cumulativeFailureCounters.filter((name) => (
       Number.isFinite(beforeVt?.[name])
       && (!Number.isFinite(vt?.[name]) || vt[name] > beforeVt[name])
     ));
     if (
-      (Number.isFinite(beforeVt?.manifestsReady) && vt?.manifestsReady !== beforeVt.manifestsReady)
+      (Number.isFinite(beforeVt?.automaticResources) && vt?.automaticResources !== beforeVt.automaticResources)
       || (vt?.residentPages ?? 0) <= 0
       || vt?.pendingPages !== 0
       || newFailures.length > 0
@@ -1819,12 +1784,12 @@ const runReactLifecycleSmoke = async (session) => {
   if (!Number.isFinite(animationEnd)) return { error: 'active useFrame loop did not advance the renderer' };
 
   action('virtual-texture');
-  const manifestRequestsBefore = safeSnapshot(replacementReader)?.virtualTexturing?.manifestRequests ?? 0;
-  const manifestRequestsAtUnmount = await waitFor(() => {
-    const requests = safeSnapshot(replacementReader)?.virtualTexturing?.manifestRequests;
-    return Number.isFinite(requests) && requests > manifestRequestsBefore ? requests : undefined;
+  const pageRequestsBefore = safeSnapshot(replacementReader)?.virtualTexturing?.pageRequests ?? 0;
+  const pageRequestsAtUnmount = await waitFor(() => {
+    const requests = safeSnapshot(replacementReader)?.virtualTexturing?.pageRequests;
+    return Number.isFinite(requests) && requests > pageRequestsBefore ? requests : undefined;
   });
-  if (!Number.isFinite(manifestRequestsAtUnmount)) return { error: 'VT manifest request did not begin before unmount' };
+  if (!Number.isFinite(pageRequestsAtUnmount)) return { error: 'VT page preparation did not begin before unmount' };
 
   action('toggle-mount');
   const unmounted = await waitFor(() => (
@@ -1897,7 +1862,7 @@ const runReactLifecycleSmoke = async (session) => {
     canvasReplacement,
     failedRoot,
     initialAfterReplacement: safeSnapshot(initialReader),
-    manifestRequestsAtUnmount,
+    pageRequestsAtUnmount,
     recovered: safeSnapshot(recoveredReader),
     recoveredObserver,
     remounted: remountedSnapshot,
@@ -2174,17 +2139,17 @@ const main = async () => {
         await session.call('Fetch.enable', {
           patterns: [{
             requestStage: 'Request',
-            urlPattern: '*map-pages/*',
+            urlPattern: '*virtual-texture-stress/map.png*',
           }],
         });
         session.on('Fetch.requestPaused', (request) => {
-          if (request.request.url.includes('/fixtures/virtual-texture-stress/map-pages/')) {
+          if (request.request.url.includes('/fixtures/virtual-texture-stress/map.png')) {
             pausedVirtualTextureRequests.push(request);
           }
         });
         textureFallbackPause = session.wait(
           'Fetch.requestPaused',
-          ({ request }) => request.url.includes('/fixtures/virtual-texture-stress/map-pages/'),
+          ({ request }) => request.url.includes('/fixtures/virtual-texture-stress/map.png'),
           { timeoutMs: 10_000 },
         );
       }
@@ -2256,9 +2221,9 @@ const main = async () => {
         const fallbackRoute = virtualTextureFallback
           ? {
               ...effectiveRoute,
-              absentResourceSubstrings: ['/fixtures/virtual-texture-stress/map-pages/'],
+              absentResourceSubstrings: ['/fixtures/virtual-texture-stress/map.png'],
               minColorBuckets: undefined,
-              resourceSubstrings: ['/fixtures/virtual-texture-stress/map.vt.json'],
+              resourceSubstrings: [],
             }
           : secondaryTextureFallback
             ? {
@@ -2561,7 +2526,7 @@ const main = async () => {
         || lifecycle?.remounted?.lifecycle?.state !== 'available'
         || !(lifecycle?.remounted?.frame > 0)
         || !(lifecycle?.animationEnd >= lifecycle?.animationStart + 3)
-        || !(lifecycle?.manifestRequestsAtUnmount > 0)
+        || !(lifecycle?.pageRequestsAtUnmount > 0)
         || lifecycle?.boundaryError !== 'React lifecycle probe frame failure'
         || lifecycle?.canvasReplacement?.replaced !== true
         || lifecycle?.canvasReplacement?.oldCanvasConnected !== false
@@ -2576,7 +2541,7 @@ const main = async () => {
       ) {
         throw new Error(`React Canvas lifecycle smoke failed: ${JSON.stringify(lifecycle)}`);
       }
-      console.log(`ok react-canvas-lifecycle frames=${lifecycle.animationStart}->${lifecycle.animationEnd} manifestRequests=${lifecycle.manifestRequestsAtUnmount}`);
+      console.log(`ok react-canvas-lifecycle frames=${lifecycle.animationStart}->${lifecycle.animationEnd} pageRequests=${lifecycle.pageRequestsAtUnmount}`);
     }
 
     if (exceptions.length > 0) {

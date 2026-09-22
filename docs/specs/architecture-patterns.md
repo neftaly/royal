@@ -251,7 +251,7 @@ lifecycle. Expected domains include:
 - render clock and external-clock ownership;
 - XR capability, acquisition, and live-session lifecycle as separate machines;
 - prepared asset and individual image settlement;
-- ordinary texture and authored VT readiness;
+- ordinary texture readiness and automatic VT diagnostics;
 - VT page request/decode/admission/publication;
 - shader/program compilation readiness;
 - pointer hover/down/click interaction state.
