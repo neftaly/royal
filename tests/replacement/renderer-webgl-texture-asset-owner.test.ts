@@ -1,3 +1,4 @@
+import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/texture/storage-fit";
 import { imageTexture, textureAsset } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { waitFor } from "./support/wait-for";
@@ -80,6 +81,65 @@ describe("ordinary texture asset lifecycle owner", () => {
     } finally { owner.dispose(); }
   });
 
+  it("does not reacquire the old raster while its higher-resolution replacement is decoding", async () => {
+    const asset = imageTexture("/refining.png");
+    const first = { ...decoded(), width: 8, height: 8, sourceWidth: 64, sourceHeight: 64 };
+    const full = { ...decoded(), width: 64, height: 64 };
+    let finish!: (source: DecodedTextureSource) => void;
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>().mockResolvedValueOnce(first)
+      .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    let lease: ReturnType<TextureAssetOwner["acquireDecoded"]>;
+    const owner = new TextureAssetOwner({ decode, onAssetChanged: vi.fn(), onSnapshotChanged: vi.fn(), onListenerError: vi.fn(),
+      releaseDecoded: () => { lease?.release(); lease = undefined; },
+    });
+    try {
+      owner.reconcile([asset], [], 512);
+      await waitFor(() => expect(owner.decoded(asset)).toBe(first));
+      lease = owner.acquireDecoded(asset);
+      // VT can own pixels before the ordinary GPU fallback has uploaded them.
+      owner.reconcile([asset], [], 32768);
+      expect(decode).toHaveBeenCalledTimes(2);
+      expect(owner.acquireDecoded(asset)).toBeUndefined();
+      finish(full);
+      await waitFor(() => expect(owner.decoded(asset)).toBe(full));
+      lease = owner.acquireDecoded(asset);
+      expect(lease?.source).toBe(full);
+      expect(first.close).toHaveBeenCalledOnce();
+    } finally { lease?.release(); owner.dispose(); }
+  });
+
+  it("does not reacquire a stale raster while replacement waits for a decode slot", async () => {
+    const asset = imageTexture("/queued-refinement.png");
+    const blockers = Array.from({ length: 32 }, (_, i) => imageTexture(`/blocked-${i}.png`));
+    const first = { ...decoded(), width: 8, height: 8, sourceWidth: 64, sourceHeight: 64 };
+    const full = { ...decoded(), width: 64, height: 64 };
+    const finishes: Array<() => void> = [];
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>()
+      .mockResolvedValueOnce(first)
+      .mockImplementation(source => source === asset ? Promise.resolve(full) : new Promise(resolve => {
+        finishes.push(() => resolve(decoded()));
+      }));
+    let lease: ReturnType<TextureAssetOwner["acquireDecoded"]>;
+    const owner = new TextureAssetOwner({ decode, onAssetChanged: vi.fn(), onSnapshotChanged: vi.fn(), onListenerError: vi.fn(),
+      releaseDecoded: () => { lease?.release(); lease = undefined; },
+    });
+    try {
+      owner.reconcile([asset], [], 512);
+      await waitFor(() => expect(owner.decoded(asset)).toBe(first));
+      lease = owner.acquireDecoded(asset);
+      owner.reconcile([...blockers, asset], [], 512 * 33);
+      expect(finishes).toHaveLength(32);
+      owner.reconcile([...blockers, asset], [], 32768 * 33);
+      expect(decode).toHaveBeenCalledTimes(33);
+      expect(owner.acquireDecoded(asset)).toBeUndefined();
+      finishes[0]!();
+      await waitFor(() => expect(owner.decoded(asset)).toBe(full));
+      lease = owner.acquireDecoded(asset);
+      expect(lease?.source).toBe(full);
+      expect(first.close).toHaveBeenCalledOnce();
+    } finally { lease?.release(); owner.dispose(); }
+  });
+
   it("restores discarded native mip levels by decoding the source again once", async () => {
     const make = (size: number): DecodedTextureSource => ({ kind: "ktx2-etc2", colorSpace: "srgb", width: size, height: size,
       sourceWidth: 64, sourceHeight: 64, close: vi.fn(), levels: [{ width: size, height: size, blocks: new Uint8Array(size * size) }] });
@@ -99,6 +159,69 @@ describe("ordinary texture asset lifecycle owner", () => {
       expect(first.close).toHaveBeenCalledOnce();
       expect(full.close).toHaveBeenCalledOnce();
     } finally { owner.dispose(); }
+  });
+
+  it("restores a leased large raster using the unused shares of tiny textures", async () => {
+    const large = imageTexture("/mat.webp");
+    const tiny = Array.from({ length: 54 }, (_, i) => imageTexture(`/tiny-${i}.png`));
+    const pending: (() => void)[] = [];
+    const closed = vi.fn();
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>((asset, _signal, maxBytes) => {
+      if (asset === large) {
+        const size = fitOrdinaryTextureStorage(10092, 7128, maxBytes!);
+        return Promise.resolve({ ...size, sourceWidth: 10092, sourceHeight: 7128, source: {} as ImageBitmap, close: closed });
+      }
+      return new Promise(resolve => { pending.push(() => resolve({ ...decoded(), width: 8, height: 8 })); });
+    });
+    let lease: ReturnType<TextureAssetOwner["acquireDecoded"]>;
+    const releaseDecoded = vi.fn(() => { lease?.release(); lease = undefined; });
+    const owner = new TextureAssetOwner({ decode, releaseDecoded, onAssetChanged: vi.fn(), onListenerError: vi.fn(), onSnapshotChanged: vi.fn() }, 192 * 1024 * 1024);
+    try {
+      owner.reconcile([large, ...tiny]);
+      await waitFor(() => expect(owner.decoded(large)?.width).toBe(986));
+      lease = owner.acquireDecoded(large);
+      owner.releaseUploaded([textureStorageKey(large)]);
+      while (pending.length || owner.snapshot().activePreparations) {
+        for (const finish of pending.splice(0)) finish();
+        await new Promise(resolve => setTimeout(resolve, 0));
+        owner.releaseUploaded([large, ...tiny].map(textureStorageKey));
+      }
+      await waitFor(() => expect(owner.decoded(large)!.width).toBeGreaterThan(4000));
+      const source = owner.decoded(large)!;
+      expect(source.width * source.height * 4).toBeLessThan(64 * 1024 * 1024);
+      expect(releaseDecoded).toHaveBeenCalledOnce();
+      for (const asset of tiny) expect(decode.mock.calls.filter(call => call[0] === asset)).toHaveLength(1);
+      owner.releaseUploaded([textureStorageKey(large)]);
+      const calls = decode.mock.calls.length;
+      for (let i = 0; i < 20; i++) owner.reconcile([large, ...tiny]);
+      expect(decode.mock.calls).toHaveLength(calls);
+    } finally { lease?.release(); owner.dispose(); }
+  });
+
+  it("refines a late completed raster even when returned budget was already redistributed", async () => {
+    const large = imageTexture("/late-mat.webp"), tiny = imageTexture("/tiny.png");
+    let finish!: (source: DecodedTextureSource) => void;
+    let lease: ReturnType<TextureAssetOwner["acquireDecoded"]>;
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>((asset, _signal, _bytes) => asset === large
+      ? new Promise(resolve => { finish = resolve; })
+      : Promise.resolve({ ...decoded(), width: 8, height: 8 }));
+    const owner = new TextureAssetOwner({ decode, onListenerError: vi.fn(), onSnapshotChanged: vi.fn(),
+      releaseDecoded: () => { lease?.release(); lease = undefined; },
+      onAssetChanged: key => {
+        if (key === decodedTextureKey(large) && !lease) {
+          lease = owner.acquireDecoded(large);
+          owner.releaseUploaded([textureStorageKey(large)]);
+        }
+      },
+    }, 64 * 1024 * 1024);
+    try {
+      owner.reconcile([large, tiny]);
+      await waitFor(() => expect(owner.decoded(tiny)).toBeDefined());
+      const first = fitOrdinaryTextureStorage(10092, 7128, 32 * 1024 * 1024);
+      finish({ ...first, source: {} as ImageBitmap, sourceWidth: 10092, sourceHeight: 7128, close: vi.fn() });
+      await waitFor(() => expect(decode.mock.calls.filter(call => call[0] === large)).toHaveLength(2));
+      expect(decode.mock.calls.at(-1)![2]).toBeGreaterThan(63 * 1024 * 1024);
+    } finally { lease?.release(); owner.dispose(); }
   });
 
   it("preloads every claimed source independently of complete preparation admission", () => {

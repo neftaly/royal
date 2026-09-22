@@ -1,3 +1,5 @@
+import { ordinaryTextureStorageBytes } from "./storage";
+import { textureStorageShare } from "./storage-share";
 import { fitOrdinaryTextureStorage } from "./storage-fit";
 import {
   canReserveTextureSource,
@@ -121,6 +123,7 @@ type AssetEntry = {
   decodedClaims: number;
   decodedReleased: boolean;
   preparationRetainsAlpha: boolean;
+  preparationAlphaOnly: boolean;
   preparationQueuedAt: number;
   preparationStartedAt: number;
   queued: boolean;
@@ -174,6 +177,8 @@ export class TextureAssetOwner {
   readonly #entries = new Map<string, AssetEntry>();
   readonly #listeners = new KeyedRetainedListeners<string>();
   #maxStorageBytes: number | undefined;
+  #currentStorageBudgetBytes: number | undefined;
+  #redistributionQueued = false;
   readonly #now: () => number;
   readonly #platform: TextureAssetOwnerPlatform;
   readonly #storageBudgetBytes: number | undefined;
@@ -215,6 +220,11 @@ export class TextureAssetOwner {
     if (this.#disposed) return undefined;
     const entry = this.#entries.get(decodedTextureKey(asset));
     if (entry?.decoded === undefined || entry.decodedReleased) return undefined;
+    if (entry.reservation?.phase === "preparing" && !entry.preparationAlphaOnly) return undefined;
+    // A queued replacement must also exclude new leases: otherwise VT can pin
+    // the old pixels before a decode slot becomes available.
+    if ((entry.queued || entry.preparationDeferred)
+      && !(entry.decodedClaims > 0 && entry.retainAlpha && entry.alpha === undefined)) return undefined;
     entry.decodedClaims += 1;
     // The optional representation now charges the retained source; this slot
     // only bounds decode handoff and must not starve unrelated asset decoding.
@@ -309,14 +319,10 @@ export class TextureAssetOwner {
       if (existing === undefined) claimed.set(key, { asset, storageKeys: new Set([storageKey]) });
       else existing.storageKeys.add(storageKey);
     }
-    let storageCount = 0;
-    for (const claim of claimed.values()) storageCount += claim.storageKeys.size;
-    const fairStorageBytes = storageBudgetBytes === undefined || storageCount === 0
-      ? undefined
-      : Math.floor(storageBudgetBytes / storageCount);
-    this.#maxStorageBytes = fairStorageBytes === undefined
-      ? undefined
-      : Math.max(4, fairStorageBytes);
+    this.#currentStorageBudgetBytes = storageBudgetBytes;
+    this.#updateStorageShare([...claimed].map(([key, claim]) => ({
+      source: this.#entries.get(key)?.decoded, copies: claim.storageKeys.size,
+    })));
     for (const [key, claim] of claimed) {
       const entry = this.#entries.get(key);
       if (entry === undefined) {
@@ -324,12 +330,12 @@ export class TextureAssetOwner {
         continue;
       }
       entry.asset = claim.asset;
-      this.#refreshStorageFit(entry);
       entry.claimedStorageKeys.clear();
       for (const storageKey of claim.storageKeys) entry.claimedStorageKeys.add(storageKey);
       for (const storageKey of entry.residentStorageKeys) {
         if (!claim.storageKeys.has(storageKey)) entry.residentStorageKeys.delete(storageKey);
       }
+      this.#refreshStorageFit(entry);
       const retainAlpha = retainedAlphaKeys.has(key);
       if (entry.retainAlpha !== retainAlpha) {
         entry.retainAlpha = retainAlpha;
@@ -479,6 +485,7 @@ export class TextureAssetOwner {
       decodedClaims: 0,
       decodedReleased: false,
       preparationRetainsAlpha: false,
+      preparationAlphaOnly: false,
       preparationQueuedAt: startedAt,
       preparationStartedAt: 0,
       key,
@@ -493,10 +500,42 @@ export class TextureAssetOwner {
     this.#queuePreparation(entry);
   }
 
+  #updateStorageShare(claims: readonly { source: DecodedTextureSource | undefined; copies: number }[]): void {
+    const budget = this.#currentStorageBudgetBytes;
+    if (budget === undefined) { this.#maxStorageBytes = undefined; return; }
+    const demands = claims.filter(claim => claim.copies > 0).map(({ source, copies }) => {
+      // A fitted native mip chain does not describe the discarded levels' byte cost.
+      const fittedNative = source?.kind !== undefined && source.sourceWidth !== undefined
+        && (source.sourceWidth > source.width || (source.sourceHeight ?? source.height) > source.height);
+      const bytes = source === undefined || fittedNative ? Infinity
+        : source.kind === undefined
+          ? ordinaryTextureStorageBytes(source.sourceWidth ?? source.width, source.sourceHeight ?? source.height, true)
+          : source.levels.reduce((total, level) => total + level.blocks.byteLength, 0);
+      return { bytes, copies };
+    });
+    const share = textureStorageShare(budget, demands);
+    // Match the existing raster-detail ceiling: a fitted RGBA mip chain leaves
+    // its base pixels within both the 64 MiB VT source pool and inspection limit.
+    this.#maxStorageBytes = share === undefined ? undefined : Math.min(share, 64 * 1024 * 1024);
+  }
+
+  #redistributeStorage(): void {
+    if (this.#redistributionQueued) return;
+    this.#redistributionQueued = true;
+    queueMicrotask(() => {
+      this.#redistributionQueued = false;
+      if (this.#disposed) return;
+      this.#updateStorageShare([...this.#entries.values()].map(entry => ({
+        source: entry.decoded, copies: entry.claimedStorageKeys.size,
+      })));
+      for (const entry of this.#entries.values()) this.#refreshStorageFit(entry);
+    });
+  }
+
   #refreshStorageFit(entry: AssetEntry): void {
     const source = entry.decoded;
     if (source === undefined || source.sourceWidth === undefined || source.preview !== undefined
-      || entry.snapshot.status === "error"
+      || entry.snapshot.status === "error" || entry.reservation?.phase === "preparing"
       || (this.#maxStorageBytes ?? Infinity) <= (entry.preparationStorageBytes ?? Infinity)) return;
     const fit = source.kind === undefined
       ? fitOrdinaryTextureStorage(source.sourceWidth, source.sourceHeight ?? source.height, this.#maxStorageBytes ?? Number.MAX_SAFE_INTEGER)
@@ -591,10 +630,11 @@ export class TextureAssetOwner {
     const retainAlpha = entry.retainAlpha;
     const alphaOnly = entry.decodedClaims > 0;
     entry.preparationRetainsAlpha = retainAlpha;
-    entry.preparationStorageBytes = this.#maxStorageBytes;
+    entry.preparationAlphaOnly = alphaOnly;
+    if (!alphaOnly) entry.preparationStorageBytes = this.#maxStorageBytes;
     const decoding: Promise<DecodedTextureSource> = retainAlpha
-      ? this.#platform.decode(asset, controller.signal, this.#maxStorageBytes, true)
-      : this.#platform.decode(asset, controller.signal, this.#maxStorageBytes);
+      ? this.#platform.decode(asset, controller.signal, entry.preparationStorageBytes, true)
+      : this.#platform.decode(asset, controller.signal, entry.preparationStorageBytes);
     void decoding.then((decoded) => {
       if (
         this.#disposed
@@ -613,6 +653,11 @@ export class TextureAssetOwner {
       ) {
         decoded.close?.();
         throw new Error(`${diagnosticLabel(asset)} decoder returned invalid dimensions`);
+      }
+      if (decoded.sourceWidth !== undefined || decoded.sourceHeight !== undefined) {
+        try {
+          ordinaryTextureStorageBytes(decoded.sourceWidth ?? decoded.width, decoded.sourceHeight ?? decoded.height, true);
+        } catch (error) { decoded.close?.(); throw error; }
       }
       const alpha = decoded.alpha;
       if (alpha !== undefined && (
@@ -640,6 +685,7 @@ export class TextureAssetOwner {
         this.#platform.onAssetChanged(key);
         this.#platform.onSnapshotChanged(key);
         this.#publish(key);
+        this.#redistributeStorage();
         return;
       }
       let decodedSource: DecodedTextureSource = decoded;
@@ -689,6 +735,7 @@ export class TextureAssetOwner {
         entry.decodedReleased = true;
         this.#releaseSourceReservation(entry);
       } else this.#drainPreparationQueue();
+      this.#redistributeStorage();
     }).catch((error: unknown) => {
       if (
         this.#disposed

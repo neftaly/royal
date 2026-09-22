@@ -137,6 +137,28 @@ describe("browser virtual texture runtime", () => {
     } finally { runtime.dispose(); }
   });
 
+  it("releases every sampler lease of a decoded source before restoring its resolution", () => {
+    const source = { width: 1024, height: 1024, source: {} as ImageBitmap };
+    const decoded = () => source;
+    const assets = [imageTexture("/map.png"), imageTexture({ src: "/map.png", sampler: { wrapS: "repeat" } }), imageTexture("/other.png")];
+    const release = vi.fn();
+    const runtime = createBrowserVirtualTextureRuntime(fakeGl(), undefined, undefined, {
+      decoded, acquireDecoded: () => ({ source, release }), onChanged: vi.fn(),
+    });
+    try {
+      runtime.setScene(prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}),
+        nodes: assets.map(texture => mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture }) })),
+      }), undefined, undefined, decoded));
+      expect(runtime.runtimeSnapshot().automaticResources).toBe(3);
+      runtime.releaseRasterSource(assets[0]!);
+      expect(release).toHaveBeenCalledTimes(2);
+      expect(runtime.runtimeSnapshot().automaticResources).toBe(1);
+      runtime.releaseRasterSource(assets[0]!);
+      expect(release).toHaveBeenCalledTimes(2);
+    } finally { runtime.dispose(); }
+    expect(release).toHaveBeenCalledTimes(3);
+  });
+
   it("reserves raster detail before loading, counts shared authority once and retries after release", () => {
     const makeSource = () => {
       const pending = new Promise<never>(() => {});

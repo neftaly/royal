@@ -73,6 +73,15 @@ belong in explicit diagnostics, not ordinary presentation.
 Decoded raster sources MAY be retained for context restoration or an active
 automatic-VT representation only within CPU budget. Eviction MUST leave a reconstruction recipe or legal refetch path.
 
+Ordinary texture allocation redistributes unused shares from decoded small
+sources to larger sources. Every claimed color/sampler storage representation
+counts toward the allocation; unknown sources retain a fair share until decoded.
+Finite per-representation allocations are capped at a 64 MiB mip-chain budget,
+keeping raster base pixels within the existing VT CPU-source and inspection
+limits. A fitted source can be decoded again when returned budget restores detail;
+its replacement passes the same inspection gate before publication. Automatic
+pages derive from that retained raster, never from a new vector rendering.
+
 When the persistent budget requires a smaller ordinary PNG/JPEG/WebP/AVIF,
 Royal reads a bounded encoded-header prefix through a pure, non-authoritative
 dimension parser and asks the browser to decode directly to the selected fitted

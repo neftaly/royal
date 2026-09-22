@@ -58,10 +58,11 @@ import { VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS } from "./shader-source";
 import { copyVirtualTextureAtlasSlots } from "./atlas-copy";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 import { type AsyncPreparationScheduler } from "../resource/async-preparation-owner";
-import type {
-  DecodedTextureSource,
-  DecodedTextureLease,
-  TextureSourceRef,
+import {
+  decodedTextureKey,
+  type DecodedTextureSource,
+  type DecodedTextureLease,
+  type TextureSourceRef,
 } from "../texture/source";
 import { FrameUploadBudgetOwner } from "../resource/frame-upload-budget";
 import {
@@ -676,13 +677,17 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
 
   /** Ordinary storage can regain detail while its previous GPU texture remains visible. */
   releaseRasterSource(asset: TextureSourceRef): void {
-    const key = automaticVirtualTextureAssetKey(asset);
-    const resource = this.#resources.get(key);
-    if (resource === undefined) return;
-    this.#destroyResource(resource, true);
-    this.#resources.delete(key);
-    const index = this.#scheduleResources.indexOf(resource);
-    if (index >= 0) this.#scheduleResources.splice(index, 1);
+    const decodedKey = decodedTextureKey(asset);
+    let released = false;
+    for (const [key, resource] of this.#resources) {
+      if (decodedTextureKey(resource.asset) !== decodedKey) continue;
+      this.#destroyResource(resource, true);
+      this.#resources.delete(key);
+      const index = this.#scheduleResources.indexOf(resource);
+      if (index >= 0) this.#scheduleResources.splice(index, 1);
+      released = true;
+    }
+    if (!released) return;
     this.#bindingRevision++;
     this.#sceneNeedsReconcile = true;
     this.#scheduleCursor = 0;

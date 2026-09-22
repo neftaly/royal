@@ -3,6 +3,10 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## Unreleased
+
+- Redistribute unused texture allocations to larger images and restore fitted raster detail for automatic paging within the existing source-memory limits.
+
 ## 0.0.32 - 2026-09-22
 
 - Area-filter all inspected source pixels and check transparent images over black and white, closing sparse-grid and opacity-only inspection bypasses.
