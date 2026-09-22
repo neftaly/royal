@@ -133,7 +133,7 @@ const normalizePublishedWorkerSourceMap = (): Plugin => {
         files = [];
       }
       for (const fileName of files) {
-        if (/^(?:static-preparation|idle-astc)-worker-.*\.js$/u.test(fileName)) {
+        if (/^(?:static-preparation|draco|idle-astc|inspection-reduction)-worker-.*\.js$/u.test(fileName)) {
           const workerPath = path.join(assets, fileName);
           const source = readFileSync(workerPath, 'utf8');
           const normalized = source.replace(
@@ -142,7 +142,7 @@ const normalizePublishedWorkerSourceMap = (): Plugin => {
           );
           if (normalized !== source) writeFileSync(workerPath, normalized);
         }
-        if (/^(?:static-preparation|idle-astc)-worker-.*\.js\.map$/u.test(fileName)) {
+        if (/^(?:static-preparation|draco|idle-astc|inspection-reduction)-worker-.*\.js\.map$/u.test(fileName)) {
           rmSync(path.join(assets, fileName), { force: true });
         }
       }
@@ -215,7 +215,7 @@ export default ({ command, mode }: { readonly command: string; readonly mode: st
         closeBundle: () => {
           if (outputDirectory === undefined) return;
           for (const fileName of readdirSync(outputDirectory)) {
-            if (/^(?:static-preparation|idle-astc)-worker-.*\.js\.map$/u.test(fileName)) {
+            if (/^(?:static-preparation|draco|idle-astc|inspection-reduction)-worker-.*\.js\.map$/u.test(fileName)) {
               rmSync(path.join(outputDirectory, fileName), { force: true });
             }
           }

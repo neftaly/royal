@@ -1,9 +1,11 @@
 import { afterEach, expect, it, vi } from "vitest";
-
+const registered = vi.hoisted(() => ({ methods: {} as Record<string, (...args: any[]) => any> }));
+vi.mock("../../packages/renderer-webgl/src/workers/runtime", () => ({ loadWorkerRuntime: async () => ({
+  worker: (methods: typeof registered.methods) => { registered.methods = methods; },
+  Transfer: class { message: unknown; transfer: unknown[]; constructor(message: unknown, transfer: unknown[]) { this.message = message; this.transfer = transfer; } },
+}) }));
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.resetModules(); });
-
-it.each(["cancel", "replace"])("encodes one block row per grant and handles %s during startup without duplicating the codec", async mode => {
-  let initialize!: (value: unknown) => void;
+it("initializes once, closes input and encodes exactly one block row per RPC", async () => {
   const memory = new WebAssembly.Memory({ initial: 1 });
   const encode = vi.fn((_context: number, _input: number, _width: number, height: number, output: number, bytes: number) => {
     expect(height).toBe(6);
@@ -11,40 +13,23 @@ it.each(["cancel", "replace"])("encodes one block row per grant and handles %s d
     return 0;
   });
   const codec = { memory, _initialize: vi.fn(), create_encoder: vi.fn(() => 1), free: vi.fn(), malloc: () => 16, encode };
-  const instantiate = vi.spyOn(WebAssembly, "instantiateStreaming").mockImplementation(() => new Promise(resolve => { initialize = resolve; }) as never);
+  const instantiate = vi.spyOn(WebAssembly, "instantiateStreaming").mockResolvedValue({ instance: { exports: codec } } as never);
   vi.stubGlobal("fetch", vi.fn());
-  const target = { onmessage: undefined as unknown as (event: { data: unknown }) => Promise<void>, postMessage: vi.fn() };
-  vi.stubGlobal("self", target);
   vi.stubGlobal("OffscreenCanvas", class {
     getContext() { return { drawImage: vi.fn(), getImageData: () => ({ data: new Uint8ClampedArray(12 * 12 * 4) }) }; }
   });
   await import("../../packages/renderer-webgl/src/virtual-texture/astc/idle-astc-worker");
-  const first = { close: vi.fn() }, second = { close: vi.fn() };
-  const obsolete = target.onmessage({ data: { type: "start", id: 1, bitmap: first, size: 12 } });
-  if (mode === "cancel") {
-    await target.onmessage({ data: { type: "cancel", id: 1 } });
-    // Cancellation must release transferred pixels even if the WASM fetch hangs.
-    expect(first.close).toHaveBeenCalledOnce();
-  }
-  const active = target.onmessage({ data: { type: "start", id: 2, bitmap: second, size: 12 } });
-  expect(first.close).toHaveBeenCalledOnce();
-  expect(second.close).not.toHaveBeenCalled();
-  initialize({ instance: { exports: codec } });
-  await Promise.all([obsolete, active]);
-  expect(instantiate).toHaveBeenCalledTimes(1);
-  expect(codec.create_encoder).toHaveBeenCalledTimes(1);
-  expect(first.close).toHaveBeenCalledOnce(); expect(second.close).toHaveBeenCalledOnce();
-  expect(target.postMessage).toHaveBeenCalledExactlyOnceWith({ id: 2, type: "yield" });
+  const bitmap = { close: vi.fn() };
+  await registered.methods.start!(bitmap, 12);
+  expect(bitmap.close).toHaveBeenCalledOnce();
   expect(encode).not.toHaveBeenCalled();
-  await target.onmessage({ data: { type: "step", id: 1 } });
-  expect(encode).not.toHaveBeenCalled();
-  await target.onmessage({ data: { type: "step", id: 2 } });
-  expect(encode).toHaveBeenCalledTimes(1);
-  await target.onmessage({ data: { type: "step", id: 2 } });
-  expect(encode).toHaveBeenCalledTimes(2);
-  const complete = target.postMessage.mock.calls.at(-1)![0];
-  expect(complete.type).toBe("complete");
-  expect(Array.from(complete.blocks)).toEqual([...Array(32).fill(1), ...Array(32).fill(2)]);
-  await target.onmessage({ data: { type: "step", id: 2 } });
-  expect(encode).toHaveBeenCalledTimes(2);
+  expect(registered.methods.step!()).toBeUndefined();
+  const complete = registered.methods.step!();
+  expect(Array.from(complete.message)).toEqual([...Array(32).fill(1), ...Array(32).fill(2)]);
+  expect(complete.transfer).toEqual([complete.message.buffer]);
+  expect(() => registered.methods.step!()).toThrow("No active ASTC page");
+  await registered.methods.start!(bitmap, 12);
+  expect(instantiate).toHaveBeenCalledOnce();
+  await expect(registered.methods.start!(bitmap, 7)).rejects.toThrow("Unsupported ASTC page size");
+  expect(bitmap.close).toHaveBeenCalledTimes(3);
 });

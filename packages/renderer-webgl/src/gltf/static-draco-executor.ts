@@ -1,28 +1,12 @@
+import { workerScriptUrl } from "../workers/runtime";
+import { pool, type Pool } from "workerpool";
+import workerUrl from "./draco-worker.ts?worker&url";
 import { gltfCodecUrls } from "./codec-loader";
 import type {
   StaticDracoDecodedTask,
   StaticDracoDecodeTask,
   StaticDracoTaskExecutor,
 } from "./draco";
-
-export type StaticDracoDecodeWorkerResult = Readonly<{
-  error?: string;
-  kind: "decode-draco-error" | "decode-draco-ready";
-  results?: readonly StaticDracoDecodedTask[];
-}>;
-
-export const decodedDracoTaskTransferBuffers = (
-  results: readonly StaticDracoDecodedTask[],
-): ArrayBuffer[] => {
-  const buffers = new Set<ArrayBuffer>();
-  for (const result of results) {
-    if (result.indices.buffer instanceof ArrayBuffer) buffers.add(result.indices.buffer);
-    for (const attribute of result.attributes) {
-      if (attribute.values.buffer instanceof ArrayBuffer) buffers.add(attribute.values.buffer);
-    }
-  }
-  return [...buffers];
-};
 
 export const executeDracoTasksSerially: StaticDracoTaskExecutor = async (tasks) => {
   const { executeStaticDracoTasksSerially } = await import("./draco");
@@ -51,48 +35,48 @@ export const planStaticDracoTaskBuckets = (
   return buckets;
 };
 
-export type StaticDracoDecodeWorkerFactory = () => Worker;
+// Cold startup must earn back two workers and two codec initializations.
+// Once warm, smaller batches can benefit from parallel decoding.
+export const DRACO_COLD_PARALLEL_BYTES = 512 * 1024;
+export const DRACO_WARM_PARALLEL_BYTES = 64 * 1024;
 
-const defaultWorker = (): Worker => new Worker(
-  new URL("./static-preparation-worker.ts", import.meta.url),
-  { name: "royal-draco-decode", type: "module" },
-);
+/** One reusable codec pool per preparation worker, retired with its parent. */
+export class StaticDracoWorkerOwner {
+  #pool: Pool | undefined;
+  #disposed = false;
 
-/** Bounded two-worker codec shell; task/result bytes cross only by transfer. */
-export const executeDracoTasksInWorkers = async (
-  tasks: readonly StaticDracoDecodeTask[],
-  createWorker: StaticDracoDecodeWorkerFactory | undefined = typeof Worker === "function"
-    ? defaultWorker
-    : undefined,
-): Promise<readonly StaticDracoDecodedTask[]> => {
-  if (tasks.length < 2 || createWorker === undefined) return executeDracoTasksSerially(tasks);
-  const workerCount = Math.min(2, tasks.length);
-  const workers: Worker[] = [];
-  try {
-    for (let index = 0; index < workerCount; index += 1) workers.push(createWorker());
-  } catch {
-    for (const worker of workers) worker.terminate();
-    return executeDracoTasksSerially(tasks);
+  async execute(tasks: readonly StaticDracoDecodeTask[]): Promise<readonly StaticDracoDecodedTask[]> {
+    if (this.#disposed) throw new Error("Royal Draco worker owner is disposed");
+    const bytes = tasks.reduce((total, task) => total + task.bytes.byteLength, 0);
+    const threshold = this.#pool === undefined ? DRACO_COLD_PARALLEL_BYTES : DRACO_WARM_PARALLEL_BYTES;
+    if (tasks.length < 2 || bytes < threshold || typeof Worker !== "function") return executeDracoTasksSerially(tasks);
+    const buckets = planStaticDracoTaskBuckets(tasks, 2);
+    // A large total does not justify startup when only one lane has real work.
+    if (buckets.some(bucket => bucket.reduce((total, task) => total + task.bytes.byteLength, 0) < threshold / 2)) {
+      return executeDracoTasksSerially(tasks);
+    }
+    const workers = this.#pool ??= pool(workerScriptUrl(workerUrl), {
+      maxWorkers: 2, workerType: "web", workerOpts: { type: "module", name: "royal-draco-decode" },
+    });
+    try {
+      const batches = await Promise.all(buckets.map(async bucket => {
+        const owned = bucket.map(task => ({ ...task, bytes: task.bytes.slice() }));
+        return workers.exec("decodeDraco", [gltfCodecUrls(), owned], { transfer: owned.map(task => task.bytes.buffer) });
+      }));
+      return batches.flat();
+    } catch (error) {
+      // Do not carry a partially failed batch into another asset's work.
+      this.#pool = undefined;
+      await workers.terminate(true);
+      throw error;
+    }
   }
-  const buckets = planStaticDracoTaskBuckets(tasks, workerCount);
-  try {
-    const batches = await Promise.all(workers.map((worker, index) =>
-      new Promise<readonly StaticDracoDecodedTask[]>((resolve, reject) => {
-        worker.addEventListener("error", (event) => {
-          reject(new Error(event.message || "Royal Draco decode worker failed"));
-        }, { once: true });
-        worker.addEventListener("message", (event: MessageEvent<StaticDracoDecodeWorkerResult>) => {
-          if (event.data.kind === "decode-draco-error") reject(new Error(event.data.error));
-          else resolve(event.data.results ?? []);
-        }, { once: true });
-        const owned = buckets[index]!.map((task) => ({ ...task, bytes: task.bytes.slice() }));
-        worker.postMessage(
-          { codecs: gltfCodecUrls(), kind: "decode-draco-tasks", tasks: owned },
-          owned.map((task) => task.bytes.buffer),
-        );
-      })));
-    return batches.flat();
-  } finally {
-    for (const worker of workers) worker.terminate();
+
+  async dispose(): Promise<void> {
+    if (this.#disposed) return;
+    this.#disposed = true;
+    const workers = this.#pool;
+    this.#pool = undefined;
+    await workers?.terminate(true);
   }
-};
+}

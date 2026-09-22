@@ -1,3 +1,4 @@
+import { PoolWorker, type PoolRequest } from "./support/pool-worker";
 import { afterEach, expect, it, vi } from "vitest";
 import { imageTexture, mesh, perspectiveCamera, planeGeometry, scene, unlitMaterial } from "@royal/renderer-core";
 import { createBrowserVirtualTextureRuntime } from "../../packages/renderer-webgl/src/virtual-texture/runtime";
@@ -9,24 +10,20 @@ import * as sources from "../../packages/renderer-webgl/src/virtual-texture/auto
 import { fakeGl } from "./support/canvas-root-harness";
 import { writeVirtualTexturePageTable, COMPRESSED_SLOT_BASE } from "../../packages/renderer-webgl/src/virtual-texture/residency";
 
-class EncoderWorker {
-  static instances: EncoderWorker[] = [];
-  onmessage?: (event: { data: unknown }) => void;
-  onerror?: () => void;
+class EncoderWorker extends PoolWorker {
+  static override instances: EncoderWorker[] = [];
   steps = 0;
   stopped = false;
-  constructor() { EncoderWorker.instances.push(this); }
-  postMessage(data: { type: string; id: number; bitmap?: ImageBitmap }): void {
-    if (data.type === "cancel") return;
-    if (data.type === "start") data.bitmap?.close();
-    if (data.type === "step") this.steps++;
+  constructor() { super(); EncoderWorker.instances.push(this); }
+  override postMessage = vi.fn((data: PoolRequest | string) => {
+    if (typeof data === "string") return;
+    if (data.method === "start") data.params[0]?.close();
+    if (data.method === "step") this.steps++;
     queueMicrotask(() => {
-      if (!this.stopped) this.onmessage?.({ data: data.type === "step"
-        ? { id: data.id, type: "complete", blocks: new Uint8Array(7744) }
-        : { id: data.id, type: "yield" } });
+      if (!this.stopped) this.reply(data, data.method === "step" ? new Uint8Array(7744) : undefined);
     });
-  }
-  terminate(): void { this.stopped = true; }
+  });
+  override terminate = vi.fn(() => { this.stopped = true; });
 }
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); EncoderWorker.instances = []; });
 

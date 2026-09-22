@@ -1,7 +1,9 @@
-import { Transfer, worker } from "workerpool";
+import { loadWorkerRuntime } from "../workers/runtime";
 import { reduceInspectionRgba, type InspectionRgba } from "./inspection-rgba";
 import { InspectionReadback, INSPECTION_CONTEXT_OPTIONS, type InspectionReadbackSource } from "./inspection-readback";
 import { nativeTextureAvailable } from "./native-storage";
+
+const { worker, Transfer } = await loadWorkerRuntime();
 
 let readback: InspectionReadback | undefined;
 let context: WebGL2RenderingContext | null | undefined;

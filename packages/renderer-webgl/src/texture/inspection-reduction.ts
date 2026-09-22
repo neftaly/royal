@@ -1,3 +1,4 @@
+import { workerScriptUrl } from "../workers/runtime";
 import type { Pool } from "workerpool";
 import workerUrl from "./inspection-reduction-worker.ts?worker&url";
 import type { InspectionReadbackSource } from "./inspection-readback";
@@ -15,7 +16,7 @@ export class InspectionReductionWorker {
   async #getPool(): Promise<Pool> {
     const { pool } = await import("workerpool");
     if (this.#disposed) throw aborted();
-    return this.#pool ??= pool(workerUrl, {
+    return this.#pool ??= pool(workerScriptUrl(workerUrl), {
       workerType: "web",
       workerOpts: { type: "module" },
       maxWorkers: 1,

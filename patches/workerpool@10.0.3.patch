@@ -1,5 +1,5 @@
 diff --git a/dist/workerpool.js b/dist/workerpool.js
-index 2bf2c201cf7e8bd4b98c923b2da3351fdc42a8ed..dae73811eaee6b0dda7dd92d74e3a2b939f3b2a1 100644
+index 2bf2c201cf7e8bd4b98c923b2da3351fdc42a8ed..bcaf063f4e13687687fabe64a36b9c278b3038bd 100644
 --- a/dist/workerpool.js
 +++ b/dist/workerpool.js
 @@ -927,12 +927,15 @@
@@ -71,7 +71,23 @@ index 2bf2c201cf7e8bd4b98c923b2da3351fdc42a8ed..dae73811eaee6b0dda7dd92d74e3a2b9
      } else {
        this.requestQueue.push(request);
      }
-@@ -1652,6 +1672,11 @@
+@@ -1608,7 +1628,14 @@
+         // there are tasks in the queue
+ 
+         // find an available worker
+-        var worker = this._getWorker();
++        var worker;
++      try { worker = this._getWorker(); }
++      catch (error) {
++        var failedTask = this.taskQueue.pop();
++        if (failedTask) failedTask.resolver.reject(error);
++        this._next();
++        return;
++      }
+         if (worker) {
+           // get the first task from the queue
+           var me = this;
+@@ -1652,6 +1679,11 @@
        var workers = this.workers;
        for (var i = 0; i < workers.length; i++) {
          var worker = workers[i];
@@ -84,10 +100,26 @@ index 2bf2c201cf7e8bd4b98c923b2da3351fdc42a8ed..dae73811eaee6b0dda7dd92d74e3a2b9
            return worker;
          }
 diff --git a/src/Pool.js b/src/Pool.js
-index ab84273812b4393eed4d5c2e369c4898a20f68cb..4d3d7f947b20a4b079e11905b20a8fce8aad9000 100644
+index ab84273812b4393eed4d5c2e369c4898a20f68cb..8f0aa9b32c90db83f4441576d90b07a55740a20e 100644
 --- a/src/Pool.js
 +++ b/src/Pool.js
-@@ -270,6 +270,11 @@ Pool.prototype._getWorker = function () {
+@@ -222,7 +222,14 @@ Pool.prototype._next = function () {
+     // there are tasks in the queue
+ 
+     // find an available worker
+-    var worker = this._getWorker();
++    var worker;
++    try { worker = this._getWorker(); }
++    catch (error) {
++      var failedTask = this.taskQueue.pop();
++      if (failedTask) failedTask.resolver.reject(error);
++      this._next();
++      return;
++    }
+     if (worker) {
+       // get the first task from the queue
+       var me = this;
+@@ -270,6 +277,11 @@ Pool.prototype._getWorker = function () {
    var workers = this.workers;
    for (var i = 0; i < workers.length; i++) {
      var worker = workers[i];

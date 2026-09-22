@@ -1,328 +1,162 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { BrowserStaticGltfPreparationOwner, shouldPrepareStaticGltfInWorker } from "../../packages/renderer-webgl/src/gltf/browser-static-preparation";
+import { PoolWorker } from "./support/pool-worker";
 import { waitFor } from "./support/wait-for";
-import {
-  BrowserStaticGltfPreparationOwner,
-  prepareStaticGltfInBrowser,
-  shouldPrepareStaticGltfInWorker,
-} from "../../packages/renderer-webgl/src/gltf/browser-static-preparation";
-import { AsyncPreparationOwner } from "../../packages/renderer-webgl/src/resource/async-preparation-owner";
 
-class FakeWorker extends EventTarget {
-  readonly postMessage = vi.fn();
-  readonly terminate = vi.fn();
-}
-
-const glbBytes = (length: number): Uint8Array => {
-  const bytes = new Uint8Array(length);
-  new DataView(bytes.buffer).setUint32(0, 0x46_54_6c_67, true);
-  return bytes;
+beforeEach(() => { PoolWorker.instances = []; PoolWorker.execute = undefined; vi.stubGlobal("Worker", PoolWorker); });
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+const bytes = () => new TextEncoder().encode("{}");
+const prepared = { primitives: [], lights: [], textureAssets: [], rootExtras: { revision: 3 } };
+const run = (owner: BrowserStaticGltfPreparationOwner, signal = new AbortController().signal, reader = vi.fn(async () => new Uint8Array([4, 5, 6]))) =>
+  owner.prepare(bytes(), "asset", "asset", "/asset.gltf", signal, reader);
+const first = async () => {
+  await waitFor(() => expect(PoolWorker.instances[0]?.requests.length).toBeGreaterThan(0));
+  const worker = PoolWorker.instances[0]!;
+  return { worker, request: worker.requests.at(-1)! };
 };
-
-const prepared = {
-  bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
-  lights: [],
-  nodeCount: 0,
-  primitives: [],
-  textureAssets: [],
-  variantNames: [],
-} as const;
-
-describe("browser static glTF preparation", () => {
-  it("uses workload shape to avoid worker startup for tiny self-contained GLBs", () => {
-    expect(shouldPrepareStaticGltfInWorker(glbBytes(128))).toBe(false);
-    expect(shouldPrepareStaticGltfInWorker(glbBytes(256 * 1024))).toBe(true);
-    expect(shouldPrepareStaticGltfInWorker(new TextEncoder().encode("{}"))).toBe(true);
-  });
-
-  it("transfers source ownership and terminates the worker after publication", async () => {
-    const worker = new FakeWorker();
-    const bytes = new TextEncoder().encode("{}");
-    const result = prepareStaticGltfInBrowser(
-      bytes,
-      "asset:v1",
-      "test asset",
-      "/asset.gltf",
-      new AbortController().signal,
-      vi.fn(),
-      () => worker as unknown as Worker,
-      2,
-    );
-    expect(worker.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        codecs: expect.objectContaining({
-          draco: expect.stringContaining("draco-codec"),
-          meshopt: expect.stringContaining("meshopt-codec"),
-        }),
-        contentKey: "asset:v1",
-        kind: "prepare",
-        sceneIndex: 2,
-      }),
-      [bytes.buffer],
-    );
-    const preparedWithExtras = {
-      ...prepared,
-      rootExtras: { application: { revision: 3 } },
-    } as const;
-    worker.dispatchEvent(new MessageEvent("message", {
-      data: { kind: "ready", prepared: preparedWithExtras },
-    }));
-    await expect(result).resolves.toBe(preparedWithExtras);
-    await expect(result).resolves.toMatchObject({
-      rootExtras: { application: { revision: 3 } },
-    });
-    expect(worker.terminate).toHaveBeenCalledTimes(1);
-  });
-
-  it("sends cloneable geometry task and borrowing intent to the worker", async () => {
-    const worker = new FakeWorker();
-    const owner = new BrowserStaticGltfPreparationOwner({
-      createWorker: () => worker as unknown as Worker,
-      workerLimit: 1,
-    });
-    const bytes = new TextEncoder().encode("{}");
-    const geometryTasks = {
-      tasks: [{ key: "shared", meshIndex: 0, primitiveIndex: 0 }],
-    } as const;
-    const result = owner.prepare(
-      bytes,
-      "asset",
-      "asset",
-      "/asset.gltf",
-      new AbortController().signal,
-      vi.fn(),
-      undefined,
-      undefined,
-      geometryTasks,
-      new Set(),
-    );
-
-    expect(worker.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        computeGeometryTaskKeys: [],
-        geometryTasks,
-        kind: "prepare",
-      }),
-      [bytes.buffer],
-    );
-    worker.dispatchEvent(new MessageEvent("message", {
-      data: { kind: "ready", prepared },
-    }));
+it("keeps tiny self-contained GLBs local", () => {
+  const glb = new Uint8Array(256 * 1024);
+  new DataView(glb.buffer).setUint32(0, 0x46546c67, true);
+  expect(shouldPrepareStaticGltfInWorker(glb.subarray(0, 128))).toBe(false);
+  expect(shouldPrepareStaticGltfInWorker(glb)).toBe(true);
+  expect(shouldPrepareStaticGltfInWorker(bytes())).toBe(true);
+});
+it("transfers bytes, ports and geometry intent; preserves result extras", async () => {
+  const owner = new BrowserStaticGltfPreparationOwner();
+  try {
+    const source = bytes();
+    const result = owner.prepare(source, "asset", "asset", "/asset.gltf", new AbortController().signal, vi.fn(), 2, undefined, { tasks: [] }, new Set());
+    const { worker, request } = await first();
+    expect(request.method).toBe("prepare");
+    expect(request.params[0]).toMatchObject({ sceneIndex: 2, computeGeometryTaskKeys: [], geometryTasks: { tasks: [] }, codecs: { draco: expect.stringContaining("draco-codec") } });
+    expect(worker.postMessage.mock.calls[0]![1]).toEqual([source.buffer, request.params[1]]);
+    worker.reply(request, prepared);
     await expect(result).resolves.toBe(prepared);
-    owner.dispose();
-  });
-
-  it("keeps worker resource reads in the injected asset lifecycle", async () => {
-    const worker = new FakeWorker();
-    const source = new TextEncoder().encode("{}");
-    const external = new Uint8Array([4, 5, 6]);
-    const readResource = vi.fn(async () => external);
-    const result = prepareStaticGltfInBrowser(
-      source,
-      "asset:external",
-      "external asset",
-      "/asset.gltf",
-      new AbortController().signal,
-      readResource,
-      () => worker as unknown as Worker,
-    );
-
-    worker.dispatchEvent(new MessageEvent("message", {
-      data: { id: 7, kind: "read-resource", uri: "/asset.bin" },
-    }));
-    await waitFor(() => expect(readResource).toHaveBeenCalledWith("/asset.bin"));
-    expect(worker.postMessage).toHaveBeenLastCalledWith(
-      { bytes: external, id: 7, kind: "read-resource-ready" },
-      [external.buffer],
-    );
-
-    worker.dispatchEvent(new MessageEvent("message", {
-      data: { kind: "ready", prepared },
-    }));
-    await expect(result).resolves.toBe(prepared);
-  });
-
-  it("returns synchronous resource-reader failures to the preparation worker", async () => {
-    const worker = new FakeWorker();
-    const result = prepareStaticGltfInBrowser(
-      new TextEncoder().encode("{}"),
-      "asset",
-      "asset",
-      "/asset.gltf",
-      new AbortController().signal,
-      () => {
-        throw new Error("reader rejected");
-      },
-      () => worker as unknown as Worker,
-    );
-
-    worker.dispatchEvent(new MessageEvent("message", {
-      data: { id: 9, kind: "read-resource", uri: "/buffer.bin" },
-    }));
-    expect(worker.postMessage).toHaveBeenLastCalledWith({
-      error: "reader rejected",
-      id: 9,
-      kind: "read-resource-error",
-    });
-    worker.dispatchEvent(new MessageEvent("message", {
-      data: { error: "reader rejected", kind: "error" },
-    }));
-
-    await expect(result).rejects.toThrow("reader rejected");
-    expect(worker.terminate).toHaveBeenCalledTimes(1);
-  });
-
-  it("terminates in-flight preparation when its asset claim is aborted", async () => {
-    const worker = new FakeWorker();
+  } finally { owner.dispose(); }
+});
+it.each([false, true])("routes resource reads and synchronous reader errors (failure=%s)", async fail => {
+  const owner = new BrowserStaticGltfPreparationOwner();
+  const reader = vi.fn(() => { if (fail) throw new Error("reader rejected"); return Promise.resolve(new Uint8Array([4, 5, 6])); });
+  try {
+    const result = run(owner, undefined, reader);
+    const { worker, request } = await first();
+    const port = request.params[1] as MessagePort;
+    const response = new Promise<any>(resolve => { port.onmessage = event => resolve(event.data); });
+    port.postMessage({ id: 7, uri: "/asset.bin" });
+    expect(await response).toEqual(fail ? { id: 7, error: "reader rejected" } : { id: 7, bytes: new Uint8Array([4, 5, 6]) });
+    expect(reader).toHaveBeenCalledWith("/asset.bin");
+    worker.reply(request, prepared);
+    await result;
+  } finally { owner.dispose(); }
+});
+it("reuses bounded workers across a queued burst", async () => {
+  const owner = new BrowserStaticGltfPreparationOwner({ workerLimit: 2 });
+  try {
+    const results = Array.from({ length: 7 }, () => run(owner));
+    await first();
+    expect(PoolWorker.instances).toHaveLength(2);
+    const replied = new Set<object>();
+    for (let i = 0; i < 7; i++) {
+      await waitFor(() => expect(PoolWorker.instances.flatMap(w => w.requests).some(r => !replied.has(r))).toBe(true));
+      const worker = PoolWorker.instances.find(w => w.requests.some(r => !replied.has(r)))!;
+      const request = worker.requests.find(r => !replied.has(r))!;
+      replied.add(request); worker.reply(request, prepared);
+    }
+    await expect(Promise.all(results)).resolves.toHaveLength(7);
+    expect(PoolWorker.instances).toHaveLength(2);
+  } finally { owner.dispose(); }
+  expect(PoolWorker.instances.every(w => w.terminate.mock.calls.length === 1)).toBe(true);
+});
+it("cancels a queued task without killing another asset", async () => {
+  const owner = new BrowserStaticGltfPreparationOwner({ workerLimit: 1 });
+  try {
+    const active = run(owner);
     const controller = new AbortController();
-    const result = prepareStaticGltfInBrowser(
-      glbBytes(256 * 1024),
-      "asset:v2",
-      "test asset",
-      "/asset.glb",
-      controller.signal,
-      vi.fn(),
-      () => worker as unknown as Worker,
-    );
+    const queued = run(owner, controller.signal);
     controller.abort();
-    await expect(result).rejects.toMatchObject({ name: "AbortError" });
-    expect(worker.terminate).toHaveBeenCalledTimes(1);
-  });
-
-  it("reuses only the scheduler-bounded worker set across a many-asset burst", async () => {
-    const workers: FakeWorker[] = [];
-    const idleDelays: number[] = [];
-    const owner = new BrowserStaticGltfPreparationOwner({
-      cancelDelay: vi.fn(),
-      createWorker: () => {
-        const worker = new FakeWorker();
-        workers.push(worker);
-        return worker as unknown as Worker;
-      },
-      idleWorkerTimeoutMs: 1_000,
-      requestDelay: (callback, delayMs) => {
-        idleDelays.push(delayMs);
-        return callback;
-      },
-      workerLimit: 2,
-    });
-    const scheduler = new AsyncPreparationOwner(2);
-    const controllers = Array.from({ length: 5 }, () => new AbortController());
-    const results = controllers.map((controller, index) =>
-      scheduler.runForeground(controller.signal, () => owner.prepare(
-        new TextEncoder().encode(`{"asset":${index}}`),
-        `asset:${index}`,
-        `asset ${index}`,
-        `/asset-${index}.gltf`,
-        controller.signal,
-        vi.fn(),
-      )));
-
-    expect(workers).toHaveLength(2);
-    for (const worker of workers) {
-      worker.dispatchEvent(new MessageEvent("message", {
-        data: { kind: "ready", prepared },
-      }));
-    }
-    await waitFor(() => expect(
-      workers.reduce((sum, worker) => sum + worker.postMessage.mock.calls.length, 0),
-    ).toBe(4));
-    for (const worker of workers) {
-      worker.dispatchEvent(new MessageEvent("message", {
-        data: { kind: "ready", prepared },
-      }));
-    }
-    await waitFor(() => expect(
-      workers.reduce((sum, worker) => sum + worker.postMessage.mock.calls.length, 0),
-    ).toBe(5));
-    const activeWorker = workers.find((worker) => worker.postMessage.mock.calls.length === 3);
-    activeWorker?.dispatchEvent(new MessageEvent("message", {
-      data: { kind: "ready", prepared },
-    }));
-
-    await expect(Promise.all(results)).resolves.toHaveLength(5);
-    expect(workers).toHaveLength(2);
-    expect(idleDelays).toContain(1_000);
-    expect(idleDelays.every((delayMs) => delayMs === 1_000)).toBe(true);
-    expect(workers.every((worker) => worker.terminate.mock.calls.length === 0)).toBe(true);
-    owner.dispose();
-    scheduler.dispose();
-    expect(workers.every((worker) => worker.terminate.mock.calls.length === 1)).toBe(true);
-  });
-
-  it("reuses a worker after an asset failure and retires it after the idle grace", async () => {
-    const worker = new FakeWorker();
-    let retire: (() => void) | undefined;
-    const owner = new BrowserStaticGltfPreparationOwner({
-      createWorker: () => worker as unknown as Worker,
-      requestDelay: (callback, delayMs) => {
-        expect(delayMs).toBe(1_000);
-        retire = callback;
-        return callback;
-      },
-      workerLimit: 2,
-    });
-    const first = owner.prepare(
-      new TextEncoder().encode("{}"),
-      "bad",
-      "bad asset",
-      "/bad.gltf",
-      new AbortController().signal,
-      vi.fn(),
-    );
-    worker.dispatchEvent(new MessageEvent("message", {
-      data: { error: "invalid asset", kind: "error" },
-    }));
-    await expect(first).rejects.toThrow("invalid asset");
-
-    const second = owner.prepare(
-      new TextEncoder().encode("{}"),
-      "good",
-      "good asset",
-      "/good.gltf",
-      new AbortController().signal,
-      vi.fn(),
-    );
-    expect(worker.postMessage).toHaveBeenCalledTimes(2);
-    worker.dispatchEvent(new MessageEvent("message", {
-      data: { kind: "ready", prepared },
-    }));
+    await expect(queued).rejects.toMatchObject({ name: "AbortError" });
+    const { worker, request } = await first();
+    worker.reply(request, prepared);
+    await expect(active).resolves.toBe(prepared);
+    expect(worker.requests).toHaveLength(1);
+  } finally { owner.dispose(); }
+});
+it("aborts active tasks and rejects later work on disposal", async () => {
+  const owner = new BrowserStaticGltfPreparationOwner();
+  const result = run(owner);
+  await first();
+  owner.dispose(); owner.dispose();
+  await expect(result).rejects.toMatchObject({ name: "AbortError" });
+  await expect(run(owner)).rejects.toMatchObject({ name: "AbortError" });
+});
+it("reuses after asset errors and retires after idle grace", async () => {
+  let retire = () => {};
+  const owner = new BrowserStaticGltfPreparationOwner({ requestDelay: callback => { retire = callback; return callback; }, cancelDelay: vi.fn() });
+  try {
+    const failed = run(owner);
+    const { worker, request } = await first();
+    worker.reply(request, undefined, "invalid asset");
+    await expect(failed).rejects.toThrow("invalid asset");
+    const second = run(owner);
+    worker.reply(worker.requests.at(-1)!, prepared);
     await expect(second).resolves.toBe(prepared);
-    expect(worker.terminate).not.toHaveBeenCalled();
-
-    retire?.();
-    expect(worker.terminate).toHaveBeenCalledTimes(1);
-    owner.dispose();
-    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(PoolWorker.instances).toHaveLength(1);
+    retire();
+    expect(worker.terminate).toHaveBeenCalledOnce();
+  } finally { owner.dispose(); }
+});
+it("rejects failed startup without leaving a ghost task ahead of the next asset", async () => {
+  let fail = true;
+  vi.stubGlobal("Worker", class extends PoolWorker {
+    constructor() {
+      if (fail) { fail = false; throw new Error("worker blocked"); }
+      super();
+    }
   });
-
-  it("terminates and rejects every active worker when its root owner is disposed", async () => {
-    const workers = [new FakeWorker(), new FakeWorker()];
-    let nextWorker = 0;
-    const owner = new BrowserStaticGltfPreparationOwner({
-      createWorker: () => workers[nextWorker++]! as unknown as Worker,
-      workerLimit: 2,
-    });
-    const first = owner.prepare(
-      new TextEncoder().encode("{}"),
-      "first",
-      "first asset",
-      "/first.gltf",
-      new AbortController().signal,
-      vi.fn(),
-    );
-    const second = owner.prepare(
-      new TextEncoder().encode("{}"),
-      "second",
-      "second asset",
-      "/second.gltf",
-      new AbortController().signal,
-      vi.fn(),
-    );
-
-    owner.dispose();
-
-    await expect(first).rejects.toMatchObject({ name: "AbortError" });
-    await expect(second).rejects.toMatchObject({ name: "AbortError" });
-    expect(workers.every((worker) => worker.terminate.mock.calls.length === 1)).toBe(true);
-  });
+  const owner = new BrowserStaticGltfPreparationOwner({ workerLimit: 1 });
+  try {
+    await expect(run(owner)).rejects.toThrow("worker blocked");
+    const next = run(owner);
+    const { worker, request } = await first();
+    worker.reply(request, prepared);
+    await expect(next).resolves.toBe(prepared);
+    expect(worker.requests).toHaveLength(1);
+  } finally { owner.dispose(); }
+});
+it("uses a five-second default idle grace and cancels it on reuse", async () => {
+  let retirement: (() => void) | undefined;
+  const cancelDelay = vi.fn();
+  const requestDelay = vi.fn((callback: () => void) => { retirement = callback; return callback; });
+  const owner = new BrowserStaticGltfPreparationOwner({ requestDelay, cancelDelay });
+  try {
+    const result = run(owner);
+    const { worker, request } = await first();
+    worker.reply(request, prepared);
+    await result;
+    expect(requestDelay).toHaveBeenLastCalledWith(expect.any(Function), 5000);
+    const firstRetirement = retirement;
+    const second = run(owner);
+    expect(cancelDelay).toHaveBeenCalledWith(firstRetirement);
+    worker.reply(worker.requests.at(-1)!, prepared);
+    await second;
+    retirement?.();
+    expect(worker.terminate).toHaveBeenCalledOnce();
+  } finally { owner.dispose(); }
+});
+it("replaces an idle crashed worker before admitting the next asset", async () => {
+  const owner = new BrowserStaticGltfPreparationOwner({ workerLimit: 1 });
+  try {
+    const firstResult = run(owner);
+    const { worker, request } = await first();
+    worker.reply(request, prepared);
+    await firstResult;
+    worker.dispatchEvent(new MessageEvent("error", { data: new Error("idle crash") }));
+    const next = run(owner);
+    const observed = next.then(value => value, error => error);
+    await waitFor(() => expect(PoolWorker.instances.length).toBe(2));
+    const replacement = PoolWorker.instances[1]!;
+    await waitFor(() => expect(replacement.requests).toHaveLength(1));
+    replacement.reply(replacement.requests[0]!, prepared);
+    await expect(observed).resolves.toBe(prepared);
+  } finally { owner.dispose(); }
 });

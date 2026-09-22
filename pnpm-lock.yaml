@@ -154,7 +154,7 @@ catalogs:
       version: 5.0.0
 
 patchedDependencies:
-  workerpool@10.0.3: 397ee950699d970dabeb6b92b366cd061397f0bae8b4d832b6e00d82c0da5695
+  workerpool@10.0.3: 6d1c96d147d6fcbd3faa16db46519bb9ec307960db47eca892c419003d93eb53
 
 importers:
 
@@ -202,6 +202,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.0.0(@types/node@24.13.3)(vite@8.2.2(@types/node@24.13.3)(terser@5.48.0)(yaml@2.9.0))
+      workerpool:
+        specifier: 10.0.3
+        version: 10.0.3(patch_hash=6d1c96d147d6fcbd3faa16db46519bb9ec307960db47eca892c419003d93eb53)
 
   apps/examples-react:
     dependencies:
@@ -299,7 +302,7 @@ importers:
         version: 0.5.0(three@0.184.0)
       workerpool:
         specifier: 10.0.3
-        version: 10.0.3(patch_hash=397ee950699d970dabeb6b92b366cd061397f0bae8b4d832b6e00d82c0da5695)
+        version: 10.0.3(patch_hash=6d1c96d147d6fcbd3faa16db46519bb9ec307960db47eca892c419003d93eb53)
     devDependencies:
       oxlint:
         specifier: 'catalog:'
@@ -1673,7 +1676,7 @@ snapshots:
       siginfo: 2.0.0
       stackback: 0.0.2
 
-  workerpool@10.0.3(patch_hash=397ee950699d970dabeb6b92b366cd061397f0bae8b4d832b6e00d82c0da5695): {}
+  workerpool@10.0.3(patch_hash=6d1c96d147d6fcbd3faa16db46519bb9ec307960db47eca892c419003d93eb53): {}
 
   yaml@2.9.0:
     optional: true

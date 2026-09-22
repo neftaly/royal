@@ -1,0 +1,70 @@
+{
+  "browser": "153.0.8010.36",
+  "measuredAt": "2026-09-22T18:16:14.041Z",
+  "preparation": {
+    "coldMs": 28,
+    "warm": {
+      "medianMs": 0.5,
+      "p95Ms": 0.7000000029802322
+    },
+    "burst20Ms": 23,
+    "workersCreated": 2,
+    "maxWorkers": 2,
+    "reads": 52,
+    "detachedReads": 52
+  },
+  "astc": [
+    {
+      "startupMs": 34.5,
+      "rows": {
+        "medianMs": 0.09999999403953552,
+        "p95Ms": 0.5
+      },
+      "totalRowsMs": 5
+    },
+    {
+      "startupMs": 0.4000000059604645,
+      "rows": {
+        "medianMs": 0,
+        "p95Ms": 0.10000000894069672
+      },
+      "totalRowsMs": 1.0999999940395355
+    },
+    {
+      "startupMs": 0.4000000059604645,
+      "rows": {
+        "medianMs": 0.09999999403953552,
+        "p95Ms": 0.20000000298023224
+      },
+      "totalRowsMs": 2.2999999970197678
+    },
+    {
+      "startupMs": 0.4000000059604645,
+      "rows": {
+        "medianMs": 0.09999999403953552,
+        "p95Ms": 0.10000000894069672
+      },
+      "totalRowsMs": 1.2999999970197678
+    }
+  ],
+  "draco": {
+    "fourDecodesMs": 77.5,
+    "workers": 2,
+    "nestedPreparationMs": 90.6000000089407
+  },
+  "transport1MiB": {
+    "rawTransfer": {
+      "medianMs": 0,
+      "p95Ms": 0.19999998807907104
+    },
+    "poolTransfer": {
+      "medianMs": 0.09999999403953552,
+      "p95Ms": 0.20000000298023224
+    },
+    "poolCloneInput": {
+      "medianMs": 1.3999999910593033,
+      "p95Ms": 4.5999999940395355
+    }
+  },
+  "remainingWorkers": 0
+}

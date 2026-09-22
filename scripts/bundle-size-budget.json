@@ -63,14 +63,16 @@
     "virtualTextureFallbackInitialGzipBytes": 512,
     "inspectionConcurrencyInitialGzipBytes": 64,
     "inspectionWorkerpoolLazyAndTotalGzipBytes": 20000,
-    "inspectionWorkerpoolWorkerGzipBytes": 12000
+    "inspectionWorkerpoolWorkerGzipBytes": 12000,
+    "workerpoolMigrationLazyAndTotalGzipBytes": 4096,
+    "workerpoolRuntimeUrlInitialGzipBytes": 64
   },
-  "royalInitialGzipBytes": 145682,
-  "royalIncrementalGzipBytes": 86422,
-  "royalGltfInitialGzipBytes": 146658,
+  "royalInitialGzipBytes": 145746,
+  "royalIncrementalGzipBytes": 86486,
+  "royalGltfInitialGzipBytes": 146722,
   "royalGltfIncrementalGzipBytes": 1050,
-  "royalLazyGzipBytes": 246000,
-  "royalTotalIncrementalGzipBytes": 331710,
-  "royalTotalGzipBytes": 391000,
+  "royalLazyGzipBytes": 250096,
+  "royalTotalIncrementalGzipBytes": 335870,
+  "royalTotalGzipBytes": 395160,
   "royalWorkerGzipBytes": 125902
 }

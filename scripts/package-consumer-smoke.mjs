@@ -96,6 +96,10 @@ try {
       throw new Error(`${manifest.name} packed export target is missing: ${missingTarget}`);
     }
     if (manifest.name === '@royal/renderer-webgl') {
+      if (!contents.includes('package/dist/workerpool-runtime.js') || !contents.some(entry =>
+        /^package\/dist\/assets\/draco-worker-.*\.js$/u.test(entry))) {
+        throw new Error('@royal/renderer-webgl shared worker runtime or Draco worker is missing');
+      }
       if (!contents.includes('package/THIRD_PARTY_NOTICES') || !contents.some(entry =>
         /^package\/dist\/assets\/idle-astc-worker-.*\.js$/u.test(entry))) {
         throw new Error('@royal/renderer-webgl packed ASTC worker or third-party notices are missing');
