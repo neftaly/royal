@@ -109,7 +109,7 @@ export const createTextureAssetReader = (
   value: unknown,
   path: string,
   colorSpace?: "linear" | "srgb",
-  svgPreview?: boolean,
+  rasterPreview?: boolean,
 ) => TextureSourceRef) => {
   const images = optionalArray(document.images, label, "images");
   const samplers = optionalArray(document.samplers, label, "samplers");
@@ -119,12 +119,12 @@ export const createTextureAssetReader = (
     label,
   );
   const prepared = new Map<string, TextureSourceRef>();
-  return (value, path, colorSpace = "srgb", svgPreview = false) => {
+  return (value, path, colorSpace = "srgb", rasterPreview = false) => {
     const textureIndex = index(value, textures, label, path);
-    const preparedKey = `${textureIndex}:${colorSpace}:${svgPreview ? 1 : 0}`;
+    const preparedKey = `${textureIndex}:${colorSpace}:${rasterPreview ? 1 : 0}`;
     const retained = prepared.get(preparedKey);
     if (retained !== undefined) return retained;
-    const imagePlan = planTextureImages(textureIndex, colorSpace);
+    const imagePlan = planTextureImages(textureIndex);
     const texturePath = `textures[${textureIndex}]`;
     const texture = imagePlan.texture;
     let sampler: TextureSampler;
@@ -148,12 +148,8 @@ export const createTextureAssetReader = (
       if ((image.uri === undefined) === (image.bufferView === undefined)) {
         fail(label, imagePath, "must contain exactly one of uri or bufferView");
       }
-      const expectedMime = sourceEncoding === "svg" ? "image/svg+xml" : expectedMimeType;
-      const mimeError = sourceEncoding === "svg"
-        ? "must be image/svg+xml for GS_texture_svg"
-        : `must be ${expectedMimeType} for ${
-          expectedMimeType === "image/ktx2" ? "EXT_texture_astc" : expectedMimeType === "image/avif" ? "EXT_texture_avif" : "EXT_texture_webp"
-        }`;
+      const expectedMime = expectedMimeType;
+      const mimeError = `must be ${expectedMimeType} for ${expectedMimeType === "image/ktx2" ? "EXT_texture_astc" : expectedMimeType === "image/avif" ? "EXT_texture_avif" : "EXT_texture_webp"}`;
       if (image.bufferView === undefined) {
         const uri = image.uri;
         if (typeof uri !== "string" || uri.length === 0) {
@@ -210,14 +206,10 @@ export const createTextureAssetReader = (
       };
     };
     const raster = (source: StaticTextureImageSource): TextureSourceRef => imagePlan.astc === undefined
-      || (imagePlan.rasterPreview !== undefined && !svgPreview)
+      || (imagePlan.rasterPreview !== undefined && !rasterPreview)
       ? readImage(source) : { ...readImage(source), astc: readImage(imagePlan.astc),
         ...(imagePlan.rasterPreview === undefined ? {} : { rasterPreview: imagePlan.rasterPreview }) };
-    const primary = imagePlan.fallback === undefined ? raster(imagePlan.primary) : readImage(imagePlan.primary);
-    const asset: TextureSourceRef = imagePlan.fallback === undefined || (imagePlan.requiredSvg && !svgPreview)
-      ? primary
-      : { ...primary, fallback: raster(imagePlan.fallback), ...(svgPreview
-        ? { svgPreview: imagePlan.requiredSvg ? "required" as const : true as const } : {}) };
+    const asset = raster(imagePlan.primary);
     prepared.set(preparedKey, asset);
     return asset;
   };
@@ -229,7 +221,7 @@ export const prepareMaterial = (
     value: unknown,
     path: string,
     colorSpace?: "linear" | "srgb",
-    svgPreview?: boolean,
+    rasterPreview?: boolean,
   ) => TextureSourceRef,
   materialIndex: unknown,
   label: string,
@@ -311,12 +303,12 @@ export const prepareMaterial = (
     value: unknown,
     textureInfoPath: string,
     colorSpace: "linear" | "srgb",
-    svgPreview = false,
+    rasterPreview = false,
   ): MaterialTextureUse | undefined => {
     if (value === undefined) return undefined;
     const textureInfo = object(value, label, textureInfoPath);
     return {
-      asset: textureAsset(textureInfo.index, `${textureInfoPath}.index`, colorSpace, svgPreview),
+      asset: textureAsset(textureInfo.index, `${textureInfoPath}.index`, colorSpace, rasterPreview),
       coordinates: prepareTextureCoordinates(textureInfo, label, textureInfoPath),
     };
   };

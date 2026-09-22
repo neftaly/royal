@@ -22,11 +22,9 @@ import {
 } from "./browser-page-source";
 import {
   automaticVirtualTextureEligible,
-  automaticVirtualTextureIsSvg,
   automaticVirtualTextureHasPreview,
   createAutomaticPreviewPageSource,
   createAutomaticRasterPageSource,
-  createAutomaticSvgPageSource,
 } from "./automatic-page-source";
 import {
   collectVirtualTextureDemand,
@@ -61,7 +59,6 @@ import {
   virtualTextureAssetKey,
 } from "./runtime-contract";
 import { VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS } from "./shader-source";
-import { SvgRasterCache } from "./svg-raster-cache";
 import { copyVirtualTextureAtlasSlots } from "./atlas-copy";
 import { PersistentGpuBudgetOwner } from "../resource/persistent-gpu-budget";
 import { AsyncPreparationOwner, type AsyncPreparationScheduler } from "../resource/async-preparation-owner";
@@ -111,7 +108,6 @@ const prepareDirectly: AsyncPreparationScheduler = (_signal, prepare) => prepare
 type ReadyPage = Readonly<{
   readyAt: number;
   page: VirtualTexturePageId;
-  preview: boolean;
   byteLength: number;
   decoded: DecodedVirtualTexturePage;
   pageKey: VirtualTexturePageKey;
@@ -133,7 +129,6 @@ type GpuVirtualTextureAtlas = VirtualTextureAtlasStoragePlan & {
 };
 
 type GpuVirtualTexture = {
-  previewCoarse?: boolean;
   atlas: GpuVirtualTextureAtlas;
   atlasSampler: WebGLSampler;
   budgetIdentity: object;
@@ -178,7 +173,6 @@ type RuntimeResource = {
   readonly sampler: CanonicalTextureSampler;
   snapshot: VirtualTextureAssetSnapshot | undefined;
   source?: VirtualTexturePageSource;
-  sourceDemand?: readonly VirtualTexturePageId[];
   readonly surfaces: VirtualTextureDemandSurface[];
   readonly workspace: VirtualTextureDemandWorkspace;
 };
@@ -435,7 +429,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #lastAtlasGrowthFailure: string | undefined;
   readonly #anisotropy: TextureAnisotropy;
   readonly #budget: PersistentGpuBudgetOwner;
-  readonly #svgRasterCache = new SvgRasterCache();
   readonly #automatic: AutomaticVirtualTextureRuntimeOptions;
   readonly #onChanged: (asset: VirtualTextureAssetRef, presentationChanged: boolean) => void;
   readonly #schedule: AsyncPreparationScheduler;
@@ -533,7 +526,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     let atlasBytes = 0;
     for (const atlas of this.#atlases.values()) atlasBytes += atlas.allocationBytes + (atlas.growth?.replacement.allocationBytes ?? 0);
     for (const resource of this.#resources.values()) atlasBytes += resource.gpu?.astc?.byteLength ?? 0;
-    let automaticDecodedBytes = this.#svgRasterCache.byteLength + this.#pagePixels.size * 132 ** 2 * 4;
+    let automaticDecodedBytes = this.#pagePixels.size * 132 ** 2 * 4;
     for (const resource of this.#resources.values()) automaticDecodedBytes += resource.gpu?.astc?.cpuBytes ?? 0;
     let automaticResources = 0;
     let failedPages = 0;
@@ -564,7 +557,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           detailWeight += weight;
           if (resource.gpu?.residentSlots.has(key)) residentDetailWeight += weight;
         }
-        if (!resource.gpu?.residentSlots.has(key) || this.#needsCoarseAuthority(resource, key)) unresidentPages += 1;
+        if (!resource.gpu?.residentSlots.has(key)) unresidentPages += 1;
       }
     }
     return {
@@ -711,50 +704,36 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         else this.#automaticIneligible += 1;
         continue;
       }
-      const svg = automaticVirtualTextureIsSvg(decoded);
       const preview = automaticVirtualTextureHasPreview(decoded);
       if (
-        !svg && !preview && !automaticVirtualTextureEligible(decoded)
+        !preview && !automaticVirtualTextureEligible(decoded)
       ) {
         this.#automaticIneligible += 1;
         continue;
       }
       const decodedBytes = this.#seenDecoded.get(decoded) === scan ? 0 : automaticSourceBytes(decoded);
-      if (!svg && retainedDecodedBytes + decodedBytes > MAX_AUTOMATIC_DECODED_BYTES) {
+      if (retainedDecodedBytes + decodedBytes > MAX_AUTOMATIC_DECODED_BYTES) {
         this.#automaticIneligible += 1;
         continue;
       }
       const sampler = canonicalTextureSampler(asset);
-      let lease: DecodedTextureLease | undefined;
-      let source: VirtualTexturePageSource;
-      if (svg) {
-        source = createAutomaticSvgPageSource(
-          decoded.encodedSvg,
-          decoded.width,
-          decoded.height,
-          sampler,
-          asset.colorSpace ?? "srgb",
-          this.#svgRasterCache,
-        );
-      } else {
-        lease = this.#automatic.acquireDecoded(asset);
-        if (lease === undefined) {
-          this.#automaticWaiting += 1;
-          continue;
-        }
-        if (!automaticVirtualTextureHasPreview(lease.source) && !automaticVirtualTextureEligible(lease.source)) {
-          lease.release();
-          this.#automaticIneligible += 1;
-          continue;
-        }
-        if (this.#seenDecoded.get(lease.source) !== scan) {
-          this.#seenDecoded.set(lease.source, scan);
-          retainedDecodedBytes += automaticSourceBytes(lease.source);
-        }
-        source = automaticVirtualTextureHasPreview(lease.source)
-          ? createAutomaticPreviewPageSource(lease.source, sampler, asset.colorSpace ?? "srgb", this.#svgRasterCache)
-          : createAutomaticRasterPageSource(lease.source, sampler, asset.colorSpace ?? "srgb");
+      const lease = this.#automatic.acquireDecoded(asset);
+      if (lease === undefined) {
+        this.#automaticWaiting += 1;
+        continue;
       }
+      if (!automaticVirtualTextureHasPreview(lease.source) && !automaticVirtualTextureEligible(lease.source)) {
+        lease.release();
+        this.#automaticIneligible += 1;
+        continue;
+      }
+      if (this.#seenDecoded.get(lease.source) !== scan) {
+        this.#seenDecoded.set(lease.source, scan);
+        retainedDecodedBytes += automaticSourceBytes(lease.source);
+      }
+      const source = automaticVirtualTextureHasPreview(lease.source)
+        ? createAutomaticPreviewPageSource(lease.source.preview, sampler, asset.colorSpace ?? "srgb")
+        : createAutomaticRasterPageSource(lease.source, sampler, asset.colorSpace ?? "srgb");
       claimed.add(key);
       this.#resources.set(key, {
         abort: new AbortController(),
@@ -764,7 +743,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         failedPages: new Set(),
         gpu: undefined,
         key,
-        ...(lease === undefined ? {} : { lease }),
+        lease,
         loadingPages: new Map(),
         manifest: source.manifest,
         manifestPending: false,
@@ -950,7 +929,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         }
         const ready = resource.readyPages[0]!;
         const slot = this.#pageSlot(resource, ready.pageKey);
-        if ((gpu.residentSlots.has(ready.pageKey) && !this.#needsCoarseAuthority(resource, ready.pageKey)) || slot < 0) {
+        if ((gpu.residentSlots.has(ready.pageKey)) || slot < 0) {
           // A read can lose its cell before completion. Release its pixels
           // so a full atlas cannot hold the global preparation queue.
           this.#settleReadyPage(resource);
@@ -1008,7 +987,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   }
 
   #retainPagePixels(resource: RuntimeResource, ready: ReadyPage): boolean {
-    if (resource.authored || ready.preview || ready.decoded.kind !== "image" || resource.gpu?.atlas.storedPageSize !== 132
+    if (resource.authored || ready.decoded.kind !== "image" || resource.gpu?.atlas.storedPageSize !== 132
       || (resource.asset.colorSpace ?? resource.manifest?.colorSpace) !== "srgb"
       || typeof Worker === "undefined" || typeof createImageBitmap === "undefined") return false;
     try { this.#idleSupported ??= nativeTextureAvailable(this.#gl, "astc-6x6", "srgb"); }
@@ -1062,7 +1041,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       if (resource.manifestPending || resource.previewSourcePending) return true;
       if (resource.manifestFailure !== undefined) continue;
       for (const key of resource.workspace.keys) {
-        if (!resource.failedPages.has(key) && (!resource.gpu?.residentSlots.has(key) || this.#needsCoarseAuthority(resource, key))) return true;
+        if (!resource.failedPages.has(key) && (!resource.gpu?.residentSlots.has(key))) return true;
       }
     }
     return false;
@@ -1119,8 +1098,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           this.#clearPagePixels();
           this.#idleEncoder?.dispose(); this.#idleEncoder = undefined; return;
         }
-        // Visible pages first, then cached pages. Coarse previews keep their
-        // separate authority state and never become compressed authority.
+        // Visible pages first, then cached pages.
         for (const visible of [true, false]) for (const cached of [true, false]) for (const resource of this.#resources.values()) {
           const gpu = resource.gpu, manifest = resource.manifest;
           if (resource.authored || resource.compressionDisabled || resource.compressionBlockedBytes === this.#budget.availableBytes || gpu === undefined || manifest === undefined
@@ -1129,7 +1107,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
             || (gpu.astc?.blocks.length ?? 0) >= 512) continue;
           for (const [key, slot] of gpu.residentSlots) {
             if (this.#pagePixels.has(`${resource.key}:${key}`) !== cached || slot >= COMPRESSED_SLOT_BASE || typeof key !== "number" || resource.workspace.keys.has(key) !== visible
-              || (gpu.previewCoarse && key === virtualTexturePageKeyParts(manifest.mipCount - 1, 0, 0))) continue;
+            ) continue;
             const abort = new AbortController();
             const generation = this.#compressionGeneration;
             this.#compressionJob = { resource, gpu, key, slot, abort, waits: 0 };
@@ -1300,7 +1278,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       if (demandChanged) {
         resource.demandNeedsFit = false;
         this.#clearReadyPages(resource);
-        this.#publishSourceDemand(resource);
       }
       if (resource.failedPages.size > 0 && resource.gpu?.residentSlots.size === 0) {
         this.#releaseGpuResource(resource);
@@ -1355,7 +1332,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         for (let index = 0; index < workspace.count; index++) workspace.scores[index] = score(index);
         workspace.order.subarray(0, workspace.count).sort((a, b) => workspace.scores[b]! - workspace.scores[a]! || a - b);
       }
-      this.#publishSourceDemand(resource);
       this.#cancelStalePageReads(resource);
       let retainedReadyPages = 0;
       for (let index = 0; index < resource.readyPages.length; index += 1) {
@@ -1384,23 +1360,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     return gpuCreated;
   }
 
-  #publishSourceDemand(resource: RuntimeResource): void {
-    const source = resource.source;
-    if (source?.setDemand === undefined) return;
-    const { workspace, sourceDemand } = resource;
-    let changed = sourceDemand?.length !== workspace.count;
-    for (let index = 0; index < workspace.count && !changed; index++) {
-      const page = sourceDemand![index]!;
-      changed = page.mip !== workspace.mips[index] || page.x !== workspace.xs[index] || page.y !== workspace.ys[index];
-    }
-    if (!changed) return;
-    const pages = Array.from({ length: workspace.count }, (_, index) => ({
-      mip: workspace.mips[index]!, x: workspace.xs[index]!, y: workspace.ys[index]!,
-    }));
-    source.setDemand(pages);
-    resource.sourceDemand = pages;
-  }
-
   #destroyResource(resource: RuntimeResource, deleteGpu: boolean): void {
     this.#clearPagePixels(resource);
     if (this.#compressionJob?.resource === resource) this.#cancelCompression();
@@ -1412,7 +1371,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       this.#releaseGpuResource(resource);
     }
     resource.source?.close?.();
-    delete resource.sourceDemand;
     resource.lease?.release();
   }
 
@@ -1859,20 +1817,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       && this.#activeJobs < MAX_DECODE_JOBS
       && this.#activeJobs + this.#readyPages < MAX_AUTOMATIC_PAGE_JOBS
     ) {
-      // Prefer cached regions before cold work can evict them. Retry after
-      // a successful read; failed visits cannot complete asynchronous work.
-      if (idleVisits === 0) {
-        let cached = false;
-        for (let offset = 0; offset < resources.length; offset += 1) {
-          const index = (this.#scheduleCursor + offset) % resources.length;
-          if (this.#startNextPageRead(resources[index]!, true)) {
-            this.#scheduleCursor = index + 1;
-            cached = true;
-            break;
-          }
-        }
-        if (cached) { idleVisits = 0; continue; }
-      }
       if (this.#scheduleCursor >= resources.length) this.#scheduleCursor = 0;
       const resource = resources[this.#scheduleCursor]!;
       this.#scheduleCursor += 1;
@@ -1883,7 +1827,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
 
   #pageSlot(resource: RuntimeResource, key: VirtualTexturePageKey): number {
     const gpu = resource.gpu!;
-    if (this.#needsCoarseAuthority(resource, key)) return gpu.residentSlots.get(key)!;
     return selectVirtualTexturePoolSlot(
       resource.key,
       key,
@@ -1892,15 +1835,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       this.#protectedPoolPages,
       gpu.residentSlots.size - gpu.compressedPages >= gpu.maxResidentPages ? gpu.residentSlots : undefined,
     );
-  }
-
-  #needsCoarseAuthority(resource: RuntimeResource, key: VirtualTexturePageKey): boolean {
-    const source = resource.lease?.source;
-    return resource.gpu?.previewCoarse === true && (resource.workspace.coarsestTarget || resource.workspace.count === 1)
-      && resource.gpu.residentSlots.has(key)
-      && key === virtualTexturePageKeyParts(resource.manifest!.mipCount - 1, 0, 0)
-      && !resource.previewSourceFailed
-      && !(source !== undefined && automaticVirtualTextureHasPreview(source) && source.preview.error !== undefined);
   }
 
   #nativePreviewSufficient(resource: RuntimeResource): boolean {
@@ -1933,7 +1867,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     return growth.replacement;
   }
 
-  #startNextPageRead(resource: RuntimeResource, cachedOnly = false): boolean {
+  #startNextPageRead(resource: RuntimeResource): boolean {
     if (resource.authored && this.#activeJobs + this.#readyPages >= MAX_DECODE_JOBS) return false;
     const gpu = resource.gpu;
     if (gpu === undefined || resource.source === undefined) return false;
@@ -1947,7 +1881,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       }
       if (growthJobs >= 2) return false;
     }
-    if (cachedOnly && resource.source.hasCachedPage === undefined) return false;
     const preview = resource.lease?.source;
     const detailSource = preview !== undefined && automaticVirtualTextureHasPreview(preview)
       ? preview.preview : undefined;
@@ -1964,27 +1897,20 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       const y = resource.workspace.ys[index]!;
       const key = virtualTexturePageKeyParts(mip, x, y);
       if (
-        (gpu.residentSlots.has(key) && !this.#needsCoarseAuthority(resource, key))
+        gpu.residentSlots.has(key)
         || resource.loadingPages.has(key)
         || resource.readyPageKeys.has(key)
         || resource.failedPages.has(key)
         || !this.#publicationAncestorReady(resource, mip, x, y)
       ) continue;
-      if (cachedOnly && !resource.source.hasCachedPage!({ mip, x, y })) continue;
       // Avoid preparing pages while every atlas cell is protected.
       if (!preparingGrowth && this.#pageSlot(resource, key) < 0) continue;
-      const usePreview = resource.source.readPreview !== undefined && mip === manifest.mipCount - 1
-        && ((!resource.workspace.coarsestTarget && resource.workspace.count > 1) || detailSource?.error !== undefined);
-      if (!usePreview && detailSource !== undefined && !texturePreviewReady(detailSource)
-        && !(mip === manifest.mipCount - 1 && detailSource.error !== undefined)) {
-        // A failed full source cannot prevent restoring retained preview pixels.
-        if (detailSource.error !== undefined) continue;
+      if (detailSource !== undefined && !texturePreviewReady(detailSource)) {
         if (!resource.previewSourcePending) {
-          if ((detailSource.retainedBytes ?? 0) === 0 && detailSource.rasterBytes !== undefined
+          if (detailSource.retainedBytes === 0
             && !this.#canLoadRasterPreview(detailSource.rasterBytes)) return false;
           resource.previewSourcePending = true;
-          // Transport must not occupy the sole rasterization slot. Validation
-          // re-enters the root detail lane after bytes arrive.
+          // Transport runs before the raster decode enters the detail lane.
           void detailSource.load().catch(() => {
             if (!resource.abort.signal.aborted) resource.previewSourceFailed = true;
           }).finally(() => {
@@ -1994,15 +1920,14 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         }
         return false;
       }
-      const cached = cachedOnly && !usePreview && resource.source.readCached !== undefined;
-      if (!cached && !resource.authored && !usePreview && (gpu.residentSlots.size > 0 || detailSource !== undefined) && this.#detailJobs > 0) return false;
+      if (!resource.authored && (gpu.residentSlots.size > 0 || detailSource !== undefined) && this.#detailJobs > 0) return false;
       if (byteLength > MAX_PENDING_PAGE_BYTES) {
         resource.failedPages.add(key);
         this.#changed(resource);
         continue;
       }
       if (this.#pendingPageBytes + byteLength > MAX_PENDING_PAGE_BYTES) return false;
-      this.#startPageRead(resource, { mip, x, y }, key, byteLength, usePreview, cached);
+      this.#startPageRead(resource, { mip, x, y }, key, byteLength);
       return true;
     }
     return false;
@@ -2041,8 +1966,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     page: VirtualTexturePageId,
     pageKey: VirtualTexturePageKey,
     byteLength: number,
-    preview = false,
-    cached = false,
   ): void {
     const source = resource.source;
     if (source === undefined) {
@@ -2051,10 +1974,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       return;
     }
     const controller = new AbortController();
-    // Ordinary texture fallback already presents the portable preview. Even
-    // the first SVG-backed VT page belongs in the background detail lane.
+    // The native preview stays bound while its raster detail uses the background lane.
     const retainedSource = resource.lease?.source;
-    const detail = !cached && !resource.authored && !preview && (resource.gpu!.residentSlots.size > 0
+    const detail = !resource.authored && (resource.gpu!.residentSlots.size > 0
       || (retainedSource !== undefined && automaticVirtualTextureHasPreview(retainedSource)));
     if (detail) this.#detailJobs += 1;
     this.#pendingPageBytes += byteLength;
@@ -2066,21 +1988,20 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     // Authored transport overlaps within the same four-page/byte reservations;
     // its source re-enters the detail scheduler only after the bytes arrive.
     const queuedAt = performance.now();
-    void (resource.authored || cached ? prepareDirectly : detail ? this.#scheduleDetail : this.#schedule)(
+    void (resource.authored ? prepareDirectly : detail ? this.#scheduleDetail : this.#schedule)(
       controller.signal,
       async () => {
         const startedAt = performance.now();
         this.#pageTiming.queueMs += startedAt - queuedAt;
         this.#pageTiming.reads++;
-        try { return await (cached ? source.readCached!(page, controller.signal) : preview ? source.readPreview!(page, controller.signal) : source.read(page, controller.signal)); }
+        try { return await (source.read(page, controller.signal)); }
         finally { this.#pageTiming.readMs += performance.now() - startedAt; }
       },
     ).then((decoded) => {
       const current = resource.loadingPages.get(pageKey) === controller;
       if (decoded === undefined) {
         if (
-          !cached
-          && !controller.signal.aborted
+          !controller.signal.aborted
           && current
           && !resource.abort.signal.aborted
           && resource.workspace.keys.has(pageKey)
@@ -2097,7 +2018,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         resource.failedPages.add(pageKey);
       } else {
         resource.readyPageKeys.add(pageKey);
-        resource.readyPages.push({ byteLength, decoded, page, pageKey, preview, readyAt: performance.now() });
+        resource.readyPages.push({ byteLength, decoded, page, pageKey, readyAt: performance.now() });
         retained = true;
         this.#readyPages += 1;
       }
@@ -2185,7 +2106,6 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     atlas.lastUsedFrames[slot] = this.#frame;
     gpu.residentSlots.set(ready.pageKey, slot);
     if (ready.pageKey === virtualTexturePageKeyParts(resource.manifest!.mipCount - 1, 0, 0)) {
-      gpu.previewCoarse = ready.preview;
       if (!resource.authored) this.#bindingRevision += 1;
     }
     gpu.pageTableDirty = true;

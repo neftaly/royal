@@ -11,7 +11,7 @@ const fixture = () => ({
   contractVersion: 2,
   mipCount: 4,
   pageSize: 512,
-  pages: { uriTemplate: "pages/m{mip}-{x}-{y}.svg" },
+  pages: { uriTemplate: "pages/m{mip}-{x}-{y}.png" },
   physicalByteBudget: 26_419_856,
   physicalSlots: 24,
   virtualSize: [4096, 4096],
@@ -33,7 +33,7 @@ describe("VT2 manifest contract", () => {
       tableWidth: 8,
     });
     expect(virtualTexturePageUri(manifest, { mip: 2, x: 1, y: 0 }))
-      .toBe("pages/m2-1-0.svg");
+      .toBe("pages/m2-1-0.png");
   });
 
   it("pads odd page grids so every logical mip fits WebGL mip storage", () => {

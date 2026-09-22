@@ -27,7 +27,6 @@ const capabilityDefinitions = [
     owns: (id) =>
       id.includes('/renderer-webgl/src/texture/ktx2-etc2.ts')
       || id.includes('/renderer-webgl/src/texture/etc2-storage.ts')
-      || id.includes('/renderer-webgl/src/virtual-texture/ktx2-etc2.ts')
       || publishedRendererModule(id, 'etc2-storage-')
       || publishedRendererModule(id, 'ktx2-etc2-'),
   },
@@ -40,13 +39,7 @@ const capabilityDefinitions = [
       || publishedRendererModule(id, 'meshopt-codec-')
       || id.includes('/meshoptimizer/'),
   },
-  {
-    fixture: 'gltf',
-    name: 'svg',
-    owns: (id) =>
-      id.includes('/renderer-webgl/src/texture/svg-source.ts')
-      || publishedRendererModule(id, 'svg-source-'),
-  },
+
   {
     fixture: 'gltf',
     name: 'transmission',

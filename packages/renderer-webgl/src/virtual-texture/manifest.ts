@@ -5,7 +5,6 @@ import type { TextureColorSpace } from "@royal/renderer-core";
 export { DEFAULT_VIRTUAL_TEXTURE_PHYSICAL_SLOTS } from "./automatic-policy";
 
 export type VirtualTexturePageId = Readonly<{ mip: number; x: number; y: number }>;
-export type VirtualTexturePageEntry = VirtualTexturePageId & Readonly<{ uri: string }>;
 export type VirtualTextureMipLayout = Readonly<{
   byteOffset: number;
   height: number;
@@ -91,14 +90,6 @@ export const derivedVirtualTextureMipCount = (
   }
   return count;
 };
-
-export const virtualTextureMipPageSize = (
-  manifest: Pick<VirtualTextureManifest, "height" | "pageSize" | "width">,
-  mip: number,
-): readonly [width: number, height: number] => [
-  Math.max(1, Math.ceil(manifest.width / (manifest.pageSize * 2 ** mip))),
-  Math.max(1, Math.ceil(manifest.height / (manifest.pageSize * 2 ** mip))),
-];
 
 const buildMipLayouts = (
   width: number,

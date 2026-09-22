@@ -67,7 +67,6 @@ describe('examples contract', () => {
         assets: [{
           imageCandidates: 3,
           imageFailures: 0,
-          imageFallbacks: 0,
           imagesLoaded: 2,
           imageRequests: 3,
           lightCount: 0,

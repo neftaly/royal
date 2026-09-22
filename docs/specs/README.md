@@ -25,14 +25,13 @@ not in an undocumented compatibility path.
 7. [Optional glTF feature profile](optional-gltf-features.md)
 8. [glTF required-extension conformance ledger](gltf-extension-conformance.md)
 9. [Textures and virtual texturing](textures-and-virtual-texturing.md)
-10. [Experimental `GS_texture_svg` glTF extension](gs-texture-svg-extension.md)
-11. [Rendering and presentation](rendering-and-presentation.md)
-12. [Interaction and XR](interaction-and-xr.md)
-13. [Resources and performance](resources-and-performance.md)
-14. [Hot-path normalization](hot-path-normalization.md)
-15. [Failures and diagnostics](failures-and-diagnostics.md)
-16. [Specification verification strategy](verification-strategy.md)
-17. [Conformance and adversarial review](conformance-and-review.md)
+10. [Rendering and presentation](rendering-and-presentation.md)
+11. [Interaction and XR](interaction-and-xr.md)
+12. [Resources and performance](resources-and-performance.md)
+13. [Hot-path normalization](hot-path-normalization.md)
+14. [Failures and diagnostics](failures-and-diagnostics.md)
+15. [Specification verification strategy](verification-strategy.md)
+16. [Conformance and adversarial review](conformance-and-review.md)
 
 ## Normative language
 
@@ -58,7 +57,7 @@ scenes containing many repeated, high-resolution assets on desktop, mobile, and
 WebXR devices.
 
 Its primary workload is a mixture of authored glTF geometry, ordinary and
-virtual raster or SVG textures, stable picking identities, and many instances.
+virtual raster textures, stable picking identities, and many instances.
 Royal is not an application state model, scene ECS, physics engine, UI toolkit,
 public render graph, or general cross-backend abstraction.
 

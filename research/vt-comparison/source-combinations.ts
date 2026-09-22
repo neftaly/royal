@@ -1,4 +1,3 @@
-import { SvgRasterCache } from '../../packages/renderer-webgl/src/virtual-texture/svg-raster-cache.ts';
 import { gltf, orthographicCamera, scene } from '../../packages/renderer-core/src/index.ts';
 import { createRendererRoot } from '../../packages/renderer-webgl/src/index.ts';
 import { staticTexturedTriangleGlb } from '../../tests/replacement/support/static-glb.ts';
@@ -18,7 +17,7 @@ export async function runSourceCombinations() {
   if (failureAudit !== null && !['transport', 'invalid'].includes(failureAudit)) throw new Error('Unknown source failure mode');
   if (Number(demandAudit) + Number(lateBitmapAudit) + Number(failureAudit !== null) + Number(largeRasterAudit) > 1) throw new Error('Select one source audit mode');
   const nativeFetch = globalThis.fetch;
-  for (const vk of demandAudit ? [172] : [166, 172]) for (const name of largeRasterAudit ? ['png-preview', 'jpeg-preview'] : lateBitmapAudit || failureAudit ? ['png-preview', 'jpeg-preview', 'jpeg-metadata-preview', 'webp-preview', 'avif-preview'] : demandAudit ? ['svg', 'png-preview', 'webp-preview'] : ['svg', 'webp', 'avif', 'png', 'jpeg', 'png-svg', 'png-preview', 'jpeg-preview', 'jpeg-metadata-preview', 'webp-preview', 'avif-preview']) for (const supported of demandAudit || lateBitmapAudit || failureAudit || largeRasterAudit ? [true] : [true, false]) {
+  for (const vk of demandAudit ? [172] : [166, 172]) for (const name of largeRasterAudit ? ['png-preview', 'jpeg-preview'] : lateBitmapAudit || failureAudit ? ['png-preview', 'jpeg-preview', 'jpeg-metadata-preview', 'webp-preview', 'avif-preview'] : demandAudit ? ['png-preview', 'webp-preview'] : ['webp', 'avif', 'png', 'jpeg', 'png-preview', 'jpeg-preview', 'jpeg-metadata-preview', 'webp-preview', 'avif-preview']) for (const supported of demandAudit || lateBitmapAudit || failureAudit || largeRasterAudit ? [true] : [true, false]) {
     const rasterPreview = name.endsWith('-preview');
     const jpeg = name.startsWith('jpeg');
     const webp = name.startsWith('webp');
@@ -44,30 +43,28 @@ export async function runSourceCombinations() {
       rasterBlob = new Blob([magic, metadata, rasterBlob.slice(2)], { type: rasterMime });
     }
     const raster = blobUrl(rasterBlob);
-    const vector = blobUrl(new Blob(['<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><path fill="blue" d="M0 0h512v512H0z"/></svg>'], { type: 'image/svg+xml' }));
     const astcBytes = createKtx2Fixture(vk, aspect === 'tall' ? 16 : 32, aspect === 'wide' ? 16 : 32, 6) as Uint8Array<ArrayBuffer>;
     const astc = blobUrl(new Blob([astcBytes], { type: 'image/ktx2' }));
     const reads: string[] = [];
     let injectFailure = failureAudit !== null;
     globalThis.fetch = (input, init) => {
       const uri = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      if ([raster, vector, astc].includes(uri)) reads.push(uri === raster ? 'raster' : uri === vector ? 'svg' : 'astc');
+      if ([raster, astc].includes(uri)) reads.push(uri === raster ? 'raster' : 'astc');
       if (injectFailure && uri === raster) return Promise.resolve(failureAudit === 'transport'
         ? new Response('Fixture unavailable', { status: 404 })
         : new Response(new Uint8Array([0, 1, 2, 3]), { headers: { 'content-type': rasterMime } }));
       return nativeFetch(input, init);
     };
-    const svg = name.includes('svg');
     const bytes = staticTexturedTriangleGlb(undefined, raster, document => {
       document.nodes = [{ mesh: 0 }]; document.scenes = [{ nodes: [0] }];
       document.images = [{ uri: raster, mimeType: rasterMime },
-        { uri: vector, mimeType: 'image/svg+xml' }, { uri: astc, mimeType: 'image/ktx2' }];
-      document.extensionsUsed = ['KHR_materials_unlit', 'EXT_texture_astc', ...(svg ? ['GS_texture_svg'] : []), ...(rasterExtension ? [rasterExtension] : [])];
-      document.extensionsRequired = name === 'svg' ? ['GS_texture_svg'] : rasterExtension ? [rasterExtension] : [];
+        { uri: raster }, { uri: astc, mimeType: 'image/ktx2' }];
+      document.extensionsUsed = ['KHR_materials_unlit', 'EXT_texture_astc', ...(rasterExtension ? [rasterExtension] : [])];
+      document.extensionsRequired = rasterExtension ? [rasterExtension] : [];
       document.samplers = [{ minFilter: 9987, magFilter: 9729, wrapS: 33071, wrapT: 33071 }];
       document.textures = [{ ...(name.startsWith('png') || jpeg ? { source: 0 } : {}), sampler: 0,
         ...(rasterPreview ? { extras: { royal: { astcPreview: { width: fullWidth, height: fullHeight } } } } : {}),
-        extensions: { EXT_texture_astc: { source: 2 }, ...(svg ? { GS_texture_svg: { source: 1 } } : {}),
+        extensions: { EXT_texture_astc: { source: 2 },
           ...(rasterExtension ? { [rasterExtension]: { source: 0 } } : {}) } }];
       document.materials = [{ extensions: { KHR_materials_unlit: {} }, pbrMetallicRoughness: { baseColorTexture: { index: 0 } } }];
     });
@@ -108,8 +105,8 @@ export async function runSourceCombinations() {
       await new Promise(resolve => setTimeout(resolve, 50));
       await contextEvent('webglcontextrestored', () => loss.restoreContext());
     };
-    const target = supported && !svg && !rasterPreview ? [255, 0, 0] : [0, 0, 255];
-    const expectedReads = supported ? svg ? ['astc', 'svg'] : rasterPreview ? ['astc', 'raster'] : ['astc'] : name === 'svg' ? ['svg'] : svg ? ['raster', 'svg'] : ['raster'];
+    const target = supported && !rasterPreview ? [255, 0, 0] : [0, 0, 255];
+    const expectedReads = supported ? rasterPreview ? ['astc', 'raster'] : ['astc'] : ['raster'];
     let frames = 0;
     const phases: { name: string; atlasBytes: number }[] = [];
     try {
@@ -269,11 +266,7 @@ export async function runSourceCombinations() {
       if (demandAudit) {
         root.setSize({ cssWidth: 512, cssHeight: 512, pixelRatio: 1 });
         const from = Array.from;
-        const has = SvgRasterCache.prototype.has;
         let arrays = 0, pageObjects = 0, cacheProbes = 0;
-        SvgRasterCache.prototype.has = function (this: SvgRasterCache, key: object): boolean {
-          cacheProbes++; return has.call(this, key);
-        };
         Array.from = ((...args: Parameters<typeof from>) => {
           const output = Reflect.apply(from, Array, args);
           const first = output[0];
@@ -288,7 +281,7 @@ export async function runSourceCombinations() {
             show(1.05 + .1 * Math.sin(frame / 30));
             root.invalidate(); root.flushInvalidated();
           }
-        } finally { Array.from = from; SvgRasterCache.prototype.has = has; }
+        } finally { Array.from = from; }
         gl.readPixels(256, 256, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
         if (pixel[2]! < 250 || pixel[0]! > 3 || root.getSnapshot().lastFrameFailure) {
           throw new Error(`Demand audit lost authoritative pixels: ${name}`);

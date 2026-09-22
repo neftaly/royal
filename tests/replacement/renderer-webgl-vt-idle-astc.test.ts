@@ -45,14 +45,14 @@ const harness = async (failAstcProbe = false) => {
     if (held) await new Promise<void>(resolve => gates.push(resolve));
     return { kind: "image" as const, source: { width: 132, height: 132 } as HTMLCanvasElement, close: vi.fn() };
   });
-  vi.spyOn(sources, "createAutomaticSvgPageSource").mockReturnValue({ manifest, read });
-  const decoded = { width: 1024, height: 1024, source: {} as ImageBitmap, encodedSvg: {} as never };
-  const asset = imageTexture("https://example.test/art.svg");
+  vi.spyOn(sources, "createAutomaticRasterPageSource").mockReturnValue({ manifest, read });
+  const decoded = { width: 1024, height: 1024, source: {} as ImageBitmap };
+  const asset = imageTexture("https://example.test/art.png");
   const gl = fakeGl();
   Object.assign(gl, { getExtension: vi.fn(() => ({ getSupportedProfiles: () => { if (failAstcProbe) throw new Error("ASTC profile query failed"); return ["ldr"]; } })), compressedTexSubImage2D: vi.fn() });
   const budget = new PersistentGpuBudgetOwner();
   const runtime = createBrowserVirtualTextureRuntime(gl, vi.fn(), budget, undefined, {
-    decoded: () => decoded, acquireDecoded: () => undefined, onChanged: vi.fn(),
+    decoded: () => decoded, acquireDecoded: () => ({ source: decoded, release: vi.fn() }), onChanged: vi.fn(),
   });
   const matrix = identityMat4();
   const view = { view: matrix, viewProjection: matrix, viewport: { width: 256, height: 256, x: 0, y: 0 } };

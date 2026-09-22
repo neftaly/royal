@@ -1,4 +1,4 @@
-import { automaticVirtualTextureEligible, automaticVirtualTextureIsSvg, automaticVirtualTextureHasPreview } from "./automatic-policy";
+import { automaticVirtualTextureEligible, automaticVirtualTextureHasPreview } from "./automatic-policy";
 import type { VirtualTextureAssetRef } from "@royal/renderer-core";
 import type { SurfaceFrameView } from "../frame/surface-frame";
 import { decodedTextureKey, type DecodedTextureSource, type TextureSourceRef } from "../texture/source";
@@ -42,7 +42,7 @@ export const virtualTextureRuntimeRequired = (
     const asset = surface.material.baseColorAsset;
     const source = asset === undefined ? undefined : decoded(asset);
     return source !== undefined
-      && (automaticVirtualTextureIsSvg(source) || automaticVirtualTextureHasPreview(source) || automaticVirtualTextureEligible(source));
+      && (automaticVirtualTextureHasPreview(source) || automaticVirtualTextureEligible(source));
   });
 
 export type VirtualTextureShaderSource = Readonly<{
@@ -101,7 +101,7 @@ export type VirtualTextureRuntimeSnapshot = Readonly<{
   unresidentPages: number;
   /** Unique ordinary base-color assets considered by the latest scene. */
   automaticCandidates: number;
-  /** Estimated automatic raster leases, shared SVG rasters, and retained ASTC blocks. */
+  /** Estimated automatic raster leases, retained ASTC blocks. */
   automaticDecodedBytes: number;
   /** Latest-scene candidates rejected by format, size, or decoded-memory policy. */
   automaticIneligible: number;

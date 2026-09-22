@@ -34,8 +34,6 @@
     "vtLatencyRankingPixelHandoffAndDiagnosticsBytes": 1024,
     "vtContiguousAtlasCopyRunsBytes": 512,
     "vtBoundedGrowthPreparationBytes": 768,
-    "vtDemandSizedSvgRegionsBytes": 512,
-    "vtCancelledSvgConsumerRetentionBytes": 128,
     "vtAstcLifecycleCleanupBytes": 256,
     "rootAnisotropyDirectionalFilteringAndDeclarationsBytes": 4608
   }

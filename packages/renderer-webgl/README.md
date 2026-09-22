@@ -90,12 +90,7 @@ grace; cancellation, worker failure, and root disposal terminate them
 immediately. Reuse adds no second task queue and no defensive byte or geometry
 copy.
 
-Automatic virtual texturing is always enabled. Eligible base-color raster and
-SVG images move onto Royal's shared VT demand, residency, and shader path after
-usable ancestor coverage exists. Small raster images retain ordinary storage
-when appropriate. SVG pages are rasterized from vector source on demand up to
-a 16,384-texel logical long edge; the renderer does not retain a bitmap of that
-size. VT/SVG implementation code remains behind the renderer's lazy boundary.
+Automatic virtual texturing is always enabled for eligible base-color raster textures. Small raster textures retain ordinary storage when appropriate.
 
 `setScene()` installs the complete scene intent and requests one coalesced
 presentation frame; it does not synchronously draw. The scene owns clear color
@@ -149,9 +144,7 @@ for one exact source, version, and selected document scene. `streaming`, `ready`
 include `nodeCount`, `primitiveCount`, `lightCount`, document-declared
 `variantNames`, the resolved `sceneIndex`, lightweight document `scenes`,
 `bounds`, and
-`textures: { total, loading, ready, failed, fallback }`. `fallback` counts ready
-logical textures whose preferred representation failed and whose declared
-alternative won. Scene inventory does not fetch or prepare unselected scene
+`textures: { total, loading, ready, failed }`. Scene inventory does not fetch or prepare unselected scene
 content. `timings` reports claim-to-read start, root read, preparation queue,
 external-resource span, canonical preparation, direct first-drawable elapsed
 time, and optional terminal image elapsed time. `streaming` has outstanding
@@ -230,20 +223,11 @@ extension. Royal does not attach it to glTF through a private extension and
 does not reinterpret `KHR_texture_basisu`; the latter remains unsupported
 while Royal ships no Basis runtime transcoder. Unsupported native textures
 use the neutral material fallback without crashing rendering; unsupported VT
-settles without downloading pages. Automatic PNG/SVG pages remain RGBA.
+settles without downloading pages. Automatic raster pages remain RGBA.
 Native ASTC/BC sources that need retained CPU alpha for exact MASK picking fail
 preparation; use ETC2/raster or an explicit picking proxy for those materials.
 See the [texture contract](../../docs/specs/textures-and-virtual-texturing.md)
 for block alignment, mip, and color-space requirements.
-
-Experimental `GS_texture_svg` prefers one bounded self-contained SVG source on
-sRGB material slots. Optional use requires a portable raster fallback: an
-ordinary core source, or a lower-priority AVIF/WebP source that is itself
-required. Royal fetches that representation only after SVG transport, profile,
-or decode failure. Required SVG use may omit a fallback and fails if SVG cannot
-publish. Both outcomes retain one texture identity, sampler, material path and
-focused lifecycle. This is an unregistered Royal vendor experiment, not a
-registered glTF compatibility claim.
 
 The dedicated `@royal/renderer-webgl/xr` entrypoint exposes
 `createWebXrSessionRenderer(root, session, options)` for lower-level hosts. It

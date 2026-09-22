@@ -10,8 +10,6 @@ export type BrowserImageElementSource = Readonly<{
 export type BrowserImageElementDecodeOptions = Readonly<{
   fit?: ((width: number, height: number) =>
     Readonly<{ height: number; width: number }>) | undefined;
-  /** Materialize browser pixels before a WebGL upload consumes them. */
-  output?: "canvas" | "native" | undefined;
 }>;
 
 const aborted = (): DOMException => new DOMException("Image decode was aborted", "AbortError");
@@ -55,8 +53,7 @@ export const decodeBrowserImageElement = async (
     const fitted = options.fit?.(sourceWidth, sourceHeight)
       ?? { height: sourceHeight, width: sourceWidth };
     if (
-      options.output !== "canvas"
-      && fitted.width === sourceWidth
+      fitted.width === sourceWidth
       && fitted.height === sourceHeight
     ) {
       let closed = false;

@@ -24,8 +24,8 @@ describe("prepared static glTF transfer ownership", () => {
     const lightModel = matrix();
     const embeddedStorage = new ArrayBuffer(32);
     const embeddedBytes = new Uint8Array(embeddedStorage, 8, 12);
-    const fallbackStorage = new ArrayBuffer(16);
-    const fallbackBytes = new Uint8Array(fallbackStorage, 4, 8);
+    const nativeStorage = new ArrayBuffer(16);
+    const nativeBytes = new Uint8Array(nativeStorage, 4, 8);
     const prepared: PreparedStaticGltf = {
       alphaMaskTextureAssets: [],
       bounds: { max: [1, 1, 1], min: [-1, -1, -1] },
@@ -64,17 +64,17 @@ describe("prepared static glTF transfer ownership", () => {
       textureAssets: [{
         bytes: embeddedBytes,
         contentKey: "embedded:0",
-        fallback: {
-          bytes: fallbackBytes,
+        astc: {
+          bytes: nativeBytes,
           contentKey: "embedded:1",
           kind: "embedded-asset",
-          label: "embedded fallback",
-          mimeType: "image/png",
+          label: "embedded native",
+          mimeType: "image/ktx2",
+          sourceEncoding: "ktx2-astc",
         },
         kind: "embedded-asset",
         label: "embedded image",
-        mimeType: "image/svg+xml",
-        sourceEncoding: "svg",
+        mimeType: "image/png",
       }],
       variantNames: [],
     };
@@ -83,7 +83,7 @@ describe("prepared static glTF transfer ownership", () => {
       sharedGeometry,
       instanceModels.buffer,
       embeddedStorage,
-      fallbackStorage,
+      nativeStorage,
     ]));
   });
 

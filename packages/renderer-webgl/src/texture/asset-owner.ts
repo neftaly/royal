@@ -35,7 +35,6 @@ export {
   type DecodedTextureLease,
   type DecodedTextureSource,
   type EmbeddedTextureAssetRef,
-  type EncodedSvgTextureSource,
   type TextureLeafSourceRef,
   type TextureSourceEncoding,
   type TextureSourceRef,
@@ -51,8 +50,6 @@ export type TextureAssetSnapshot =
   | Readonly<{ status: "idle" }>
   | Readonly<{ status: "loading" }>
   | Readonly<{
-    /** Preferred-source failure when the ready pixels came from an authored fallback. */
-    fallbackReason?: string;
     /** Fitted upload height in texels. */
     height: number;
     status: "ready";
@@ -88,8 +85,6 @@ export type TexturePreparationSnapshot = Readonly<{
   encodedSourceReads?: StagedByteReadSnapshot;
   /** Claimed color-space/sampler storage representations not yet GPU-resident. */
   pendingStorageRepresentations: number;
-  /** Encoded SVG bytes retained for an optional vector-backed representation. */
-  retainedEncodedSourceBytes: number;
   /** Maximum simultaneous active-preparation and decoded-handoff reservations. */
   sourceReservationLimit: number;
   /** Active preparations plus decoded sources retaining a handoff reservation. */
@@ -260,7 +255,6 @@ export class TextureAssetOwner {
 
   snapshot(): TexturePreparationSnapshot {
     let pendingStorageRepresentations = 0;
-    let retainedEncodedSourceBytes = 0;
     let timedSources = 0;
     const timings = {
       decodeDurationMs: 0,
@@ -270,9 +264,6 @@ export class TextureAssetOwner {
     };
     const encodedSourceReads = this.#platform.readAheadSnapshot?.();
     for (const entry of this.#entries.values()) {
-      retainedEncodedSourceBytes += entry.decoded?.kind !== undefined
-        ? entry.decoded.preview?.encoded?.byteLength ?? 0
-        : entry.decoded?.encodedSvg?.byteLength ?? entry.decoded?.preview?.encoded?.byteLength ?? 0;
       for (const storageKey of entry.claimedStorageKeys) {
         if (!entry.residentStorageKeys.has(storageKey)) pendingStorageRepresentations += 1;
       }
@@ -296,7 +287,6 @@ export class TextureAssetOwner {
       decodedHandoffThresholdBytes: DECODED_HANDOFF_BYTE_THRESHOLD,
       ...(encodedSourceReads === undefined ? {} : { encodedSourceReads }),
       pendingStorageRepresentations,
-      retainedEncodedSourceBytes,
       sourceReservationLimit: DECODED_HANDOFF_SOURCE_LIMIT,
       sourceReservations: this.#reservations.sourceReservations,
     };
@@ -506,7 +496,6 @@ export class TextureAssetOwner {
   #refreshStorageFit(entry: AssetEntry): void {
     const source = entry.decoded;
     if (source === undefined || source.sourceWidth === undefined || source.preview !== undefined
-      || (source.kind === undefined && source.encodedSvg !== undefined && entry.decodedClaims > 0)
       || entry.snapshot.status === "error"
       || (this.#maxStorageBytes ?? Infinity) <= (entry.preparationStorageBytes ?? Infinity)) return;
     const fit = source.kind === undefined
@@ -676,9 +665,6 @@ export class TextureAssetOwner {
       entry.decodedReleased = false;
       const completedAt = this.#now();
       entry.snapshot = {
-        ...(decoded.fallbackReason === undefined
-          ? {}
-          : { fallbackReason: decoded.fallbackReason }),
         height: decoded.height,
         status: "ready",
         ...(decoded.timings === undefined ? {} : {

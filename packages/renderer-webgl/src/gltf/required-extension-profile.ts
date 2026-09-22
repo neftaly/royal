@@ -27,7 +27,6 @@ const REQUIRED_EXTENSION_PLACEMENTS: Readonly<Record<string, PlacementProfile>> 
   EXT_texture_astc: (path) => texture.test(path),
   EXT_texture_avif: (path) => texture.test(path),
   EXT_texture_webp: (path) => texture.test(path),
-  GS_texture_svg: (path) => texture.test(path),
   KHR_draco_mesh_compression: (path) => primitive.test(path),
   KHR_lights_punctual: (path) => path === "" || node.test(path),
   KHR_materials_emissive_strength: materialOnly,

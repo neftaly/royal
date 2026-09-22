@@ -602,7 +602,7 @@ describe("glTF asset lifecycle owner", () => {
           sourceReadDurationMs: expect.any(Number),
           sourceReadStartedAfterMs: expect.any(Number),
         },
-        textures: { failed: 0, fallback: 0, loading: 0, ready: 0, total: 0 },
+        textures: { failed: 0, loading: 0, ready: 0, total: 0 },
         variantNames: [],
       });
     });
@@ -696,7 +696,7 @@ describe("glTF asset lifecycle owner", () => {
         preparationDurationMs: expect.any(Number),
         sourceReadDurationMs: expect.any(Number),
       },
-      textures: { failed: 1, fallback: 0, loading: 0, ready: 0, total: 1 },
+      textures: { failed: 1, loading: 0, ready: 0, total: 1 },
     });
     const degraded = owner.getSnapshot(node.asset);
     expect(degraded.status).toBe("degraded");
@@ -714,7 +714,6 @@ describe("glTF asset lifecycle owner", () => {
       );
     }
     owner.refreshTextureProgress(() => ({
-      fallbackReason: "preferred SVG failed",
       height: 16,
       status: "ready",
       width: 16,
@@ -722,7 +721,7 @@ describe("glTF asset lifecycle owner", () => {
     expect(owner.getSnapshot(node.asset)).toMatchObject({
       status: "ready",
       timings: { imagesCompleteAfterMs: completionMs },
-      textures: { failed: 0, fallback: 1, loading: 0, ready: 1, total: 1 },
+      textures: { failed: 0, loading: 0, ready: 1, total: 1 },
     });
     const ready = owner.getSnapshot(node.asset);
     if (ready.status === "ready") expect(ready.rootExtras).toBe(publishedRootExtras);

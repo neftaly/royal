@@ -24,18 +24,10 @@ names remain legal when core fallback is valid.
 
 An executable Royal glTF extension MUST be one of:
 
-- ratified or registered in the Khronos glTF extension registry;
-- published under an active Khronos or multi-vendor draft whose exact name,
-  placement, and payload Royal implements; or
-- the single explicit Royal exception, `GS_texture_svg`.
+- ratified or registered in the Khronos glTF extension registry; or
+- published under an active Khronos or multi-vendor draft whose exact name, placement, and payload Royal implements.
 
-`GS_texture_svg` is the only executable `GS_` name. Direct Royal features,
-browser format support, or a convenient payload shape do not authorize another
-private glTF extension. A new accepted name requires primary specification
-evidence, an honest status label, fallback/required behavior, cold validation,
-and positive and adversarial fixtures before it enters the implementation
-ledger below. Registered vendor extensions such as `MSFT_lod` remain eligible
-but are implemented only when their renderer semantics are justified.
+Private glTF extensions are unsupported. New accepted names require primary specification evidence, an honest status label, fallback/required behavior, cold validation, and positive and adversarial fixtures.
 
 The glTF Lab distinguishes a `supported-oracle` from a
 `core-fallback-oracle`. The latter proves that an optional extension's authored
@@ -57,7 +49,6 @@ oracle.
 | `EXT_texture_avif` (open draft) | texture | ordinary cold texture recipe using the draft extension image source |
 | `EXT_texture_webp` | texture | ordinary cold texture recipe using the extension image source |
 | `EXT_texture_astc` | texture | draft subset: native LDR 6x6/8x8 KTX2; capability-selected alternate or required source |
-| `GS_texture_svg` | texture | experimental preferred SVG recipe with required failure or one deferred ordinary fallback |
 | `KHR_draco_mesh_compression` | mesh primitive, async preparation with available decoder | validated canonical triangle attributes and indices |
 | `KHR_lights_punctual` | document and node | canonical punctual light definition and transformed occurrences |
 | `KHR_materials_emissive_strength` | material | multiplied canonical emissive factor |
@@ -107,17 +98,6 @@ transform math is generic.
   Unsupported optional ASTC selects the raster; unsupported required ASTC
   settles at the texture-error boundary without a download or GPU upload.
   Other block sizes, HDR, supercompression and transcoding remain unsupported.
-  Combined SVG behavior is defined by the experimental SVG contract.
-- `GS_texture_svg` accepts one self-contained, bounded SVG image source for
-  sRGB color slots. Optional use requires a core source or a present
-  lower-priority texture extension which is itself required, and attempts SVG
-  first for non-base-color uses; optional base color publishes a selected raster
-  preview first. The raster priority is supported ASTC LDR, AVIF, WebP,
-  or core and fetches only that fallback. Required use may omit the fallback
-  and fails rather than silently changing
-  representations. Required SVG with ASTC may load native bytes first, but must
-  validate SVG authority before publishing that preview. The chosen representation lowers through one texture
-  identity and lifecycle.
 - Meshopt validates the ratified buffer-view schema, lazily loads its decoder,
   requests only compressed ranges reachable from the selected scene, skips
   marked or implicit URI-less fallback buffers, and decodes into the ordinary
@@ -150,5 +130,3 @@ extensions, the remaining PBR extension family, and unimplemented draft or
 imaginary texture extensions. Browser AVIF remains valid as a direct ordinary
 Royal texture source; `EXT_texture_avif` is implemented narrowly as an open
 draft and is not represented as registered or ratified compatibility.
-`GS_texture_svg` is likewise an implemented but unregistered Royal experiment,
-not a registered ecosystem compatibility claim.

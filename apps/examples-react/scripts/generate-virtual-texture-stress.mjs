@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const virtualSize = 4096;
@@ -34,7 +35,7 @@ const periodicCanonicalCopies = [-virtualSize, 0, virtualSize]
     .map((x) => `<use href="#canonical-map" transform="translate(${x} ${y})"/>`))
   .join('\n');
 
-const pageSvg = (mip, x, y) => {
+export const pageArtwork = (mip, x, y) => {
   const scale = 2 ** mip;
   const sourceSize = pageSize * scale;
   const sourceX = x * sourceSize;
@@ -61,12 +62,22 @@ ${periodicCanonicalCopies}
 `;
 };
 
+const writePage = (path, artwork) => new Promise((resolve, reject) => {
+  const process = spawn('convert', ['svg:-', path], { stdio: ['pipe', 'ignore', 'inherit'] });
+  process.on('error', reject);
+  process.on('exit', (code) => code === 0 ? resolve() : reject(new Error(`Rasterization failed: ${code}`)));
+  process.stdin.end(artwork);
+});
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
 await mkdir(outputDirectory, { recursive: true });
 for (let mip = 0; mip < mipCount; mip += 1) {
   const grid = virtualSize / pageSize / (2 ** mip);
   for (let y = 0; y < grid; y += 1) {
     for (let x = 0; x < grid; x += 1) {
-      await writeFile(`${outputDirectory}/m${mip}-${x}-${y}.svg`, pageSvg(mip, x, y));
+      await writePage(`${outputDirectory}/m${mip}-${x}-${y}.png`, pageArtwork(mip, x, y));
     }
   }
+}
+
 }

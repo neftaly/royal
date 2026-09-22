@@ -327,7 +327,6 @@ const lazyBrowserTextureDecoder = (
   gl: WebGL2RenderingContext,
   readGltfTexture: CanvasRootPlatform["readGltfTextureResource"],
   onReadAheadChanged: () => void,
-  scheduleSvgPreparation: import("../resource/async-preparation-owner").AsyncPreparationScheduler,
 ): Pick<TextureAssetOwnerPlatform, "decode" | "preload" | "readAheadSnapshot"> => {
   let decoder:
     | Promise<import("../texture/browser-decode").BrowserTextureDecoder>
@@ -341,7 +340,6 @@ const lazyBrowserTextureDecoder = (
           etc2Available,
           readGltfTexture,
           onReadAheadChanged,
-          scheduleSvgPreparation,
           gl,
         );
         loadedDecoder = value;
@@ -833,7 +831,6 @@ export class CanvasRoot implements RendererRoot {
           () => {
             if (!this.#disposed) this.#publish();
           },
-          this.#asyncPreparation.run,
         )
         : undefined;
       this.#textureAssets = construction.own(new TextureAssetOwner({

@@ -19,7 +19,7 @@ export type StaticTextureDemand = Readonly<{
   priority: number;
   retainAlpha: boolean;
   textureIndex: number;
-  svgPreview?: true;
+  rasterPreview?: true;
 }>;
 
 type TextureClaim = (demand: StaticTextureDemand) => void;
@@ -44,7 +44,7 @@ export const createStaticPrimitiveTextureDemand = (
     path: string,
     retainAlpha = false,
     priority = 2,
-    svgPreview = false,
+    rasterPreview = false,
   ): void => {
     if (value === undefined) return;
     const textureInfo = object(value, label, path);
@@ -55,7 +55,7 @@ export const createStaticPrimitiveTextureDemand = (
       priority: priority * materials.length + materialPhase,
       retainAlpha,
       textureIndex,
-      ...(svgPreview ? { svgPreview: true } : {}),
+      ...(rasterPreview ? { rasterPreview: true } : {}),
     });
   };
   const claimMaterial = (value: unknown, path: string, phase?: number): void => {
@@ -167,10 +167,9 @@ export const createStaticPrimitiveImageDemand = (
   claimImage: (imageIndex: number) => void,
 ): ((primitive: JsonObject, path: string) => void) => {
   const planTextureImages = createStaticTextureImagePlanner(document, label);
-  return createStaticPrimitiveTextureDemand(document, label, ({ colorSpace, textureIndex }) => {
-    const plan = planTextureImages(textureIndex, colorSpace);
+  return createStaticPrimitiveTextureDemand(document, label, ({ textureIndex }) => {
+    const plan = planTextureImages(textureIndex);
     claimImage(plan.primary.imageIndex);
     if (plan.astc !== undefined) claimImage(plan.astc.imageIndex);
-    if (plan.fallback !== undefined) claimImage(plan.fallback.imageIndex);
   });
 };

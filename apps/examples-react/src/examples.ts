@@ -78,10 +78,6 @@ const exampleLoaders: Record<string, () => Promise<LoadedExample>> = {
     () => import('./examples/cases/GltfLab').then((module) => module.GltfLab),
     () => import('./examples/cases/GltfLab.tsx?raw'),
   ),
-  'gltf-ghostscript-tiger-svg': exampleLoader(
-    () => import('./examples/cases/GltfGhostscriptTigerSvg').then((module) => module.GltfGhostscriptTigerSvg),
-    () => import('./examples/cases/GltfGhostscriptTigerSvg.tsx?raw'),
-  ),
   'gltf-lod': exampleLoader(
     () => import('./examples/cases/GltfLod').then((module) => module.GltfLod),
     () => import('./examples/cases/GltfLod.tsx?raw'),

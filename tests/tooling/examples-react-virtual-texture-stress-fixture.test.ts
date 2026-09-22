@@ -1,3 +1,5 @@
+// @ts-expect-error Fixture authoring utility is plain JavaScript.
+import { pageArtwork } from "../../apps/examples-react/scripts/generate-virtual-texture-stress.mjs";
 import { readdir, readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
@@ -18,7 +20,7 @@ describe("virtual texture stress fixture", () => {
       readonly physicalSlots: number;
       readonly virtualSize: readonly [number, number];
     };
-    const files = (await readdir(pagesDirectory)).filter((file) => file.endsWith(".svg")).sort();
+    const files = (await readdir(pagesDirectory)).filter((file) => file.endsWith(".png")).sort();
     const expectedFiles: string[] = [];
     const canonicalMaps = new Set<string>();
     const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
@@ -44,9 +46,13 @@ describe("virtual texture stress fixture", () => {
       const gridHeight = Math.ceil(manifest.virtualSize[1] / manifest.pageSize / scale);
       for (let y = 0; y < gridHeight; y += 1) {
         for (let x = 0; x < gridWidth; x += 1) {
-          const file = `m${mip}-${x}-${y}.svg`;
+          const file = `m${mip}-${x}-${y}.png`;
           expectedFiles.push(file);
-          const source = await readFile(new URL(file, pagesDirectory), "utf8");
+          const png = await readFile(new URL(file, pagesDirectory));
+          expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+          expect(png.readUInt32BE(16)).toBe(storedPageSize);
+          expect(png.readUInt32BE(20)).toBe(storedPageSize);
+          const source = pageArtwork(mip, x, y);
           const sourceSize = manifest.pageSize * scale;
           const sourceX = x * sourceSize;
           const sourceY = y * sourceSize;

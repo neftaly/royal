@@ -1,11 +1,7 @@
-vi.mock("../../packages/renderer-webgl/src/texture/origin-clean", () => ({ proveOriginClean: vi.fn(async () => {}) }));
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SvgRasterCache } from "../../packages/renderer-webgl/src/virtual-texture/svg-raster-cache";
 import {
   automaticVirtualTextureEligible,
-  automaticVirtualTextureIsSvg,
   createAutomaticRasterPageSource,
-  createAutomaticSvgPageSource,
   createAutomaticPreviewPageSource,
   planAutomaticVirtualTextureAxis,
 } from "../../packages/renderer-webgl/src/virtual-texture/automatic-page-source";
@@ -13,17 +9,6 @@ import {
 afterEach(() => {
   vi.unstubAllGlobals();
 });
-
-const svgDocument = (attributes = new Map<string, string>()): XMLDocument => ({
-  documentElement: {
-    getAttribute: () => null,
-    cloneNode: () => ({ setAttribute: vi.fn() }),
-  },
-  createElementNS: () => ({
-    setAttribute: (name: string, value: string) => attributes.set(name, value),
-    appendChild: vi.fn(),
-  }),
-}) as unknown as XMLDocument;
 
 describe("automatic virtual texture page source", () => {
   it.each(["abort", "close"] as const)("isolates %s during shared lazy raster loading", async (mode) => {
@@ -35,11 +20,11 @@ describe("automatic virtual texture page source", () => {
     const authority = { source: {} as ImageBitmap, width: 512, height: 512, close };
     let resolve!: (value: typeof authority) => void;
     const pending = new Promise<typeof authority>((done) => { resolve = done; });
-    const preview = { source: {} as ImageBitmap, width: 64, height: 64,
-      preview: { size: { width: 512, height: 512 }, load: () => pending } };
+    const preview = { kind: "ktx2-native" as const, format: "astc-8x8" as const, colorSpace: "srgb" as const, levels: [], width: 64, height: 64,
+      preview: { size: { width: 512, height: 512 }, rasterBytes: 512 * 512 * 4, retainedBytes: 0, load: () => pending } };
     const sampler = { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" } as const;
-    const first = createAutomaticPreviewPageSource(preview, sampler, "srgb");
-    const survivor = mode === "abort" ? first : createAutomaticPreviewPageSource(preview, sampler, "srgb");
+    const first = createAutomaticPreviewPageSource(preview.preview, sampler, "srgb");
+    const survivor = mode === "abort" ? first : createAutomaticPreviewPageSource(preview.preview, sampler, "srgb");
     const signal = new AbortController();
     const page = { mip: 0, x: 0, y: 0 };
     const cancelled = expect(first.read(page, signal.signal)).rejects.toMatchObject({ name: "AbortError" });
@@ -62,258 +47,6 @@ describe("automatic virtual texture page source", () => {
     // The shared decoded-source owner, not either page source, closes the image.
     expect(close).not.toHaveBeenCalled();
   });
-
-  it.each([
-    { level: 4, xs: [0, 1, 4, 5], ys: [0, 0, 0, 0], rasters: 2 },
-    { level: 4, xs: [0, 1, 2, 3, 0, 1, 2, 3], ys: [0, 0, 0, 0, 1, 1, 1, 1], rasters: 1 },
-    { level: 2, xs: [0, 1], ys: [0, 0], rasters: 1 },
-  ])("retains bounded SVG rasters at level $level across zoom reversals until cache pressure or disposal", async ({ level, xs, ys, rasters }) => {
-    const attributes = new Map<string, string>();
-    const context = { clearRect: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
-    const closed = vi.fn();
-    const decode = vi.fn(async () => ({
-      width: Number(attributes.get("width")), height: Number(attributes.get("height")), close: closed,
-    }));
-    vi.stubGlobal("createImageBitmap", decode);
-    vi.stubGlobal("XMLSerializer", class { serializeToString = () => "<svg/>"; });
-    vi.stubGlobal("document", { createElement: () => ({ getContext: () => context, width: 0, height: 0 }) });
-    const cache = new SvgRasterCache();
-    const blob = new Blob(["<svg/>"]);
-    const source = createAutomaticSvgPageSource({ blob, byteLength: blob.size, parsed: {
-      document: svgDocument(attributes),
-      viewBox: [0, 0, 16, 8],
-    } }, 16, 8, { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb", cache);
-    const mip = source.manifest.mipCount - level;
-    const pages = xs.map((x, index) => ({ mip, x, y: ys[index]! }));
-    source.setDemand!(pages);
-    try {
-      expect(source.hasCachedPage!(pages[1]!)).toBe(false);
-      expect(await source.readCached!(pages[1]!, new AbortController().signal)).toBeUndefined();
-      expect(decode).not.toHaveBeenCalled();
-      (await source.read(pages[0]!, new AbortController().signal))!.close();
-      expect(source.hasCachedPage!(pages[1]!)).toBe(true);
-      (await source.readCached!(pages[1]!, new AbortController().signal))!.close();
-      if (pages[2] !== undefined && rasters > 1) expect(source.hasCachedPage!(pages[2])).toBe(false);
-      for (const page of pages.slice(1)) (await source.read(page, new AbortController().signal))!.close();
-      expect(decode).toHaveBeenCalledTimes(rasters);
-      expect(source.manifest.pageSize).toBe(128);
-      expect(Number(attributes.get("width"))).toBeLessThanOrEqual(516);
-      expect(Number(attributes.get("height"))).toBeLessThanOrEqual(516);
-      expect(cache.byteLength).toBeLessThanOrEqual(4 * 1024 * 1024);
-      expect(closed).not.toHaveBeenCalled();
-      source.setDemand!([]);
-      expect(cache.byteLength).toBeGreaterThan(0);
-      expect(closed).not.toHaveBeenCalled();
-      source.setDemand!(pages);
-      for (const page of pages) (await source.read(page, new AbortController().signal))!.close();
-      expect(decode).toHaveBeenCalledTimes(rasters);
-      if (pages.length === 8) {
-        source.setDemand!(pages.slice(0, 2));
-        // A sparse view can reuse an already completed wide region.
-        (await source.readCached!(pages[1]!, new AbortController().signal))!.close();
-        expect(decode).toHaveBeenCalledTimes(rasters);
-        source.setDemand!(pages);
-      }
-      // Another source may reclaim the entire cache; old demand must not pin it.
-      const pressure = {};
-      await cache.use(pressure, 4 * 1024 * 1024,
-        async () => ({ width: 1024, height: 1024, source: {} as ImageBitmap }), () => undefined);
-      expect(closed).toHaveBeenCalledTimes(rasters);
-      expect(source.hasCachedPage!(pages[1]!)).toBe(false);
-      expect(await source.readCached!(pages[1]!, new AbortController().signal)).toBeUndefined();
-      expect(decode).toHaveBeenCalledTimes(rasters);
-      cache.delete(pressure);
-      source.setDemand!([]);
-      source.setDemand!(pages.length === 8 ? pages.slice(0, 2) : pages);
-      (await source.read(pages[0]!, new AbortController().signal))!.close();
-      expect(decode).toHaveBeenCalledTimes(rasters + 1);
-      if (pages.length === 8) {
-        source.setDemand!(pages);
-        // Dense demand must prefer the completed narrow raster over a new,
-        // unprepared wide region, without launching a cached-lane decode.
-        (await source.readCached!(pages[1]!, new AbortController().signal))!.close();
-        expect(await source.readCached!(pages[2]!, new AbortController().signal)).toBeUndefined();
-        expect(decode).toHaveBeenCalledTimes(rasters + 1);
-        (await source.read(pages[2]!, new AbortController().signal))!.close();
-        expect(decode).toHaveBeenCalledTimes(rasters + 2);
-      }
-    } finally { source.close!(); }
-    expect(cache.byteLength).toBe(0);
-    expect(closed).toHaveBeenCalledTimes(rasters + (pages.length === 8 ? 2 : 1));
-  });
-
-  it.each([2, 4])("does not regenerate an obsolete shared raster after eviction in a sparse view at level %i", async level => {
-    const attributes = new Map<string, string>();
-    const context = { clearRect: vi.fn(), drawImage: vi.fn(), getImageData: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
-    const widths: number[] = [];
-    vi.stubGlobal("createImageBitmap", vi.fn(async () => {
-      const width = Number(attributes.get("width")); widths.push(width);
-      return { width, height: Number(attributes.get("height")), close: vi.fn() };
-    }));
-    vi.stubGlobal("XMLSerializer", class { serializeToString = () => "<svg/>"; });
-    vi.stubGlobal("document", { createElement: () => ({ getContext: () => context, width: 0, height: 0 }) });
-    const cache = new SvgRasterCache(), blob = new Blob(["<svg/>"]);
-    const source = createAutomaticSvgPageSource({ blob, byteLength: blob.size, parsed: {
-      document: svgDocument(attributes), viewBox: [0, 0, 16, 8],
-    } }, 16, 8, { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb", cache);
-    const mip = source.manifest.mipCount - level;
-    const pages = Array.from({ length: level === 2 ? 2 : 8 }, (_, i) => ({ mip, x: i % 4, y: Math.floor(i / 4) }));
-    const signal = new AbortController().signal;
-    try {
-      source.setDemand!(pages);
-      (await source.read(pages[0]!, signal))!.close();
-      expect(widths[0]).toBeGreaterThan(level === 2 ? 132 : 260);
-      source.setDemand!(pages.slice(0, 2));
-      cache.clear();
-      expect(await source.readCached!(pages[0]!, signal)).toBeUndefined();
-      (await source.read(pages[0]!, signal))!.close();
-      expect(widths[1]).toBeLessThanOrEqual(260);
-      source.setDemand!(pages.slice(0, 1));
-      cache.clear();
-      (await source.read(pages[0]!, signal))!.close();
-      expect(widths[2]).toBeLessThanOrEqual(132);
-      expect(cache.byteLength).toBe(0);
-    } finally { source.close!(); }
-  });
-
-  it("recognizes explicit retained SVG authority instead of guessing from a URL", () => {
-    expect(automaticVirtualTextureIsSvg({
-      encodedSvg: {
-        blob: new Blob(["<svg/>"]),
-        byteLength: 6,
-        parsed: { document: {} as XMLDocument, viewBox: [0, 0, 1, 1] as const },
-      },
-      height: 8,
-      source: {} as ImageBitmap,
-      width: 16,
-    })).toBe(true);
-    expect(automaticVirtualTextureIsSvg({
-      height: 8,
-      source: {} as ImageBitmap,
-      width: 16,
-    })).toBe(false);
-  });
-
-  it("reuses one parsed SVG authority without reading or fetching its source again", async () => {
-    const root = {
-      cloneNode: () => ({ setAttribute: vi.fn() }),
-      getAttribute: (name: string) => name === "viewBox" ? "0 0 16 8" : null,
-      localName: "svg",
-      querySelector: () => null,
-    };
-    const context = { drawImage: vi.fn(), getImageData: vi.fn() };
-    const blob = new Blob(['<svg viewBox="0 0 16 8"/>'], { type: "image/svg+xml" });
-    const text = vi.spyOn(blob, "text");
-    const fetch = vi.fn();
-    vi.stubGlobal("fetch", fetch);
-    vi.stubGlobal("XMLSerializer", class {
-      serializeToString = (): string => "<svg/>";
-    });
-    vi.stubGlobal("createImageBitmap", vi.fn(async () => ({
-      close: vi.fn(),
-      height: 132,
-      width: 132,
-    })));
-    vi.stubGlobal("document", {
-      createElement: () => ({ getContext: () => context, height: 0, width: 0 }),
-    });
-    const source = createAutomaticSvgPageSource(
-      {
-        blob,
-        byteLength: blob.size,
-        parsed: {
-          document: Object.assign(svgDocument(), { documentElement: root }),
-          viewBox: [0, 0, 16, 8],
-        },
-      },
-      16,
-      8,
-      {
-        magFilter: "linear",
-        minFilter: "linear-mipmap-linear",
-        wrapS: "clamp-to-edge",
-        wrapT: "clamp-to-edge",
-      },
-      "srgb",
-    );
-
-    const first = await source.read({ mip: 0, x: 1, y: 1 }, new AbortController().signal);
-    if (first === undefined) throw new Error("expected first SVG page");
-    first.close();
-    const second = await source.read({ mip: 0, x: 2, y: 2 }, new AbortController().signal);
-    if (second === undefined) throw new Error("expected second SVG page");
-    second.close();
-
-    expect(text).not.toHaveBeenCalled();
-    expect(fetch).not.toHaveBeenCalled();
-    source.close?.();
-    await expect(source.read(
-      { mip: 0, x: 1, y: 1 },
-      new AbortController().signal,
-    )).rejects.toThrow("closed");
-  });
-
-  it.each([0, 1, 2])("renders early SVG quality level %i with one bounded decode", async (level) => {
-    const context = { drawImage: vi.fn(), getImageData: vi.fn(), clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
-    vi.stubGlobal("document", { createElement: () => ({ getContext: () => context, height: 0, width: 0 }) });
-    vi.stubGlobal("XMLSerializer", class { serializeToString = (): string => "<svg/>"; });
-    const close = vi.fn();
-    const bitmap = { close, width: 128, height: 128 };
-    const decode = vi.fn(async () => bitmap);
-    vi.stubGlobal("createImageBitmap", decode);
-    const previewImage = {} as ImageBitmap;
-    const encoded = {
-      blob: new Blob(["<svg/>"]), byteLength: 6,
-      parsed: { document: svgDocument(), viewBox: [0, 0, 64, 64] as const },
-    };
-    const load = vi.fn(async () => encoded);
-    const source = createAutomaticPreviewPageSource({ width: 64, height: 64, source: previewImage, preview: { encoded, load } },
-      { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb");
-    const page = await source.read({ mip: source.manifest.mipCount - 1 - level, x: 0, y: 0 }, new AbortController().signal);
-    expect(load).toHaveBeenCalledOnce();
-    expect(decode).toHaveBeenCalledOnce();
-    expect(close).toHaveBeenCalledOnce();
-    expect(context.drawImage.mock.calls.every(([image]) => image === bitmap)).toBe(true);
-    page?.close();
-    source.close?.();
-  });
-
-  it.each([[64, 64, 0, 0], [64, 64, 3, 3], [64, 17, 3, 0], [1, 64, 0, 3]])(
-    "bounds clamped SVG decoding and covers gutters for %i x %i at %i,%i",
-    async (width, height, x, y) => {
-      const attributes = new Map<string, string>();
-      const context = { drawImage: vi.fn(), getImageData: vi.fn(), clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
-      vi.stubGlobal("document", { createElement: () => ({ getContext: () => context, height: 0, width: 0 }) });
-      vi.stubGlobal("XMLSerializer", class { serializeToString = (): string => "<svg/>"; });
-      const close = vi.fn();
-      const decode = vi.fn(async () => ({ close, width: Number(attributes.get("width")), height: Number(attributes.get("height")) }));
-      vi.stubGlobal("createImageBitmap", decode);
-      const source = createAutomaticSvgPageSource({
-        blob: new Blob(["<svg/>"]), byteLength: 6,
-        parsed: { document: svgDocument(attributes), viewBox: [0, 0, width, height] },
-      }, width, height, { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb");
-      const page = await source.read({ mip: source.manifest.mipCount - 3, x, y }, new AbortController().signal);
-      expect(decode).toHaveBeenCalledOnce();
-      expect(close).toHaveBeenCalledOnce();
-      const rasterWidth = Number(attributes.get("width"));
-      const rasterHeight = Number(attributes.get("height"));
-      expect(rasterWidth).toBeGreaterThan(0);
-      expect(rasterHeight).toBeGreaterThan(0);
-      expect(rasterWidth).toBeLessThanOrEqual(source.manifest.pageSize + source.manifest.borderTexels * 2);
-      expect(rasterHeight).toBeLessThanOrEqual(source.manifest.pageSize + source.manifest.borderTexels * 2);
-      let area = 0;
-      for (const [, sx, sy, sw, sh, , , dw, dh] of context.drawImage.mock.calls) {
-        expect(sx).toBeGreaterThanOrEqual(0);
-        expect(sy).toBeGreaterThanOrEqual(0);
-        expect(sx + sw).toBeLessThanOrEqual(rasterWidth + 1e-9);
-        expect(sy + sh).toBeLessThanOrEqual(rasterHeight + 1e-9);
-        area += dw * dh;
-      }
-      expect(area).toBeCloseTo((source.manifest.pageSize + source.manifest.borderTexels * 2) ** 2);
-      page?.close();
-      source.close?.();
-    },
-  );
 
   it("selects only sufficiently large browser raster sources", () => {
     expect(automaticVirtualTextureEligible({

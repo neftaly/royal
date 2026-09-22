@@ -49,7 +49,6 @@ const contextLossSmoke = process.env.EXAMPLES_SMOKE_CONTEXT_LOSS === '1';
 const creationContextLossSmoke = process.env.EXAMPLES_SMOKE_CREATION_CONTEXT_LOSS === '1';
 const reactLifecycleSmoke = process.env.EXAMPLES_SMOKE_REACT_LIFECYCLE === '1';
 const embeddedTextureGate = process.env.EXAMPLES_SMOKE_EMBEDDED_TEXTURE_GATE === '1';
-const svgFallbackSmoke = process.env.EXAMPLES_SMOKE_SVG_FALLBACK === '1';
 const allowSoftwareGpu = process.env.EXAMPLES_SMOKE_ALLOW_SOFTWARE_GPU === '1';
 
 if (!new Set(['cdp', 'chromium']).has(browserMode)) {
@@ -97,7 +96,7 @@ const smokeExpectations = {
   'virtual-texture-stress': {
     resourceSubstrings: [
       '/fixtures/virtual-texture-stress/map.vt.json',
-      '/fixtures/virtual-texture-stress/map-pages/m3-0-0.svg',
+      '/fixtures/virtual-texture-stress/map-pages/m3-0-0.png',
     ],
     minColorBuckets: 8,
     minPaintedRatio: 0.02,
@@ -140,12 +139,6 @@ const smokeExpectations = {
     minColorBuckets: 1,
     minPaintedRatio: 0.0001,
   },
-  'gltf-ghostscript-tiger-svg': {
-    // A flat parchment card previously reached 22 buckets while the decoded
-    // Tiger consistently contributes far more color variation.
-    minColorBuckets: 48,
-    minPaintedRatio: 0.006,
-  },
   'gltf-lod': {
     minColorBuckets: 8,
     minPaintedRatio: 0.004,
@@ -159,8 +152,8 @@ const smokeExpectations = {
     minColorBuckets: 10,
     minPaintedRatio: 0.01,
     resourceSubstrings: [
-      '/fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf',
-      '/fixtures/gltf-svg-texture/ghostscript-tiger.svg',
+      '/fixtures/gltf-tiger-texture/ghostscript-tiger-card.gltf',
+      '/fixtures/gltf-tiger-texture/ghostscript-tiger-fallback.png',
     ],
   },
 };
@@ -1023,7 +1016,7 @@ const assertRoute = (expected, state) => {
       for (const region of focusedRegions) {
         const pageUrls = interaction.presets?.[region.preset]?.pageUrls ?? [];
         const pages = pageUrls.flatMap((url) => {
-          const match = /\/map-pages\/m(\d+)-(\d+)-(\d+)\.svg(?:$|\?)/.exec(url);
+          const match = /\/map-pages\/m(\d+)-(\d+)-(\d+)\.png(?:$|\?)/.exec(url);
           if (match === null) return [];
           const mip = Number(match[1]);
           const grid = 2 ** Math.max(0, 3 - mip);
@@ -2137,7 +2130,6 @@ const main = async () => {
       let textureFallbackPause;
       let textureFallbackKind;
       let textureFallbackCapture;
-      let svgFallbackIntercepted;
       const pausedTextureRequests = [];
       const pausedVirtualTextureRequests = [];
       if (route.id === 'texture-materials') {
@@ -2225,29 +2217,7 @@ const main = async () => {
           })();
         ` });
       }
-      if (svgFallbackSmoke) {
-        if (route.id !== 'gltf-ghostscript-tiger-svg') {
-          throw new Error('EXAMPLES_SMOKE_SVG_FALLBACK requires the Ghostscript Tiger route');
-        }
-        await session.call('Fetch.enable', {
-          patterns: [{
-            requestStage: 'Request',
-            urlPattern: '*ghostscript-tiger.svg*',
-          }],
-        });
-        session.on('Fetch.requestPaused', (request) => {
-          if (!request.request.url.includes('/ghostscript-tiger.svg')) return;
-          void session.call('Fetch.failRequest', {
-            errorReason: 'Failed',
-            requestId: request.requestId,
-          }).catch((error) => exceptions.push(`SVG fallback interception failed: ${error}`));
-        });
-        svgFallbackIntercepted = session.wait(
-          'Fetch.requestPaused',
-          ({ request }) => request.url.includes('/ghostscript-tiger.svg'),
-          { timeoutMs: 10_000 },
-        );
-      }
+
       const routeLoaded = session.once('Page.loadEventFired');
       await session.call('Page.navigate', { url: routeUrl.href });
       await Promise.race([
@@ -2357,28 +2327,6 @@ const main = async () => {
         console.log(creation.status === 'unsupported'
           ? 'skip creation-time context-loss WEBGL_lose_context unavailable'
           : `ok creation-time context-loss attempts=${creation.attempts} same-canvas`);
-      }
-      if (svgFallbackIntercepted !== undefined) {
-        if (await svgFallbackIntercepted === undefined) {
-          throw new Error('SVG fallback smoke did not intercept the preferred source');
-        }
-        await session.call('Fetch.disable');
-        const detail = await evaluate(session, `
-          (async () => {
-            const deadline = performance.now() + 10000;
-            while (performance.now() < deadline) {
-              const snapshot = globalThis.__royalExamplesRendererBenchmarkSnapshot?.();
-              const vt = snapshot?.virtualTexturing;
-              if (vt?.failedPages === 1 && vt.pendingPages === 0 && vt.residentPages > 0) return snapshot;
-              await new Promise((resolve) => setTimeout(resolve, 20));
-            }
-            throw new Error('Optional SVG failure did not settle on preview coverage');
-          })()
-        `);
-        if (detail.gltfLoadDiagnostics?.assets?.[0]?.imageFallbacks !== 0) {
-          throw new Error(`Initial preview was misclassified as a failed image: ${JSON.stringify(detail)}`);
-        }
-        state = { ...state, renderer: detail };
       }
       if ((state.canvas?.sample?.paintedPixels ?? 0) === 0) {
         const compositedSample = await compositedCanvasSample(session);

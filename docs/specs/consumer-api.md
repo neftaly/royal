@@ -298,9 +298,7 @@ Drawable glTF status includes selected-scene node, primitive, and punctual-light
 counts, the actual resolved `sceneIndex`, the complete lightweight
 `scenes: { index, name? }[]` document inventory, document-declared
 material-variant names, optional uninterpreted `rootExtras`, and
-`textures: { total, loading, ready, failed, fallback }`. `fallback` counts ready
-logical textures whose preferred representation failed and whose declared
-alternative won; it is not a second texture or an asset failure. Consumers do
+`textures: { total, loading, ready, failed }`. Consumers do
 not parse a second copy of the glTF merely to populate scene/variant controls or
 application metadata. `rootExtras` is the JSON value from the same canonical
 root parse, scoped to the exact source/version/selected-scene identity and
@@ -427,7 +425,7 @@ sampler. `textureAsset` is the explicit form when `contentKey` is needed.
 `virtualTexture(manifestUri)` names authored VT; automatic VT remains a renderer
 creation policy, not a different material constructor.
 
-Source selection, fallback, compression, SVG rasterization, and VT are not
+Source selection, fallback, compression, and VT are not
 different material APIs. Materials receive a texture reference with one visible
 orientation and color/alpha contract.
 

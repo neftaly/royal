@@ -23,7 +23,6 @@ const supportedRequiredExtensions = new Set([
   'EXT_meshopt_compression',
   'EXT_texture_avif',
   'EXT_texture_webp',
-  'GS_texture_svg',
   'KHR_draco_mesh_compression',
   'KHR_lights_punctual',
   'KHR_materials_emissive_strength',

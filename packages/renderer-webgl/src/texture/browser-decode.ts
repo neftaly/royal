@@ -1,6 +1,6 @@
 import { completeKtx2MipLevelCount, fitKtx2Etc2Storage, ktx2Etc2StorageBytes } from "./etc2-storage";
 import { nativeTextureAvailable, validateNativeBaseDimensions } from "./native-storage";
-import { selectAsyncPreparationLane, type AsyncPreparationScheduler } from "../resource/async-preparation-owner";
+import { selectAsyncPreparationLane } from "../resource/async-preparation-owner";
 import type {
   DecodedImageTextureSource,
   DecodedTextureSource,
@@ -149,7 +149,6 @@ type TextureBlob = Readonly<{
   blob: Blob;
   byteLength: number;
   ktx2: boolean;
-  svg: boolean;
   transportDurationMs?: number;
   transportQueueDurationMs?: number;
 }>;
@@ -263,18 +262,12 @@ const isKtx2MimeType = (mimeType: string): boolean =>
 
 const isKtx2Uri = (uri: string): boolean => /\.ktx2(?:[?#]|$)/i.test(uri);
 
-const isSvgMimeType = (mimeType: string): boolean =>
-  mimeType.split(";", 1)[0]!.trim().toLowerCase() === "image/svg+xml";
-
 const isAvifMimeType = (mimeType: string): boolean =>
   mimeType.split(";", 1)[0]!.trim().toLowerCase() === "image/avif";
-
-const isSvgUri = (uri: string): boolean => /\.svg(?:[?#]|$)/i.test(uri);
 
 const textureBlobType = (asset: TextureLeafSourceRef & Readonly<{ src: string }>): string => {
   if (asset.mimeType !== undefined) return asset.mimeType;
   if (asset.sourceEncoding?.startsWith("ktx2-") === true || isKtx2Uri(asset.src)) return "image/ktx2";
-  if (asset.sourceEncoding === "svg" || isSvgUri(asset.src)) return "image/svg+xml";
   if (/\.avif(?:[?#]|$)/i.test(asset.src)) return "image/avif";
   if (/\.jpe?g(?:[?#]|$)/i.test(asset.src)) return "image/jpeg";
   if (/\.png(?:[?#]|$)/i.test(asset.src)) return "image/png";
@@ -341,7 +334,6 @@ const readTextureBlob = async (
       blob: new Blob([asset.bytes as Uint8Array<ArrayBuffer>], { type: asset.mimeType }),
       byteLength: asset.bytes.byteLength,
       ktx2: asset.sourceEncoding?.startsWith("ktx2-") === true || isKtx2MimeType(asset.mimeType),
-      svg: asset.sourceEncoding === "svg" || isSvgMimeType(asset.mimeType),
     }
     : await (async () => {
       if (asset.gltfResource === true && readGltfTexture !== undefined) {
@@ -350,7 +342,6 @@ const readTextureBlob = async (
           blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: textureBlobType(asset) }),
           byteLength: bytes.byteLength,
           ktx2: asset.sourceEncoding?.startsWith("ktx2-") === true || isKtx2Uri(asset.src),
-          svg: asset.sourceEncoding === "svg" || isSvgUri(asset.src),
         };
       }
       const response = await fetch(asset.src, { signal });
@@ -364,7 +355,6 @@ const readTextureBlob = async (
         ktx2: (asset.sourceEncoding?.startsWith("ktx2-") === true)
           || isKtx2Uri(asset.src)
           || isKtx2MimeType(blob.type),
-        svg: asset.sourceEncoding === "svg" || isSvgUri(asset.src) || isSvgMimeType(blob.type),
       };
     })();
 
@@ -491,7 +481,6 @@ const decodeTextureBlob = async (
   signal: AbortSignal,
   maxStorageBytes?: number,
   retainAlpha = false,
-  imageElementOutput?: "canvas",
 ): Promise<DecodedTextureSource> => {
   if (signal.aborted) throw aborted();
   const avif = textureIsAvif(asset, blob);
@@ -504,7 +493,6 @@ const decodeTextureBlob = async (
           ? undefined
           : (width: number, height: number) =>
               fitOrdinaryTextureStorage(width, height, maxStorageBytes),
-        output: imageElementOutput,
       },
     );
     return retainAlpha
@@ -703,7 +691,6 @@ export const createBrowserTextureDecoder = (
   etc2Available = true,
   readGltfTexture?: BrowserGltfTextureReader,
   onReadAheadChanged: () => void = () => undefined,
-  scheduleSvgPreparation: AsyncPreparationScheduler = (_signal, prepare) => prepare(),
   gl?: WebGL2RenderingContext,
 ): BrowserTextureDecoder => {
   const now = (): number => performance.now();
@@ -748,7 +735,6 @@ export const createBrowserTextureDecoder = (
     signal: AbortSignal,
     maxStorageBytes: number | undefined,
     retainAlpha: boolean | undefined,
-    fallback = false,
     detailRead = false,
     expectedSize?: Readonly<{ width: number; height: number }>,
   ): Promise<DecodedTextureSource> => {
@@ -767,7 +753,6 @@ export const createBrowserTextureDecoder = (
     const {
       blob,
       ktx2,
-      svg,
       transportDurationMs = 0,
       transportQueueDurationMs = 0,
     } = await read(asset, signal, detailRead);
@@ -779,17 +764,10 @@ export const createBrowserTextureDecoder = (
       if (dimensions === undefined && prefixBytes === 16 * 1024) {
         dimensions = readEncodedImageDimensions(new Uint8Array(await blob.slice(0, 128 * 1024).arrayBuffer()));
       }
-      if (ktx2 || svg || dimensions?.width !== expectedSize.width || dimensions.height !== expectedSize.height) {
+      if (ktx2 || dimensions?.width !== expectedSize.width || dimensions.height !== expectedSize.height) {
         throw new TypeError("Royal raster preview dimensions must match a supported full raster header");
       }
     }
-    if (fallback && svg) {
-      throw new TypeError("Royal SVG texture fallback must be an ordinary raster or ETC2 source");
-    }
-    const parsedSvg = svg
-      ? await import("./svg-source").then(({ validateSvgTextureBlob }) =>
-          validateSvgTextureBlob(blob, signal))
-      : undefined;
     const decodeQueuedAt = now();
     let decodeStartedAt = decodeQueuedAt;
     const decoded = await decodes.run(signal, () => {
@@ -802,7 +780,6 @@ export const createBrowserTextureDecoder = (
             signal,
             maxStorageBytes,
             retainAlpha,
-            svg ? "canvas" : undefined,
           );
     }, detailRead);
     const decodeCompletedAt = now();
@@ -815,11 +792,7 @@ export const createBrowserTextureDecoder = (
         transportQueueDurationMs,
       },
     };
-    if (!svg || timed.kind !== undefined) return timed;
-    return {
-      ...timed,
-      encodedSvg: { blob, byteLength: blob.size, parsed: parsedSvg! },
-    };
+    return timed;
   };
   const decode = async (
     asset: TextureSourceRef,
@@ -831,69 +804,49 @@ export const createBrowserTextureDecoder = (
     const fullRaster = fullRasterSource(asset);
     if (size !== undefined && gl !== undefined) await waitForTextureContext(gl, signal);
     if (size !== undefined && selectRaster(asset, retainAlpha) === asset) {
-      return decodeLeaf(fullRaster, signal, maxStorageBytes, retainAlpha, false, false, size);
+      return decodeLeaf(fullRaster, signal, maxStorageBytes, retainAlpha, false, size);
     }
-    const previewAsset = size !== undefined ? asset.astc : asset.svgPreview ? asset.fallback : undefined;
-    if (previewAsset !== undefined) {
+    const previewAsset = size !== undefined ? asset.astc : undefined;
+    if (previewAsset !== undefined && size !== undefined) {
       let preview: DecodedTextureSource;
       try {
-        preview = await decodeLeaf(previewAsset, signal, Math.min(maxStorageBytes ?? Infinity, 128 * 128 * 4), retainAlpha, true);
+        preview = await decodeLeaf(previewAsset, signal, Math.min(maxStorageBytes ?? Infinity, 128 * 128 * 4), retainAlpha);
       } catch (error) {
         if (signal.aborted) throw error;
         // A missing preview must not prevent a usable authoritative source.
-        return decodeLeaf(size === undefined ? asset : fullRaster, signal, maxStorageBytes, retainAlpha, false, false, size);
+        return decodeLeaf(fullRaster, signal, maxStorageBytes, retainAlpha, false, size);
+      }
+      if (preview.kind === undefined) {
+        preview.close?.();
+        throw new TypeError("Royal raster previews require a native compressed source");
       }
       const lifetime = new AbortController();
       const detailStorageLimit = 64 * 1024 * 1024;
-      const fitted = size === undefined ? undefined : fitOrdinaryTextureStorage(size.width, size.height, detailStorageLimit);
+      const fitted = fitOrdinaryTextureStorage(size.width, size.height, detailStorageLimit);
       let pending: ReturnType<TexturePreviewSource["load"]> | undefined;
       const detail: { -readonly [Key in keyof TexturePreviewSource]: TexturePreviewSource[Key] } = {
-        ...(fitted === undefined ? {} : { size, rasterBytes: fitted.width * fitted.height * 4, retainedBytes: 0 }),
+        size, rasterBytes: fitted.width * fitted.height * 4, retainedBytes: 0,
         load: () => lifetime.signal.aborted ? Promise.reject(aborted()) : pending ??= (async () => {
-          if (size !== undefined) {
-            detail.retainedBytes = detail.rasterBytes!;
-            const raster = await decodeLeaf(fullRaster, lifetime.signal, detailStorageLimit, false, false, true, size);
-            if (raster.kind !== undefined || lifetime.signal.aborted) { raster.close?.(); throw aborted(); }
-            if (raster.width * raster.height * 4 > detail.rasterBytes!
-              || (raster.sourceWidth ?? raster.width) !== size.width || (raster.sourceHeight ?? raster.height) !== size.height) {
-              raster.close?.();
-              throw new TypeError("Royal raster detail exceeded its reservation or declared dimensions");
-            }
-            detail.raster = raster;
-            detail.retainedBytes = raster.width * raster.height * 4;
-            return raster;
+          detail.retainedBytes = detail.rasterBytes;
+          const raster = await decodeLeaf(fullRaster, lifetime.signal, detailStorageLimit, false, true, size);
+          if (raster.kind !== undefined || lifetime.signal.aborted) { raster.close?.(); throw aborted(); }
+          if (raster.width * raster.height * 4 > detail.rasterBytes
+            || (raster.sourceWidth ?? raster.width) !== size.width || (raster.sourceHeight ?? raster.height) !== size.height) {
+            raster.close?.();
+            throw new TypeError("Royal raster detail exceeded its reservation or declared dimensions");
           }
-          const { blob, svg } = await read(asset, lifetime.signal, true);
-          if (!svg) throw new TypeError("Royal SVG detail must contain an SVG source");
-          const { validateSvgTextureBlob } = await import("./svg-source");
-          const parsed = await scheduleSvgPreparation(
-            lifetime.signal,
-            () => validateSvgTextureBlob(blob, lifetime.signal),
-          );
-          if (lifetime.signal.aborted) throw aborted();
-          const encoded = { blob, byteLength: blob.size, parsed };
-          detail.encoded = encoded;
-          return encoded;
+          detail.raster = raster;
+          detail.retainedBytes = raster.width * raster.height * 4;
+          return raster;
         })().catch((error: unknown) => {
           detail.retainedBytes = 0;
           detail.error = String(error instanceof Error ? error.message : error).slice(0, 400);
           throw error;
         }),
       };
-      if (asset.svgPreview === "required") {
-        const cancel = () => lifetime.abort();
-        signal.addEventListener("abort", cancel, { once: true });
-        try {
-          if (signal.aborted) throw aborted();
-          await detail.load();
-          if (signal.aborted) throw aborted();
-        }
-        catch (error) { lifetime.abort(); preview.close?.(); throw error; }
-        finally { signal.removeEventListener("abort", cancel); }
-      }
       return {
         ...preview,
-        ...(size === undefined ? {} : { sourceWidth: size.width, sourceHeight: size.height }),
+        sourceWidth: size.width, sourceHeight: size.height,
         close: () => {
           if (lifetime.signal.aborted) return;
           lifetime.abort();
@@ -904,21 +857,13 @@ export const createBrowserTextureDecoder = (
         preview: detail,
       };
     }
-    try {
-      return await decodeLeaf(asset, signal, maxStorageBytes, retainAlpha);
-    } catch (error) {
-      if (signal.aborted || asset.fallback === undefined) throw error;
-      const value = error instanceof Error ? error.message : String(error);
-      const fallbackReason = value.length <= 400 ? value : `${value.slice(0, 399)}…`;
-      const decoded = await decodeLeaf(asset.fallback, signal, maxStorageBytes, retainAlpha, true);
-      return { ...decoded, fallbackReason };
-    }
+    return decodeLeaf(asset, signal, maxStorageBytes, retainAlpha);
   };
   return {
     decode,
     preload: (asset: TextureSourceRef, signal: AbortSignal, retainAlpha = false): void => {
       if (signal.aborted || gl?.isContextLost()) return;
-      const leaf = selectRaster(asset.svgPreview ? asset.fallback! : asset, retainAlpha);
+      const leaf = selectRaster(asset, retainAlpha);
       if (leaf.sourceEncoding === "ktx2-astc" && (retainAlpha || gl === undefined
         || !nativeTextureAvailable(gl, "astc-6x6", leaf.colorSpace ?? "srgb"))) return;
       readAhead.preload(leaf === asset ? fullRasterSource(asset) : leaf, signal);

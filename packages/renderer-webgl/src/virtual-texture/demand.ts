@@ -55,7 +55,7 @@ export type VirtualTextureDemandWorkspace = Readonly<{
   vertexFlags: Uint8Array;
   xs: Uint32Array;
   ys: Uint32Array;
-}> & { count: number; overflow: boolean; coarsestTarget: boolean; minimumMip: number; mipLinear: boolean; anisotropy: number };
+}> & { count: number; overflow: boolean; minimumMip: number; mipLinear: boolean; anisotropy: number };
 
 const CLIP_VERTEX_COMPONENTS = 6;
 const MAX_CLIPPED_VERTICES = 12;
@@ -76,7 +76,6 @@ export const createVirtualTextureDemandWorkspace = (
   screen[FINEST_FOOTPRINT_SQUARED] = Infinity;
   return {
     ancestors,
-    coarsestTarget: false,
     minimumMip: 0,
     mipLinear: false,
     anisotropy: 1,
@@ -107,7 +106,6 @@ export const createVirtualTextureDemandWorkspace = (
 
 export const resetVirtualTextureDemand = (workspace: VirtualTextureDemandWorkspace): void => {
   workspace.count = 0;
-  workspace.coarsestTarget = false;
   workspace.screen[FINEST_FOOTPRINT_SQUARED] = Infinity;
   workspace.keys.clear();
   workspace.importance.clear();
@@ -221,7 +219,6 @@ const addPageWithAncestors = (
   y: number,
   importance: number,
 ): void => {
-  if (mip === manifest.mipCount - 1) workspace.coarsestTarget = true;
   // A retained target already has its required ancestors. Overlapping triangles
   // often request the same pages; avoid walking that chain again for each one.
   if (workspace.keys.has(virtualTexturePageKeyParts(mip, x, y))) { addPage(workspace, mip, x, y, importance); return; }

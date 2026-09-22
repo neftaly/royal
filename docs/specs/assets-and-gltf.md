@@ -2,7 +2,7 @@
 
 ## Asset boundary
 
-glTF, buffers, images, SVG, manifests, and codec payloads are untrusted data.
+glTF, buffers, images, manifests, and codec payloads are untrusted data.
 They have no authority over Royal's application state, DOM, renderer options,
 camera ownership, or resource budgets.
 
@@ -98,9 +98,7 @@ the selected scene's child/LOD graph, accessors, sparse payloads, instancing,
 Draco payloads, and embedded images. Embedded-image demand follows only the
 selected primitives' base materials, material LOD chains, and variant mappings.
 Texture source choice is the same extension-aware pure decision used by
-material preparation: draft AVIF replaces its WebP/core alternate, while an
-optional SVG source retains both its preferred vector source and the required
-raster fallback. Unlit materials demand only their base-color input.
+material preparation: draft AVIF replaces its WebP/core alternate. Unlit materials demand only their base-color input.
 The browser port MAY satisfy that plan with single HTTP byte-range requests. It
 MUST probe range behavior before issuing remaining ranges concurrently,
 validate each returned interval, and fall back once to a complete response when
@@ -312,15 +310,6 @@ loop/clamp defaults, playback rate, seeking, concurrent clips, and blending.
 Context loss must preserve logical playback state without retaining stale GPU
 handles. This deferred slice MUST NOT add overhead to scenes without animation.
 
-## SVG as an image source
+## Raster image sources
 
-Royal accepts a self-contained SVG referenced by a glTF core image/texture
-source as a documented ingestion extension. It does not advertise a private
-glTF extension for this.
-
-The root SVG viewport and `viewBox` are normalized to finite raster dimensions.
-SVG uses the same ordinary/automatic-VT image path as a direct texture source.
-Royal does not parse or resolve nested external SVG resource graphs and does
-not claim to sanitize hostile markup. The browser image decoder is the
-execution boundary. Applications needing a stronger trust boundary MUST
-sanitize or flatten SVG offline under their own policy.
+Royal provides no dedicated SVG texture handling. Direct image assets and authored virtual-texture pages use the browser image decoder without SVG-specific validation. Optional `GS_texture_svg` payloads are ignored using normal unknown-extension fallback rules; required use fails preflight. Convert vector artwork to a supported raster format before loading it.

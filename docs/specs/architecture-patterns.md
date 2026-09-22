@@ -50,7 +50,7 @@ contract; it is not an acceptable blank.
 | WebGL | What complete state/resource intent is required, and how is optional capability selected/restored? |
 | Precision | What units, coordinate/color domain, finite/range arithmetic, quantization, and deterministic ordering apply? |
 | Failure | Is failure author, content, degradation, denial, interruption, scheduled, explicit-call, or XR lifecycle? |
-| Security | Can bytes, SVG, extension data, URLs, diagnostics, or callbacks gain authority or unbounded work? |
+| Security | Can bytes, extension data, URLs, diagnostics, or callbacks gain authority or unbounded work? |
 | Optionality | What import, startup, bundle, cache, shader, memory, and hot-path cost exists when unused? |
 | Observation | Which focused status is product behavior and which bounded diagnostic is cold operational evidence? |
 | Oracle | Which unit/property/fuzz/format/visual/browser/device evidence can independently prove it? |
@@ -133,7 +133,7 @@ Measure separately:
 
 - initial reachable gzip for a minimal React primitive;
 - initial and lazy reachable gzip for a minimal glTF scene;
-- reachable bytes attributable to Basis/Draco/Meshopt, SVG/VT, IBL, advanced
+- reachable bytes attributable to Basis/Draco/Meshopt, VT, IBL, advanced
   materials, and XR demand, including lazy chunks where a split is chosen;
 - duplicated code across lazy chunks and chunk/runtime overhead.
 

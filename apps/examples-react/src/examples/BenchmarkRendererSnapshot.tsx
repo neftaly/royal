@@ -82,7 +82,6 @@ export const benchmarkGltfDiagnostics = (
   return {
     ...(status.status === 'error' ? { error: status.error } : {}),
     imageCandidates: usable ? status.textures.total : 0,
-    imageFallbacks: usable ? status.textures.fallback : 0,
     imageFailures: usable ? status.textures.failed : 0,
     imagesLoaded: usable ? status.textures.ready : 0,
     imageRequests: usable ? status.textures.total : 0,
@@ -160,8 +159,6 @@ export const BenchmarkRendererSnapshot = ({
           pendingOrdinaryTextureStorageRepresentations:
             current.resources.imageTexturePreparation.pendingStorageRepresentations,
           pendingSurfaceUploads: current.resources.geometryUploads.pendingSurfaces,
-          retainedEncodedTextureSourceBytes:
-            current.resources.imageTexturePreparation.retainedEncodedSourceBytes,
         },
         textureResidency: benchmarkTextureResidency(current.resources.imageTextures),
         virtualTexturing: benchmarkVirtualTextureDiagnostics(observed.virtualTextureStatus)

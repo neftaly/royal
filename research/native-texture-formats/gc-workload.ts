@@ -25,7 +25,7 @@ export const createWorkload = (mode: "etc2" | "astc" | "astc-preview" | "unsuppo
       : { ...texture, format: texture.format, kind: "ktx2-native" },
   };
   if (mode === "astc-preview") Object.assign(binding.decoded!, {
-    svgPreview: { load: () => { throw new Error("Cached preview must not load SVG"); } },
+    preview: { load: () => { throw new Error("Cached preview must not load raster detail"); } },
   });
   const expected = owner.retain(binding);
   return {

@@ -8,7 +8,7 @@ adding runtime encoding or transcoding dependencies.
 ## Canonical texture semantics
 
 Royal has one authored texture orientation: upper-left source origin. Ordinary
-images, glTF images, generated VT pages, authored VT pages, and SVG raster pages
+images, glTF images, generated VT pages, and authored VT pages
 MUST produce the same visible U/V orientation. Upload-time or ingestion-time
 normalization happens once; there is no public `flipY` policy and no shader path
 may compensate differently by source kind.
@@ -25,7 +25,7 @@ boundaries, including non-power-of-two dimensions.
 ## Canonical prepared representation
 
 Source format is cold-path ingestion data. Every accepted complete texture
-source—whether browser-decoded PNG/JPEG/WebP/AVIF, SVG, offline native KTX2, a
+source—whether browser-decoded PNG/JPEG/WebP/AVIF, offline native KTX2, a
 buffer view, a data URI, or a future decoder—MUST lower to one prepared texture
 upload contract containing semantic storage class, dimensions, mip slices,
 row/block layout, color/alpha interpretation, and reconstruction identity. This
@@ -58,7 +58,7 @@ enters an uncompressed plan unless an offline container supplies blocks.
 
 Offline native ASTC LDR 6x6/8x8 and BC1 RGBA/BC3/BC7 MAY use the same
 compressed path behind WebGL capability checks. Format choice is authored;
-Royal does not encode browser images, rasterized SVGs, or automatic VT pages
+Royal does not encode browser images or automatic VT pages
 into block-compressed storage at runtime. Native format measurements and
 limitations are recorded in `research/native-texture-formats/README.md`.
 
@@ -79,9 +79,7 @@ Failure placeholders MUST be stable and non-flashing; conspicuous debug colors
 belong in explicit diagnostics, not ordinary presentation.
 
 Decoded raster sources MAY be retained for context restoration or an active
-automatic-VT representation only within CPU budget. Encoded SVG authority MAY
-be retained for an active vector-backed representation and MUST be diagnosed
-separately. Eviction MUST leave a reconstruction recipe or legal refetch path.
+automatic-VT representation only within CPU budget. Eviction MUST leave a reconstruction recipe or legal refetch path.
 
 When the persistent budget requires a smaller ordinary PNG/JPEG/WebP/AVIF,
 Royal reads a bounded encoded-header prefix through a pure, non-authoritative
@@ -172,9 +170,7 @@ VT is selected automatically for eligible sources. The current raster policy
 considers base-color triangle textures whose decoded
 RGBA texel count exceeds the default 24-slot atlas payload and whose longest
 edge spans more than two 128-texel pages. This prevents the representation from
-costing more GPU storage than the ordinary image it replaces. SVG uses the same
-logical page-source boundary but is selected for scalable detail rather than
-that raster-memory threshold.
+costing more GPU storage than the ordinary image it replaces.
 
 Representation choice is sticky for one capability/content generation. Royal
 MUST NOT oscillate ordinary/virtual strategies frame by frame. Context
@@ -271,8 +267,7 @@ on an atlas sampler is not used: neighbouring physical slots need not represent
 neighbouring virtual pages. CPU demand uses the same footprint calculation and
 includes the tap extent when splitting wrapped UV ranges. Existing residency
 budgets and complete-level coarsening still apply. At anisotropy 1, or for nearest
-filtering, the existing isotropic LOD and single-tap path remain in use. SVGs have
-no special LOD bias.
+filtering, the existing isotropic LOD and single-tap path remain in use.
 
 Scene publication indexes each VT resource directly to its canonical demand
 surfaces. Per-frame demand MUST NOT rescan unrelated surfaces once per resource.
@@ -299,7 +294,7 @@ At very close range, required detail is capped by source resolution, configured
 quality, hardware limits, and budgets rather than by an arbitrary camera
 distance. Near-plane clipping is camera geometry, not a VT quality policy.
 
-## Raster and SVG page sources
+## Raster page sources
 
 Automatic virtual texturing MUST be enabled for every root without an opt-in
 option. Eligibility, visible demand, CPU/GPU budgets, and coverage govern
@@ -311,42 +306,6 @@ CPU ownership as well as report it in VT diagnostics; the same bytes are not
 two independent allocations. The current root retains at most 64 MiB of such
 decoded raster sources for automatic VT; candidates beyond that ceiling remain
 on the ordinary texture path instead of stalling the shared decode queue.
-
-SVG automatic VT rasterizes requested pages from the vector source without
-retaining a full-resolution bitmap. Its current maximum raster long edge is
-16,384 texels; this is a quality/capability ceiling, not the SVG's logical
-dimension. Browser feature decisions MUST follow successful decode and
-origin-clean source capabilities rather than user-agent strings. SVG page
-sources prove origin cleanliness by creating and transferring a cropped 1px
-ImageBitmap; this avoids synchronous canvas pixel readback. The temporary
-bitmap is closed, and decoded sources remain pinned until asynchronous
-consumers finish.
-
-Direct ordinary SVG decode MUST retain the already-read
-encoded SVG as the vector authority. The automatic page source parses that
-authority once and MUST NOT refetch the URI or maintain a second source cache.
-The ordinary decoded bitmap may close after GPU upload; retained encoded bytes
-are reported separately from decoded handoff bytes and are released when the
-source is no longer claimed.
-
-Optional base-color `GS_texture_svg` textures MUST publish usable raster preview
-coverage before SVG refinement requires full-source rasterization. The selected
-preview is fitted within 64 KiB of RGBA base storage and retains full-viewport
-UVs. Automatic demand requests the current target mip levels and one coarsest
-coverage page, without requiring every intermediate mip. A supplied preview may
-populate that coverage page while finer target pages are prepared directly.
-Automatic VT bindings require resident coarse coverage so partial refinement
-cannot expose unmapped grey regions. When any visible occurrence actually needs
-the coarsest mip, it MUST receive source-authoritative pixels rather than remain
-bound to an enlarged preview, including when other occurrences need finer mips.
-All vector page work uses the background detail lane. The coarsest full image
-fits within one page, so one SVG rasterization plus canvas-generated gutters
-suffices when that image is the target. Vector authority is read
-and validated once on demand; it MUST NOT require a full ordinary SVG bitmap.
-A failed preview permits direct SVG recovery; failed optional detail keeps the
-preview. Required SVG with ASTC validates and retains the SVG authority before publishing
-the native preview. Other required SVG and non-base-color uses preserve
-direct-source semantics.
 
 Explicit low-resolution ASTC previews for full raster sources use the
 [private raster-preview contract](raster-texture-previews.md). Unmarked ASTC
@@ -362,35 +321,7 @@ variants are discarded on shader-source replacement, disposal, and context
 loss. This does not require asynchronous first draw for authored-only VT or
 on devices without the parallel compilation extension.
 
-SVG crop rasterization MUST preserve the complete authored viewport, including
-percentage geometry and preserveAspectRatio alignment. If artwork is nested
-inside a generated crop viewport, static CSS selector matching MUST retain its
-original document-root semantics and selector specificity. Viewport lengths
-must resolve against the full authored viewport, while quoted CSS strings and
-fragment identifiers remain unchanged. Browser-dependent intrinsic CSS sizing
-is feature-tested. A prepared source requiring CSS/length rewriting may retain
-one weakly owned DOM snapshot; sources requiring no rewriting retain none.
-
-Automatic SVG and ordinary raster sources use 128px pages with 2px gutters;
-authored VT retains its declared page size. The smaller SVG allocation preserves
-the requested texel density and 16,384px source-detail ceiling. The ordinary-raster
-eligibility threshold is unchanged.
-
-When admitted demand includes multiple pages at a mip whose whole image fits
-within 512px per axis, SVG preparation may rasterize that target once and crop
-its pages from shared pixels. Larger clamped SVG targets can share regions of
-two horizontal by four vertical pages, at most 260px by 516px including gutters. Fractional edge
-regions retain per-page rasterization so rounding cannot stretch all pages in
-a group. The root-owned SVG raster cache reserves at most
-4 MiB including in-flight decodes, separately from the 16 MiB pending-page
-ceiling. It evicts idle images, pins active consumers, closes rejected or
-discarded images, and releases source entries when demand or ownership ends.
-Single-page regions and larger wrapped targets retain bounded region rasterization. The cache
-only rasterizes requested targets, including an adjacent mip for linear mip
-filtering, rather than every intermediate level or the full 16,384px logical extent.
-`automaticDecodedBytes` includes reserved and retained shared SVG raster bytes.
-Cached target pages are scheduled before cold reads can evict their rasters;
-they still use the existing bounded detail-preparation lane.
+Automatic raster sources use 128px pages with 2px gutters; authored VT retains its declared page size.
 
 Authored page downloads and response-body reads may overlap without occupying
 the detail-preparation lane. Decode and ETC2 parsing enter that lane only after
@@ -398,8 +329,7 @@ bytes arrive. At most four pages may be in flight or ready per root.
 At most one detail preparation executes per root. Pending page work reserves
 its decoded-pixel upper bound before starting, with a 16 MiB ceiling shared by
 in-flight and ready pages. Rejected, cancelled, stale and uploaded pages release
-that reservation. These are admission bounds, not proof that browser SVG
-rasterization is off-thread or cannot block input.
+that reservation.
 
 A page source owns fetch/decode/raster only. It MUST NOT own atlas slots, page
 tables, shader bindings, demand selection, or render scheduling.

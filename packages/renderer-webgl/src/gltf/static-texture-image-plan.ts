@@ -10,13 +10,11 @@ import {
 export type StaticTextureImageSource = Readonly<{
   expectedMimeType?: "image/avif" | "image/webp" | "image/ktx2";
   imageIndex: number;
-  sourceEncoding?: "svg" | "ktx2-astc";
+  sourceEncoding?: "ktx2-astc";
 }>;
 
 export type StaticTextureImagePlan = Readonly<{
   astc?: StaticTextureImageSource;
-  fallback?: StaticTextureImageSource;
-  requiredSvg?: true;
   rasterPreview?: Readonly<{ width: number; height: number }>;
   primary: StaticTextureImageSource;
   texture: JsonObject;
@@ -44,7 +42,7 @@ const isRequiredTextureSource = (
 export const createStaticTextureImagePlanner = (
   document: JsonObject,
   label: string,
-): ((textureIndex: number, colorSpace: "linear" | "srgb") => StaticTextureImagePlan) => {
+): ((textureIndex: number) => StaticTextureImagePlan) => {
   const images = optionalArray(document.images, label, "images");
   const textures = optionalArray(document.textures, label, "textures");
   const required = new Set(optionalArray(
@@ -52,7 +50,7 @@ export const createStaticTextureImagePlanner = (
     label,
     "extensionsRequired",
   ));
-  return (textureIndex, colorSpace) => {
+  return (textureIndex) => {
     const texturePath = `textures[${textureIndex}]`;
     const texture = object(textures[textureIndex], label, texturePath);
     const extensions = texture.extensions === undefined
@@ -62,9 +60,6 @@ export const createStaticTextureImagePlanner = (
       ? undefined
       : object(extensions.EXT_texture_astc, label, `${texturePath}.extensions.EXT_texture_astc`);
     const requiredAstc = astc !== undefined && required.has("EXT_texture_astc");
-    const svg = extensions.GS_texture_svg === undefined
-      ? undefined
-      : object(extensions.GS_texture_svg, label, `${texturePath}.extensions.GS_texture_svg`);
     const webp = extensions.EXT_texture_webp === undefined
       ? undefined
       : object(extensions.EXT_texture_webp, label, `${texturePath}.extensions.EXT_texture_webp`);
@@ -87,7 +82,6 @@ export const createStaticTextureImagePlanner = (
       label,
       texturePath,
     );
-    const requiredSvg = svg !== undefined && required.has("GS_texture_svg");
     const extras = texture.extras;
     const royal = typeof extras === "object" && extras !== null && !Array.isArray(extras)
       ? (extras as JsonObject).royal : undefined;
@@ -99,35 +93,14 @@ export const createStaticTextureImagePlanner = (
       const value = object(preview, label, path);
       const width = integer(value.width, label, `${path}.width`);
       const height = integer(value.height, label, `${path}.height`);
-      if (astc === undefined || requiredAstc || svg !== undefined || width < 1 || height < 1 || width > 16384 || height > 16384) {
-        fail(label, path, "requires optional ASTC, a full raster source, no SVG, and dimensions from 1 to 16384");
+      if (astc === undefined || requiredAstc || width < 1 || height < 1 || width > 16384 || height > 16384) {
+        fail(label, path, "requires optional ASTC, a full raster source, dimensions from 1 to 16384");
       }
       rasterPreview = { width, height };
     }
     if (astc !== undefined && texture.source === undefined && !requiredAstc
-      && !requiredSvg && !hasRequiredAvif && !hasRequiredWebp) {
+      && !hasRequiredAvif && !hasRequiredWebp) {
       fail(label, `${texturePath}.source`, "or a required supported source extension is required when EXT_texture_astc is optional");
-    }
-    if (svg !== undefined && colorSpace !== "srgb") {
-      fail(
-        label,
-        `${texturePath}.extensions.GS_texture_svg`,
-        "is supported only for sRGB color texture slots",
-      );
-    }
-    const svgHasPortableFallback = texture.source !== undefined
-      || hasRequiredAvif
-      || hasRequiredWebp || requiredAstc;
-    if (
-      svg !== undefined
-      && !required.has("GS_texture_svg")
-      && !svgHasPortableFallback
-    ) {
-      fail(
-        label,
-        `${texturePath}.source`,
-        "or a required lower-priority texture extension source is required when GS_texture_svg is optional",
-      );
     }
     if (
       avif !== undefined
@@ -155,7 +128,7 @@ export const createStaticTextureImagePlanner = (
     const source = (
       value: unknown,
       path: string,
-      sourceEncoding?: "svg" | "ktx2-astc",
+      sourceEncoding?: "ktx2-astc",
       expectedMimeType?: StaticTextureImageSource["expectedMimeType"],
     ): StaticTextureImageSource => ({
       ...(expectedMimeType === undefined ? {} : { expectedMimeType }),
@@ -181,15 +154,7 @@ export const createStaticTextureImagePlanner = (
           "image/webp",
         );
     const alternative = native === undefined || requiredAstc ? {} : { astc: native };
-    if (svg === undefined) return { primary: fallback(), texture, ...alternative,
+    return { primary: fallback(), texture, ...alternative,
       ...(rasterPreview === undefined ? {} : { rasterPreview }) };
-    const primary = source(
-      svg.source,
-      `${texturePath}.extensions.GS_texture_svg.source`,
-      "svg",
-    );
-    return requiredSvg
-      ? { primary, texture, ...(native === undefined ? {} : { fallback: native, requiredSvg: true as const }) }
-      : { fallback: fallback(), primary, texture, ...alternative };
   };
 };

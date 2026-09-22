@@ -7,7 +7,6 @@ import type {
 import type { DecodedTextureAlpha } from "./alpha-mipmap";
 import type { Ktx2Etc2Level } from "./etc2-storage";
 import type { NativeTextureFormat } from "./native-storage";
-import type { ParsedSvgTextureSource } from "./svg-source";
 
 /** Cold stage attribution captured by the built-in browser texture decoder. */
 export type TextureDecodeStageTimings = Readonly<{
@@ -20,12 +19,7 @@ export type TextureDecodeStageTimings = Readonly<{
 export type DecodedImageTextureSource = Readonly<{
   alpha?: DecodedTextureAlpha;
   close?: () => void;
-  /** Encoded vector authority retained only when another representation needs it. */
-  encodedSvg?: EncodedSvgTextureSource;
-  /** Base-color preview owns one lazy, shared authoritative source. */
-  preview?: TexturePreviewSource;
-  /** Bounded preferred-source failure when this image came from an authored fallback. */
-  fallbackReason?: string;
+  preview?: never;
   height: number;
   kind?: never;
   source: TexImageSource;
@@ -38,20 +32,13 @@ export type DecodedImageTextureSource = Readonly<{
 
 export type TexturePreviewSource = Readonly<{
   error?: string;
-  encoded?: EncodedSvgTextureSource;
   raster?: DecodedImageTextureSource;
   /** Full raster dimensions, separate from the native preview upload extent. */
-  size?: Readonly<{ width: number; height: number }>;
+  size: Readonly<{ width: number; height: number }>;
   /** Planned bitmap reservation; retainedBytes includes an in-flight reservation. */
-  rasterBytes?: number;
-  retainedBytes?: number;
-  load(): Promise<EncodedSvgTextureSource | DecodedImageTextureSource>;
-}>;
-
-export type EncodedSvgTextureSource = Readonly<{
-  blob: Blob;
-  byteLength: number;
-  parsed: ParsedSvgTextureSource;
+  rasterBytes: number;
+  retainedBytes: number;
+  load(): Promise<DecodedImageTextureSource>;
 }>;
 
 export type DecodedKtx2Etc2TextureSource = Readonly<{
@@ -59,7 +46,6 @@ export type DecodedKtx2Etc2TextureSource = Readonly<{
   close?: () => void;
   colorSpace: TextureColorSpace;
   preview?: TexturePreviewSource;
-  fallbackReason?: string;
   height: number;
   kind: "ktx2-etc2";
   levels: readonly Ktx2Etc2Level[];
@@ -84,7 +70,7 @@ export type DecodedTextureLease = Readonly<{
   source: DecodedTextureSource;
 }>;
 
-export type TextureSourceEncoding = "ktx2-etc2" | "ktx2-native" | "ktx2-astc" | "svg";
+export type TextureSourceEncoding = "ktx2-etc2" | "ktx2-native" | "ktx2-astc";
 
 export type GltfTextureAssetRef = TextureAssetRef & Readonly<{
   /** @internal Routes this source through the root's glTF resource reader. */
@@ -100,7 +86,7 @@ export type EmbeddedTextureAssetRef = Readonly<{
   contentKey: string;
   kind: "embedded-asset";
   label: string;
-  mimeType: "image/avif" | "image/jpeg" | "image/ktx2" | "image/png" | "image/svg+xml" | "image/webp";
+  mimeType: "image/avif" | "image/jpeg" | "image/ktx2" | "image/png" | "image/webp";
   sampler?: TextureAssetRef["sampler"];
   sourceEncoding?: TextureSourceEncoding;
 }>;
@@ -116,11 +102,8 @@ export type TextureLeafSourceRef = (
   astc?: TextureLeafSourceRef;
 }>;
 
-/** Cold logical source recipe; a preferred SVG may recover to one ordinary leaf. */
+/** Cold logical source recipe with optional raster preview. */
 export type TextureSourceRef = TextureLeafSourceRef & Readonly<{
-  fallback?: TextureLeafSourceRef;
-  /** Required SVG validates its authority before publishing a native preview. */
-  svgPreview?: true | "required";
   /** Private explicit raster-preview recipe; ASTC alone remains a final source. */
   rasterPreview?: Readonly<{ width: number; height: number }>;
 }>;
@@ -149,9 +132,8 @@ const validateLeafAsset = (asset: TextureLeafSourceRef): void => {
     && asset.sourceEncoding !== "ktx2-etc2"
     && asset.sourceEncoding !== "ktx2-native"
     && asset.sourceEncoding !== "ktx2-astc"
-    && asset.sourceEncoding !== "svg"
   ) {
-    throw new TypeError("Royal texture sourceEncoding must be ktx2-etc2, ktx2-native, ktx2-astc or svg when present");
+    throw new TypeError("Royal texture sourceEncoding must be ktx2-etc2, ktx2-native, or ktx2-astc when present");
   }
   if (asset.astc !== undefined) {
     if (asset.astc.astc !== undefined || asset.astc.sourceEncoding !== "ktx2-astc"
@@ -180,24 +162,9 @@ const validateAsset = (asset: TextureSourceRef): void => {
   if (asset.rasterPreview !== undefined) {
     const { width, height } = asset.rasterPreview;
     if (asset.astc === undefined || asset.sourceEncoding !== undefined
-      || asset.svgPreview !== undefined || asset.fallback !== undefined
       || !Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 || width > 16384 || height > 16384) {
       throw new TypeError("Royal raster preview requires a full raster, optional ASTC and dimensions from 1 to 16384");
     }
-  }
-  if (asset.svgPreview !== undefined && ((asset.svgPreview !== true && asset.svgPreview !== "required") || asset.fallback === undefined)) {
-    throw new TypeError("Royal SVG preview requires an optional raster fallback");
-  }
-  if (asset.fallback === undefined) return;
-  if (asset.sourceEncoding !== "svg") {
-    throw new TypeError("Royal texture fallback requires a preferred svg source");
-  }
-  validateLeafAsset(asset.fallback);
-  if (asset.fallback.sourceEncoding === "svg") {
-    throw new TypeError("Royal texture fallback must be a raster or native compressed source");
-  }
-  if ((asset.fallback.colorSpace ?? "srgb") !== (asset.colorSpace ?? "srgb")) {
-    throw new TypeError("Royal texture fallback must share the preferred source colorSpace");
   }
 };
 
@@ -215,15 +182,13 @@ const decodedTextureLeafKey = (asset: TextureLeafSourceRef): unknown => {
   return asset.astc === undefined ? leaf : ["astc-alternative", leaf, decodedTextureLeafKey(asset.astc)];
 };
 
-/** Identity of logical decoded pixels; preferred/fallback alternates form one recipe. */
+/** Identity of logical decoded pixels, including explicit raster preview dimensions. */
 export const decodedTextureKey = (asset: TextureSourceRef): string => {
   validateAsset(asset);
   const leaf = decodedTextureLeafKey(asset);
-  const preferred = asset.rasterPreview === undefined ? leaf
+  const recipe = asset.rasterPreview === undefined ? leaf
     : ["raster-preview", asset.rasterPreview.width, asset.rasterPreview.height, leaf];
-  return JSON.stringify(asset.fallback === undefined
-    ? preferred
-    : [asset.svgPreview === "required" ? "required-svg-with-preview" : asset.svgPreview ? "svg-with-preview" : "preferred-with-fallback", preferred, decodedTextureLeafKey(asset.fallback)]);
+  return JSON.stringify(recipe);
 };
 
 /** GPU storage identity; one decoded image may be interpreted in both color spaces. */

@@ -147,7 +147,7 @@ failure. It MUST NOT leave half-published state.
 ## Execution
 
 The executor consumes explicit resolved packets. It MUST NOT know React,
-perform asset IO, parse glTF/SVG, select LOD, infer logical identity, create
+perform asset IO, parse glTF, select LOD, infer logical identity, create
 resources on cache miss, or invent fallbacks.
 
 Pipeline state and numeric binding locations SHOULD compile once per stable

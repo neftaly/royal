@@ -18,6 +18,17 @@ const decoded = (close = vi.fn()): DecodedTextureSource => ({
 });
 
 describe("ordinary texture asset lifecycle owner", () => {
+  it("keeps an explicitly encoded ETC2 source distinct from auto-decoded bytes", () => {
+    const ordinary = textureAsset({ contentKey: "hero", src: "/content" });
+    const etc2 = { ...ordinary, sourceEncoding: "ktx2-etc2" as const };
+    expect(decodedTextureKey(etc2)).not.toBe(decodedTextureKey(ordinary));
+    expect(textureStorageKey(etc2)).not.toBe(textureStorageKey(ordinary));
+    expect(() => decodedTextureKey({
+      ...ordinary,
+      sourceEncoding: "basis" as "ktx2-etc2",
+    })).toThrow("sourceEncoding must be ktx2-etc2, ktx2-native, or ktx2-astc");
+  });
+
   it.each([false, true])("restores fitted raster detail after budget growth, early increase %s", async early => {
     const first = { ...decoded(), width: 8, height: 8, sourceWidth: 64, sourceHeight: 64 };
     const full = { ...decoded(), width: 64, height: 64 };
@@ -243,49 +254,6 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(owner.getSnapshot(first)).toEqual({ status: "idle" });
   });
 
-  it("keeps an explicitly encoded ETC2 source distinct from auto-decoded bytes", () => {
-    const ordinary = textureAsset({ contentKey: "hero", src: "/content" });
-    const etc2 = { ...ordinary, sourceEncoding: "ktx2-etc2" as const };
-    expect(decodedTextureKey(etc2)).not.toBe(decodedTextureKey(ordinary));
-    expect(textureStorageKey(etc2)).not.toBe(textureStorageKey(ordinary));
-    expect(() => decodedTextureKey({
-      ...ordinary,
-      sourceEncoding: "basis" as "ktx2-etc2",
-    })).toThrow("sourceEncoding must be ktx2-etc2, ktx2-native, ktx2-astc or svg");
-  });
-
-  it("keeps a preferred SVG and fallback in one logical decoded identity", async () => {
-    const preferred = {
-      fallback: { kind: "asset" as const, src: "/fallback.png" },
-      kind: "asset" as const,
-      sourceEncoding: "svg" as const,
-      src: "/preferred.svg",
-    };
-    expect(decodedTextureKey(preferred)).not.toBe(decodedTextureKey({
-      ...preferred,
-      fallback: { kind: "asset", src: "/other.png" },
-    }));
-    expect(() => decodedTextureKey({
-      fallback: { kind: "asset", src: "/fallback.png" },
-      kind: "asset",
-      src: "/preferred.png",
-    })).toThrow("fallback requires a preferred svg source");
-
-    const owner = new TextureAssetOwner({
-      decode: vi.fn(async () => ({ ...decoded(), fallbackReason: "preferred SVG failed" })),
-      onAssetChanged: vi.fn(),
-      onListenerError: vi.fn(),
-      onSnapshotChanged: vi.fn(),
-    });
-    owner.reconcile([preferred]);
-    await waitFor(() => expect(owner.getSourceSnapshot(preferred)).toEqual({
-      fallbackReason: "preferred SVG failed",
-      height: 32,
-      status: "ready",
-      width: 64,
-    }));
-  });
-
   it("keeps concurrent out-of-order decode results attached to their content identities", async () => {
     const completions = new Map<string, (source: DecodedTextureSource) => void>();
     const owner = new TextureAssetOwner({
@@ -364,38 +332,6 @@ describe("ordinary texture asset lifecycle owner", () => {
     await waitFor(() => expect(owner.getSnapshot(asset).status).toBe("ready"));
     expect(owner.decoded(asset)).toBe(second);
     expect(onSnapshotChanged).toHaveBeenCalled();
-  });
-
-  it("reports retained encoded vector authority independently of decoded handoff bytes", async () => {
-    const source = {
-      ...decoded(),
-      encodedSvg: {
-        blob: new Blob(["<svg/>"]),
-        byteLength: 6,
-        parsed: { document: {} as XMLDocument, viewBox: [0, 0, 1, 1] as const },
-      },
-    };
-    const owner = new TextureAssetOwner({
-      decode: vi.fn(async () => source),
-      onAssetChanged: vi.fn(),
-      onListenerError: vi.fn(),
-      onSnapshotChanged: vi.fn(),
-    });
-    const asset = imageTexture("/vector.svg");
-    owner.reconcile([asset]);
-    await waitFor(() => expect(owner.getSnapshot(asset).status).toBe("ready"));
-
-    expect(owner.snapshot()).toMatchObject({
-      decodedHandoffBytes: 64 * 32 * 4,
-      retainedEncodedSourceBytes: 6,
-    });
-    owner.releaseUploaded([textureStorageKey(asset)]);
-    expect(owner.snapshot()).toMatchObject({
-      decodedHandoffBytes: 0,
-      retainedEncodedSourceBytes: 6,
-    });
-    owner.reconcile([]);
-    expect(owner.snapshot().retainedEncodedSourceBytes).toBe(0);
   });
 
   it("transfers decoded pixel lifetime through explicit representation leases", async () => {

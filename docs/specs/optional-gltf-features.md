@@ -208,12 +208,9 @@ the current Khronos registry and MUST be described as draft compatibility
 rather than ratified support. Royal did not invent its name or shape. There
 remains no registered direct-ETC2 texture extension.
 
-Direct Royal ordinary image sources may use any browser-decoded format that
-passes the normal image capability and failure boundary. That does not make the
-format valid in core glTF. `GS_texture_svg` is an implemented but explicitly
-unregistered experiment until its vendor work is complete; optional assets
-retain a standards-compatible core or required AVIF/WebP fallback, and required
-assets knowingly target aware Royal consumers.
+Direct Royal ordinary image sources may use browser-decoded raster formats that
+pass the normal image capability and failure boundary. That does not make the
+format valid in core glTF.
 
 ## Vendor packing and rendering extensions
 

@@ -268,8 +268,6 @@ for atlas validation. Shrinking and mixed authored pools keep their existing
 preparation rules. Starting, cancelling, or failing growth refits demand and
 releases obsolete reads and ready pixels. Admitted demand may therefore describe
 reserved replacement capacity before those GPU pages are published.
-A cached read atomically pins an already completed SVG raster before bypassing
-the detail lane; a cache miss starts no decode and retries through normal demand.
 Automatic demand is ordered by estimated projected contribution and the gap to
 resident ancestor detail. Coarse-coverage prerequisites, cached-raster locality,
 and resource round-robin scheduling still take precedence. Authored order is
@@ -282,25 +280,6 @@ Parallel read durations overlap; their sum is not wall-clock latency.
 `visibleDetailFraction` estimates resident contribution within admitted demand;
 consumers measuring target-detail latency must also require desired and admitted
 page counts to match, since constrained admission temporarily uses coarser mips.
-
-SVG source generation groups at least eight demanded pages within a 4×4
-neighborhood into one shared raster. Sparser neighborhoods retain 2×4 groups.
-This changes preparation granularity, not the 128px physical page size. Wide and
-narrow completed rasters may coexist; cached reads select an already completed
-raster before any unprepared alternative. Both shapes share the existing 4 MiB
-root cache, including reservations and pinned users. A full wide raster is at
-most 516×516 pixels including gutters; partial edges keep exact source scaling.
-
-Completed SVG mip and region rasters stay in the existing bounded root-local
-LRU across demand changes, so reversing a zoom can reuse them. Cache pressure
-may evict them; subsequent reads regenerate shared rasters only when current
-demand still justifies sharing. Releasing the page source releases its retained
-rasters.
-Cancelling a page consumer preserves a successfully decoded shared SVG raster
-for other pages. Failed preparation, non-cancellation consumer errors, and
-explicit source disposal still release it once active users finish.
-Render-target `texStorage`/allocation is persistent or transient capacity, not
-source upload traffic, and MUST NOT be added to these transfer counters.
 
 The pinned prefiltered-environment profile is a separately bounded atomic
 domain: 256×256 maximum faces, six packed four-byte faces, and a complete mip
@@ -484,12 +463,6 @@ Canonicalization is not permission for eager copying. A compatible decoded
 buffer or typed-array view SHOULD be borrowed or transferred under explicit
 ownership. Repacking is justified when it enables lasting GPU compression,
 coalesced upload, shared storage, or a measurably cheaper repeated hot path.
-
-SVG source validation is cold, bounded to 16 MiB of encoded input, and produces
-one parsed authority retained only when automatic VT may need it. Ordinary SVG
-decode and generated VT consume that authority without a second fetch, text
-decode, or DOM parse. A raster fallback is fetched only after preferred SVG
-failure, so compatibility does not impose unconditional duplicate work.
 
 Potential future GPU culling, transform evaluation, or feedback MUST preserve
 logical identity and have a no-readback frame path. It is not justified until

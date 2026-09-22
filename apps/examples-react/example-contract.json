@@ -89,13 +89,6 @@
       "title": "Khronos Compatibility Lab"
     },
     {
-      "id": "gltf-ghostscript-tiger-svg",
-      "maturity": "product",
-      "path": "/gltf-ghostscript-tiger-svg",
-      "sourceFile": "examples/cases/GltfGhostscriptTigerSvg.tsx",
-      "title": "glTF Ghostscript Tiger SVG"
-    },
-    {
       "id": "gltf-lod",
       "maturity": "product",
       "path": "/gltf-lod",
@@ -159,7 +152,6 @@
       "gltf-scenes",
       "gltf-instancing",
       "gltf-lab",
-      "gltf-ghostscript-tiger-svg",
       "gltf-lod",
       "gltf-variants",
       "webxr-vr"

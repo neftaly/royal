@@ -21,13 +21,11 @@ const ordinaryTextureIdentity = (
         "embedded",
         asset.mimeType,
         asset.sourceEncoding ?? null,
-        asset.svgPreview ?? null,
         asset.rasterPreview?.width ?? null,
         asset.rasterPreview?.height ?? null,
         asset.colorSpace ?? "srgb",
         asset.bytes.byteLength,
         numericArrayHash(asset.bytes),
-        asset.fallback === undefined ? null : ordinaryTextureIdentity(asset.fallback),
         asset.astc === undefined ? null : ordinaryTextureIdentity(asset.astc),
       ]
     : ["declared", textureStorageKey(asset)],
@@ -77,14 +75,12 @@ const textureAssetsEqual = (
   if (left.kind !== "embedded-asset" || right.kind !== "embedded-asset") return false;
   return left.mimeType === right.mimeType
     && left.sourceEncoding === right.sourceEncoding
-    && left.svgPreview === right.svgPreview
     && left.rasterPreview?.width === right.rasterPreview?.width
     && left.rasterPreview?.height === right.rasterPreview?.height
     && (left.colorSpace ?? "srgb") === (right.colorSpace ?? "srgb")
     && canonicalTextureSamplerKey(canonicalTextureSampler(left))
       === canonicalTextureSamplerKey(canonicalTextureSampler(right))
     && numericArraysEqual(left.bytes, right.bytes)
-    && textureAssetsEqual(left.fallback, right.fallback)
     && textureAssetsEqual(left.astc, right.astc);
 };
 

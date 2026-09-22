@@ -27,7 +27,7 @@ import { transparentViewportClearColor } from "../presentation";
 
 const xrTigerTransform = { position: [0, 1.6, -3.8], scale: [13, 13, 13] } as const;
 const xrTiger = gltf({
-  src: `${import.meta.env.BASE_URL}fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf`,
+  src: `${import.meta.env.BASE_URL}fixtures/gltf-tiger-texture/ghostscript-tiger-card.gltf`,
   transform: xrTigerTransform,
 });
 

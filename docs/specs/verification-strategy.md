@@ -47,7 +47,7 @@ Verify ownership and absence of later work, not merely final status text.
 Use official specifications, validators, and sample assets for glTF, codecs,
 and registered extensions. Record the exact accepted profile. Unknown optional
 fallback and required failure are separate tests. Royal fixtures cover
-Royal-specific VT and SVG behavior but do not redefine glTF.
+Royal-specific VT behavior but do not redefine glTF.
 
 ### Visual and color review
 
@@ -88,7 +88,7 @@ without resolution, timing attribution, and thermal state is not evidence.
 
 ### Security and authority review
 
-Treat asset bytes, SVG, URIs, extension graphs, codec output, and diagnostics as
+Treat asset bytes, URIs, extension graphs, codec output, and diagnostics as
 untrusted. Exercise bounded recursion/arithmetic/messages, malformed inputs,
 external-resource rules, and required failure. Browser decoding is not called
 sanitization and asset content never gains application authority.
@@ -158,7 +158,6 @@ expresses the invariant more completely.
 | Resources and performance | Admission/accounting properties, peak/retained measurements, upload and GC traces, bundle attribution and idle-settlement tests. |
 | Module graph and decoupling | Import-cycle/boundary checks, module-evaluation purity, minimal reachable chunks, owner/design-card review and deletion reachability. |
 | TypeScript and emitted JavaScript | Declaration consumer tests, exhaustive unions, `unknown` validation, runtime export checks, emitted helper/import inspection and target-engine smoke tests. |
-| Experimental GS SVG | Lowering/profile tests, optional and required samples, preferred/fallback transport oracles, viewport/orientation/color checks, one-parse VT handoff and hostile-content boundary review. Registration remains external evidence. |
 
 ## Review independence
 

@@ -2304,7 +2304,7 @@ globalThis.__royalBench?.armXrExitWatchdog?.(${
 const prepareVirtualTextureCloseView = async (session, route) => {
   if (
     !virtualTextureCloseEnabled
-    || !new Set(['gltf-ghostscript-tiger-svg', 'virtual-texture-stress']).has(route.id)
+    || route.id !== 'virtual-texture-stress'
   ) return undefined;
   if (route.id === 'virtual-texture-stress') {
     await evaluate(session, `
@@ -2356,8 +2356,8 @@ const prepareVirtualTextureCloseView = async (session, route) => {
   let finalDistance = initial.distance;
   let inputMode = 'trusted-cdp';
   let wheelEvents = 0;
-  const wheelDelta = route.id === 'gltf-ghostscript-tiger-svg' ? -100 : -1_000;
-  const maximumWheelEvents = route.id === 'gltf-ghostscript-tiger-svg' ? 24 : 12;
+  const wheelDelta = -1_000;
+  const maximumWheelEvents = 12;
   let frameStats;
   try {
     while (finalDistance > virtualTextureCloseTarget && wheelEvents < maximumWheelEvents) {

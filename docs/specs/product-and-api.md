@@ -11,7 +11,7 @@ Royal MUST make these paths first-class:
 
 - immutable scenes with perspective or orthographic cameras;
 - glTF 2.0 metallic-roughness rendering;
-- ordinary raster, offline ETC2 KTX2, and self-contained SVG texture sources;
+- ordinary raster and offline ETC2 KTX2 texture sources;
 - explicit bulk instances and authored GPU instances;
 - authored and automatic virtual texturing where beneficial;
 - stable mesh, glTF occurrence, and instance picking;
@@ -136,7 +136,7 @@ consumer and a planned removal date.
 ## Package and loading boundaries
 
 The core scene vocabulary MUST remain usable without React or WebGL. Importing
-the ordinary React entrypoint MUST NOT eagerly make XR, SVG paging, VT, IBL
+the ordinary React entrypoint MUST NOT eagerly make XR, VT, IBL
 transport, or optional glTF codecs execute. Optional subsystems SHOULD become
 reachable only when selected by an entrypoint, descriptor, asset declaration,
 or renderer option.

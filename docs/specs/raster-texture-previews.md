@@ -25,8 +25,7 @@ keep the full raster source and add this metadata to the texture:
 The width and height MUST describe the full raster's intrinsic pixel dimensions,
 using positive integers no greater than 16384. They are logical sampling
 coordinates, not the dimensions of the ASTC upload. Required WebP or AVIF can
-provide the full source instead of core PNG/JPEG. ASTC MUST remain optional;
-this raster hint cannot accompany `GS_texture_svg`. Consumers unaware of the
+provide the full source instead of core PNG/JPEG. ASTC MUST remain optional. Consumers unaware of the
 metadata retain ordinary core/ASTC source selection. It does not standardize
 progressive refinement outside Royal.
 An ASTC-capable consumer that ignores the Royal metadata may therefore keep the
@@ -110,9 +109,11 @@ latency guarantee.
 
 ## Memory and lifetime
 
-SVG and raster previews share decoded preview state, page publication and
-lifetime ownership. SVG retains its validated encoded document; raster detail
-retains one fitted bitmap. Each raster read/decode uses the existing detail lane
+Only native compressed sources carry preview state. Every preview declares its
+full raster dimensions and bitmap reservation; ordinary raster sources contain
+authoritative pixels and do not carry a second preview representation.
+
+Raster preview detail retains one fitted bitmap. Each raster read/decode uses the existing detail lane
 and reserves its expected retained bitmap bytes before starting. Pending
 reservations and resident bitmaps count against the existing 64 MiB automatic
 source budget; shared decoded authority is counted once. Denial preserves the

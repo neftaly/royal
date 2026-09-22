@@ -3,7 +3,6 @@ import {
   decodeKtx2Etc2Alpha,
   parseKtx2Etc2,
 } from "../../packages/renderer-webgl/src/texture/ktx2-etc2";
-import { parseKtx2Etc2Page } from "../../packages/renderer-webgl/src/virtual-texture/ktx2-etc2";
 import { createKtx2Etc2Fixture as ktx2 } from "./support/ktx2-etc2-fixture";
 
 describe("shared offline KTX2/ETC2 storage", () => {
@@ -47,13 +46,6 @@ describe("shared offline KTX2/ETC2 storage", () => {
       decodeKtx2Etc2Alpha(texture, index).length)).toEqual([32, 8, 2, 1]);
   });
 
-  it("keeps the VT page contract single-level", () => {
-    const bytes = ktx2(152);
-    const parsed = parseKtx2Etc2Page(bytes);
-    expect(parsed).toMatchObject({ colorSpace: "srgb", height: 4, width: 4 });
-    expect(parsed.blocks.buffer).toBe(bytes.buffer);
-    expect(() => parseKtx2Etc2Page(ktx2(152, 8, 4, 4))).toThrow("exactly one level");
-  });
 
   it("rejects Basis supercompression instead of silently adding a WASM path", () => {
     expect(() => parseKtx2Etc2(ktx2(0))).toThrow("runtime transcoder");

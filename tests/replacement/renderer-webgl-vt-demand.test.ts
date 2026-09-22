@@ -199,7 +199,7 @@ describe("VT2 clipped projected demand", () => {
     collectVirtualTextureDemand(workspace, manifest, surfaces, views, sampler);
     expect(entries()).toEqual(restored);
   });
-  it("requests target pages and one fallback without intermediate SVG levels", () => {
+  it("requests target pages and one fallback without intermediate levels", () => {
     const source = parseVirtualTextureManifest({
       borderTexels: 2, contractVersion: 2, pageSize: 128,
       pages: { uriTemplate: "{mip}/{x}/{y}.png" }, virtualSize: [16384, 16384],
@@ -209,14 +209,12 @@ describe("VT2 clipped projected demand", () => {
     // This plane covers 512 backing pixels: sixteen 128px pages plus coverage.
     expect(workspace.count).toBe(17);
     expect(new Set(workspace.mips.slice(0, workspace.count))).toEqual(new Set([7, 5]));
-    expect(workspace.coarsestTarget).toBe(false);
     const distant = identityMat4();
     distant[0] = 0.1;
     distant[5] = 0.1;
     collectVirtualTextureDemand(workspace, source, [{
       ...surface, model: distant, worldBounds: transformedWorldBounds(surfaceGeometry.bounds, distant),
     }], [view()], { ...sampler, minFilter: "linear-mipmap-nearest" });
-    expect(workspace.coarsestTarget).toBe(true);
     expect(workspace.count).toBe(17);
     truncateVirtualTextureDemand(workspace, 8);
     expect(workspace.count).toBe(5);
@@ -231,7 +229,6 @@ describe("VT2 clipped projected demand", () => {
     collectVirtualTextureDemand(workspace, source, [surface], [view()], sampler);
     expect(workspace.count).toBe(21);
     expect(new Set(workspace.mips.slice(0, workspace.count))).toEqual(new Set([7, 6, 5]));
-    expect(workspace.coarsestTarget).toBe(false);
   });
   it("requests finer pages as visible texel density increases", () => {
     const workspace = createVirtualTextureDemandWorkspace(64);

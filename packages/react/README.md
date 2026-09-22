@@ -85,9 +85,7 @@ remain observable through diagnostics rather than becoming consumer tuning
 knobs. A semantic option change replaces both the root and canvas. `rendererRef`
 exposes the active lower-level root or `null` during the mount/replacement
 lifecycle; a disposed root is never published for a newer canvas generation.
-Automatic virtual texturing is always enabled for eligible base-color raster
-and SVG textures. Royal retains vector authority for SVG page refinement and
-keeps small raster textures in ordinary storage when appropriate.
+Automatic virtual texturing is always enabled for eligible base-color raster textures. Small raster textures retain ordinary storage when appropriate.
 
 Root-consuming hooks use one placement rule: call them under `Canvas`, or pass
 `{ root }` from a parent-owned `rendererRef`. Passing `root: null` represents
@@ -123,7 +121,7 @@ per-view presentation pixels in external/XR views.
 selected document scene without polling or waking for unrelated frames. Its
 `streaming`, `ready`, and `degraded` states all
 mean geometry is drawable; `status.textures` reports total, loading, ready,
-failed, and preferred-source fallback images as progressive materials arrive.
+and failed images as progressive materials arrive.
 Those drawable states also
 report selected-scene `nodeCount`, `primitiveCount`, and `lightCount`, plus
 the resolved `sceneIndex`, lightweight document `scenes`, and declared

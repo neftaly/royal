@@ -151,25 +151,6 @@ comparison measures Royal's texture publication rather than deadlocking its own
 observer. `TransmissionThinwallTestGrid` covers the corresponding transmission
 and thickness group.
 
-The Ghostscript Tiger route uses always-on automatic VT. Its optional
-`GS_texture_svg` source loads a bounded PNG preview before vector refinement.
-The focused smoke checks the same normal route:
-
-```sh
-EXAMPLES_SMOKE_ROUTE=gltf-ghostscript-tiger-svg \
-pnpm --filter @royal/examples-react test:browser
-```
-
-The same route can force the SVG detail request to fail. The asset remains
-`ready` with usable preview coverage, no image-fallback count, and exactly one
-bounded VT page failure after detail settles:
-
-```sh
-EXAMPLES_SMOKE_ROUTE=gltf-ghostscript-tiger-svg \
-EXAMPLES_SMOKE_SVG_FALLBACK=1 \
-pnpm --filter @royal/examples-react test:browser
-```
-
 Fuller host report:
 
 ```sh
@@ -438,7 +419,7 @@ overflows, or quarantined bytes after `WEBGL_lose_context` restoration:
 EXAMPLES_SMOKE_CONTEXT_LOSS=1 EXAMPLES_SMOKE_ROUTE=virtual-texture-stress \
 pnpm --filter @royal/examples-react test:browser
 
-EXAMPLES_SMOKE_CONTEXT_LOSS=1 EXAMPLES_SMOKE_ROUTE=gltf-ghostscript-tiger-svg \
+EXAMPLES_SMOKE_CONTEXT_LOSS=1 EXAMPLES_SMOKE_ROUTE=virtual-texture-stress \
 pnpm --filter @royal/examples-react test:browser
 ```
 
@@ -538,3 +519,6 @@ policy. It does not intercept requests or depend on authored manifests.
 
 These are measurement reports, not CI thresholds. Prefer comparing saved JSON
 reports across commits or devices.
+
+The virtual texture fixture generator uses ImageMagick (`convert`) to rasterize
+its authoring artwork into PNG pages before they are served to the renderer.

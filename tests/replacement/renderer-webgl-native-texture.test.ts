@@ -260,7 +260,7 @@ it("waits for a lost context before testing device support and cancels that wait
   Object.assign(gl, { canvas, isContextLost: () => lost,
     getExtension: vi.fn(() => lost ? null : { getSupportedProfiles: () => ["ldr"] }),
   });
-  const decoder = createBrowserTextureDecoder(1, true, undefined, undefined, undefined, gl);
+  const decoder = createBrowserTextureDecoder(1, true, undefined, undefined, gl);
   const bytes = createKtx2Fixture(166, 16, 16, 5);
   const asset = { kind: "embedded-asset", bytes, contentKey: "astc", label: "astc", mimeType: "image/ktx2" } as const;
   const pending = decoder.decode(asset, new AbortController().signal);

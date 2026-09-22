@@ -16,7 +16,7 @@ describe("ordinary texture persistent storage budget", () => {
     const bytes = 64 * 1024 * 1024, budget = new PersistentGpuBudgetOwner(bytes), gl = fakeGl();
     const owner = new SurfaceGpuOwner(gl, budget, new ScreenSpacePartitionPatternOwner(gl, budget));
     const geometry = planeGeometry(2);
-    const fallback = mesh({ geometry, material: unlitMaterial({ texture: imageTexture("/fallback.svg") }) });
+    const fallback = mesh({ geometry, material: unlitMaterial({ texture: imageTexture("/fallback.png") }) });
     const ordinary = prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}), nodes: [fallback] }));
     const mixed = prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}), nodes: [fallback,
       ...Array.from({ length: count }, (_, index) => mesh({ geometry,

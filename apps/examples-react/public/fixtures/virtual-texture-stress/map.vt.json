@@ -8,6 +8,6 @@
   "physicalSlots": 24,
   "physicalByteBudget": 26419856,
   "pages": {
-    "uriTemplate": "map-pages/m{mip}-{x}-{y}.svg"
+    "uriTemplate": "map-pages/m{mip}-{x}-{y}.png"
   }
 }

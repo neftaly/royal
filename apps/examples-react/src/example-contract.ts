@@ -14,7 +14,6 @@ export type GltfInstancingCounters = Readonly<Record<string, number>>;
 export type GltfLoadDiagnosticsAsset = {
   readonly error?: string;
   readonly imageCandidates: number;
-  readonly imageFallbacks: number;
   readonly imageFailures: number;
   readonly imagesLoaded: number;
   readonly imageRequests: number;

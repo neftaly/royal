@@ -116,11 +116,9 @@ const discoverExternalStaticGltfDocumentTextures = (
     }
   }
   demands.sort((left, right) => left.priority - right.priority);
-  for (const { colorSpace, retainAlpha, textureIndex, svgPreview } of demands) {
-    const plan = planTextureImages(textureIndex, colorSpace);
-    const sources = plan.fallback === undefined
-      ? [plan.primary]
-      : [plan.primary, plan.fallback];
+  for (const { colorSpace, retainAlpha, textureIndex, rasterPreview } of demands) {
+    const plan = planTextureImages(textureIndex);
+    const sources = [plan.primary];
     if (plan.astc !== undefined) sources.push(plan.astc);
     let external = true;
     for (const source of sources) {
@@ -133,7 +131,7 @@ const discoverExternalStaticGltfDocumentTextures = (
       textureIndex,
       `textures[${textureIndex}]`,
       colorSpace,
-      svgPreview === true,
+      rasterPreview === true,
     );
     textureAssets.set(textureStorageKey(asset), asset);
     if (retainAlpha) alphaMaskTextureAssets.set(decodedTextureKey(asset), asset);

@@ -28,7 +28,7 @@ const setup = (supported = true, vk = 172) => {
   const close = vi.fn();
   const bitmap = vi.fn(async () => ({ width: 512, height: 512, close }));
   vi.stubGlobal("fetch", fetch); vi.stubGlobal("createImageBitmap", bitmap);
-  return { decoder: createBrowserTextureDecoder(1, true, undefined, undefined, undefined, gl), fetch, bitmap, close };
+  return { decoder: createBrowserTextureDecoder(1, true, undefined, undefined, gl), fetch, bitmap, close };
 };
 afterEach(() => vi.unstubAllGlobals());
 
@@ -69,7 +69,6 @@ describe("explicit raster previews", () => {
   it("lowers only opted-in base color and separates preview dimensions in identity", () => {
     const asset = read();
     expect(asset).toMatchObject({ rasterPreview: { width: 512, height: 512 }, astc: { sourceEncoding: "ktx2-astc" } });
-    expect(asset.svgPreview).toBeUndefined();
     expect(read(documentFor(), false).astc).toBeUndefined();
     const different = { ...asset, rasterPreview: { width: 1024, height: 1024 } };
     expect(decodedTextureKey(different)).not.toBe(decodedTextureKey(asset));
@@ -85,11 +84,8 @@ describe("explicit raster previews", () => {
     expect(() => read(document)).toThrow();
   });
 
-  it("rejects ambiguous SVG and required-ASTC preview authorities", () => {
+  it("rejects required-ASTC preview authorities", () => {
     const document = documentFor(); document.extensionsRequired = ["EXT_texture_astc"];
-    expect(() => read(document)).toThrow("requires optional ASTC");
-    delete document.extensionsRequired;
-    ((document.textures as JsonObject[])[0]!.extensions as JsonObject).GS_texture_svg = { source: 0 };
     expect(() => read(document)).toThrow("requires optional ASTC");
   });
 

@@ -3,6 +3,14 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## Unreleased
+
+- Remove `GS_texture_svg` and SVG texture decoding/refinement. Required use now
+  fails preflight; optional extension payloads use the ordinary raster source.
+- Replace SVG texture examples and virtual-texture pages with raster assets.
+- Remove obsolete preview-page state, glTF image fallback counters, and the
+  unused ETC2 page-parser wrapper. Native previews refine through raster pages.
+
 ## 0.0.31 - 2026-09-16
 
 - Add the immutable renderer-root `anisotropy` option, defaulting to 16 and
