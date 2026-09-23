@@ -267,11 +267,14 @@ const isAvifMimeType = (mimeType: string): boolean =>
 
 const textureBlobType = (asset: TextureLeafSourceRef & Readonly<{ src: string }>): string => {
   if (asset.mimeType !== undefined) return asset.mimeType;
+  const dataType = /^data:([^;,]+)/i.exec(asset.src)?.[1];
+  if (dataType !== undefined) return dataType;
   if (asset.sourceEncoding?.startsWith("ktx2-") === true || isKtx2Uri(asset.src)) return "image/ktx2";
   if (/\.avif(?:[?#]|$)/i.test(asset.src)) return "image/avif";
   if (/\.jpe?g(?:[?#]|$)/i.test(asset.src)) return "image/jpeg";
   if (/\.png(?:[?#]|$)/i.test(asset.src)) return "image/png";
   if (/\.webp(?:[?#]|$)/i.test(asset.src)) return "image/webp";
+  if (/\.svg(?:[?#]|$)/i.test(asset.src)) return "image/svg+xml";
   return "";
 };
 
@@ -341,19 +344,23 @@ const readTextureBlob = async (
         return {
           blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: textureBlobType(asset) }),
           byteLength: bytes.byteLength,
-          ktx2: asset.sourceEncoding?.startsWith("ktx2-") === true || isKtx2Uri(asset.src),
+          ktx2: asset.sourceEncoding?.startsWith("ktx2-") === true
+            || isKtx2MimeType(textureBlobType(asset)),
         };
       }
       const response = await fetch(asset.src, { signal });
       if (!response.ok) {
         throw new Error(`${diagnosticLabel(asset)} fetch failed with HTTP ${response.status}`);
       }
-      const blob = await response.blob();
+      const received = await response.blob();
+      const type = asset.mimeType ?? (received.type === "" || received.type === "application/octet-stream"
+        ? textureBlobType(asset) : received.type);
+      const blob = type && type !== received.type ? received.slice(0, received.size, type) : received;
       return {
         blob,
         byteLength: blob.size,
         ktx2: (asset.sourceEncoding?.startsWith("ktx2-") === true)
-          || isKtx2Uri(asset.src)
+          || (asset.mimeType === undefined && isKtx2Uri(asset.src))
           || isKtx2MimeType(blob.type),
       };
     })();
@@ -484,22 +491,24 @@ const decodeTextureBlob = async (
 ): Promise<DecodedTextureSource> => {
   if (signal.aborted) throw aborted();
   const avif = textureIsAvif(asset, blob);
+  const svg = blob.type.split(";", 1)[0]!.trim().toLowerCase() === "image/svg+xml";
   const decodeImageElement = async (): Promise<DecodedImageTextureSource> => {
     const decoded = await decodeBrowserImageElement(
       blob,
       signal,
       {
-        fit: maxStorageBytes === undefined
+        fit: maxStorageBytes === undefined && !svg
           ? undefined
           : (width: number, height: number) =>
-              fitOrdinaryTextureStorage(width, height, maxStorageBytes),
+              fitOrdinaryTextureStorage(width, height, svg
+                ? Math.min(maxStorageBytes ?? Infinity, 64 * 1024 * 1024) : maxStorageBytes!),
       },
     );
     return retainAlpha
       ? retainTextureAlpha(decoded, signal, alphaMipmapsRequired(asset))
       : decoded;
   };
-  if (typeof globalThis.createImageBitmap !== "function") {
+  if (svg || typeof globalThis.createImageBitmap !== "function") {
     return decodeImageElement();
   }
   const bitmapOptions = {

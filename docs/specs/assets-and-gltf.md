@@ -310,6 +310,33 @@ loop/clamp defaults, playback rate, seeking, concurrent clips, and blending.
 Context loss must preserve logical playback state without retaining stale GPU
 handles. This deferred slice MUST NOT add overhead to scenes without animation.
 
-## Raster image sources
+## Ordinary image sources
 
-Royal provides no dedicated SVG texture handling. Direct image assets use the browser image decoder without SVG-specific validation. Optional `GS_texture_svg` payloads are ignored using normal unknown-extension fallback rules; required use fails preflight. Convert vector artwork to a supported raster format before loading it.
+Browser-supported SVGs can be used as ordinary image textures, including external
+glTF `texture.source` images and embedded GLB images with `mimeType: "image/svg+xml"`.
+This is a Royal compatibility feature outside core glTF's PNG/JPEG image formats.
+External image MIME declarations survive application resource readers and take
+precedence over HTTP types. SVG URLs with no useful HTTP type can use their `.svg`
+suffix; opaque resource URLs must declare the image MIME type.
+
+Royal leaves SVG bytes unchanged and rasterizes the browser image into a fixed
+bitmap per decode. Root SVG width/height attributes (or overriding inline styles)
+use physical units at **12 pixels/mm (304.8 DPI)**: `50mm` × `80mm` requests
+600×960 pixels. `cm`, `in`, `pt`, `pc` and `Q` use the equivalent physical density;
+pixel and unitless lengths remain pixels. Fractional results round to the nearest
+pixel. A single declared dimension uses the viewBox ratio to infer the missing
+dimension. Relative or CSS-computed dimensions fall back to browser sizing.
+Dimensionless images use the browser's default sizing; when the browser supplies no natural dimensions,
+Royal fits the viewBox aspect ratio into 300×150 pixels, or uses 300×150 without a
+usable ratio. A viewBox describes coordinates and aspect ratio, not print DPI.
+
+The bitmap fits the ordinary texture memory allocation, with a 64 MiB RGBA mip-chain
+ceiling. Mesh scale and camera zoom do not change the SVG raster resolution. The
+ordinary source lifecycle can decode again after eviction, restoration or a larger
+memory allocation, as it does for raster images. Inspection, when enabled, gates
+publication of those same frozen pixels; automatic pages and mips reuse them.
+Browser image-mode support determines supported SVG features and dependencies.
+
+There is no vector zoom refinement or `GS_texture_svg` support. Optional extension
+payloads are ignored using normal unknown-extension fallback rules; required use
+fails preflight.

@@ -145,6 +145,9 @@ export const createTextureAssetReader = (
       const { expectedMimeType, imageIndex, sourceEncoding } = source;
       const imagePath = `images[${imageIndex}]`;
       const image = object(images[imageIndex], label, imagePath);
+      if (image.mimeType !== undefined && (typeof image.mimeType !== "string" || image.mimeType.length === 0)) {
+        fail(label, `${imagePath}.mimeType`, "must be a non-empty MIME type");
+      }
       if ((image.uri === undefined) === (image.bufferView === undefined)) {
         fail(label, imagePath, "must contain exactly one of uri or bufferView");
       }
@@ -163,7 +166,7 @@ export const createTextureAssetReader = (
           colorSpace,
           gltfResource: true,
           kind: "asset",
-          ...(expectedMimeType === undefined ? {} : { mimeType: expectedMimeType }),
+          ...((expectedMimeType ?? image.mimeType) === undefined ? {} : { mimeType: (expectedMimeType ?? image.mimeType) as string }),
           sampler,
           ...(sourceEncoding === undefined ? {} : { sourceEncoding }),
           src: resolvedUri,
@@ -173,12 +176,13 @@ export const createTextureAssetReader = (
       if (expectedMime === undefined ? (
         image.mimeType !== "image/jpeg"
         && image.mimeType !== "image/png"
+        && image.mimeType !== "image/svg+xml"
       ) : image.mimeType !== expectedMime) {
         fail(
           label,
           `${imagePath}.mimeType`,
           expectedMime === undefined
-            ? "must be image/jpeg or image/png for a core glTF image"
+            ? "must be image/jpeg, image/png or image/svg+xml for an ordinary image"
             : mimeError,
         );
       }

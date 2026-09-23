@@ -3,6 +3,10 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## 0.0.35 - 2026-09-23
+
+- Preserve ordinary glTF image MIME types through application resource readers and HTTP loading. Accept SVG image sources, including embedded GLB images, as fixed raster textures with ordinary memory fitting and inspection. Declared physical dimensions rasterize at 12 pixels/mm (304.8 DPI); object scaling and camera zoom do not rerasterize them.
+
 ## 0.0.34 - 2026-09-23
 
 - Move glTF preparation, Draco decoding, and idle ASTC encoding onto workerpool; share the worker runtime with texture inspection and remove obsolete transport code.

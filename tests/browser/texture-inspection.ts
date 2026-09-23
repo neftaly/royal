@@ -11,6 +11,7 @@ import { TextureInspectionSampler, freezeInspectionSource, inspectionSampleKey }
 import { TextureAssetOwner } from "../../packages/renderer-webgl/src/texture/asset-owner";
 import { PrefilteredEnvironmentAssetOwner } from "../../packages/renderer-webgl/src/environment/asset-owner";
 import { environmentInspectionSample, inspectEnvironment } from "../../packages/renderer-webgl/src/environment/inspection-sample";
+import { createTextureAssetReader } from "../../packages/renderer-webgl/src/gltf/static-material";
 
 const assert = (condition: unknown, message: string): void => { if (!condition) throw new Error(message); };
 const raster = (color: string, size = 1024): HTMLCanvasElement => {
@@ -351,10 +352,112 @@ const workerEquivalence = async (passed: string[]): Promise<void> => {
   } finally { sampler.dispose(); }
 };
 
+const ordinarySvg = async (passed: string[]): Promise<void> => {
+  const bytes = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="96" height="48" viewBox="0 0 96 48"><rect width="96" height="48" fill="red"/></svg>');
+  const source = createTextureAssetReader({
+    images: [{ uri: "automerge:svg-texture", mimeType: "image/svg+xml" }], textures: [{ source: 0 }],
+  }, new Uint8Array(), 0, [], "svg-model", "https://example.test/model.gltf", "svg-model")(0, "texture");
+  const decoder = createBrowserTextureDecoder(4, true, async () => bytes);
+  let calls = 0;
+  const owner = new TextureInspectionOwner({ key: "svg", allow: async image => { calls++; return red(image); } });
+  const decoded = await decoder.decode(source, signal());
+  assert(decoded.width === 96 && decoded.height === 48, "SVG did not retain its declared pixel dimensions");
+  assert(decoded.source instanceof HTMLCanvasElement, "SVG did not freeze to ordinary raster pixels");
+  const misleadingUri = { ...source, kind: "asset" as const, src: "https://example.test/artwork.ktx2" };
+  const typedPixels = await decoder.decode(misleadingUri, signal());
+  assert(typedPixels.width === 96, "filename overrode declared SVG MIME in resource reader");
+  typedPixels.close?.();
+  const accepted = await owner.accept(source, decoded, signal());
+  const repeated = await owner.accept(source, await decoder.decode(source, signal()), signal());
+  assert(calls === 1, "identical opaque SVG pixels were classified more than once");
+  const pages = createAutomaticRasterPageSource(accepted, { minFilter: "linear-mipmap-linear", magFilter: "linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" }, "srgb");
+  for (let mip = 0; mip < pages.layout.mipCount; mip++) {
+    const page = await pages.read({ mip, x: 0, y: 0 }, signal());
+    assert(red(page.source as HTMLCanvasElement), "SVG page changed approved pixels");
+    page.close();
+  }
+  assert(calls === 1, "SVG page generation reran classification");
+  pages.close?.(); accepted.close?.(); repeated.close?.(); owner.dispose();
+  const fitted = await decoder.decode(source, signal(), 1024);
+  assert(fitted.width < 96 && fitted.height < 48 && fitted.sourceWidth === 96, "SVG ignored ordinary memory fitting");
+  fitted.close?.();
+  const embedded = createTextureAssetReader({
+    images: [{ bufferView: 0, mimeType: "image/svg+xml" }], textures: [{ source: 0 }],
+  }, bytes, bytes.length, [{ buffer: 0, byteLength: bytes.length }], "embedded-svg", "model.glb", "test")(0, "texture");
+  const embeddedPixels = await createBrowserTextureDecoder().decode(embedded, signal());
+  assert(embeddedPixels.width === 96 && red(embeddedPixels.source as HTMLCanvasElement), "embedded SVG did not render");
+  embeddedPixels.close?.();
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(bytes, { headers: { "content-type": "application/octet-stream" } });
+    for (const asset of [source, misleadingUri, { kind: "asset" as const, src: "https://example.test/artwork.svg" }]) {
+      const httpPixels = await createBrowserTextureDecoder().decode(asset, signal());
+      assert(httpPixels.width === 96 && red(httpPixels.source as HTMLCanvasElement), "SVG MIME did not survive untyped HTTP transport");
+      httpPixels.close?.();
+    }
+  } finally { globalThis.fetch = originalFetch; }
+  for (const dimensions of ['width="25.4mm" height="12.7mm"', 'viewBox="0 0 200 100"', 'width="100%" height="100%" viewBox="0 0 200 100"', '']) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" ${dimensions}><rect width="100%" height="100%" fill="red"/></svg>`;
+    const uri = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+    try {
+      const raster = await createBrowserTextureDecoder().decode({ kind: "asset", src: uri }, signal());
+      assert(raster.width > 0 && raster.height > 0, "dimensionless SVG has no usable raster");
+      if (dimensions.includes("mm")) assert(raster.width === 305 && raster.height === 152, "physical SVG dimensions did not use 12 pixels/mm");
+      assert(red(raster.source as HTMLCanvasElement), "SVG default sizing produced empty pixels");
+      raster.close?.();
+    } finally { URL.revokeObjectURL(uri); }
+  }
+  const blocked = new TextureInspectionOwner({ key: "deny-svg", allow: async () => false });
+  assert(await rejected(blocked.accept(source, await decoder.decode(source, signal()), signal())), "denied ordinary SVG was accepted");
+  blocked.dispose();
+  passed.push("ordinary SVG resource-reader MIME, fixed raster dimensions, memory fitting, inspection caching, pages and denial");
+};
+
+const svgPhysicalResolution = async (passed: string[]): Promise<void> => {
+  const decoder = createBrowserTextureDecoder();
+  const owner = new TextureInspectionOwner({ key: "physical-svg", allow: async image => red(image) });
+  for (const dimensions of [
+    'width="50mm" height="80mm"',
+    'width="5cm" height="8cm"',
+    'width="200Q" height="320Q"',
+    'width="50mm"',
+    'height="80mm"',
+    'width="1px" height="1px" style="width:50mm;height:80mm"',
+  ]) {
+    const uri = URL.createObjectURL(new Blob([
+      `<svg xmlns="http://www.w3.org/2000/svg" ${dimensions} viewBox="0 0 50 80"><rect width="50" height="80" fill="red"/></svg>`,
+    ], { type: "image/svg+xml" }));
+    try {
+      const asset = { kind: "asset" as const, src: uri };
+      const raster = await decoder.decode(asset, signal());
+      assert(raster.width === 600 && raster.height === 960, `wrong 12px/mm dimensions for ${dimensions}: ${raster.width}x${raster.height}`);
+      const inspected = await owner.accept(asset, raster, signal());
+      assert(red(inspected.source as HTMLCanvasElement), "physical SVG inspection did not retain display pixels");
+      inspected.close?.();
+      const fitted = await decoder.decode(asset, signal(), 64 * 1024);
+      assert(fitted.width < 600 && fitted.height < 960 && fitted.sourceWidth === 600 && fitted.sourceHeight === 960,
+        "physical SVG did not retain nominal dimensions while fitting memory");
+      fitted.close?.();
+    } finally { URL.revokeObjectURL(uri); }
+  }
+  owner.dispose();
+  const xml = '<?xml version="1.0" encoding="UTF-16"?><svg xmlns="http://www.w3.org/2000/svg" width="50mm" height="80mm"><rect width="100%" height="100%" fill="red"/></svg>';
+  const utf16 = new Uint8Array(2 + xml.length * 2);
+  utf16[0] = 255; utf16[1] = 254;
+  for (let i = 0; i < xml.length; i++) { utf16[2 + i * 2] = xml.charCodeAt(i); utf16[3 + i * 2] = xml.charCodeAt(i) >>> 8; }
+  const encodedUri = URL.createObjectURL(new Blob([utf16], { type: "image/svg+xml" }));
+  try {
+    const raster = await decoder.decode({ kind: "asset", src: encodedUri }, signal());
+    assert(raster.width === 600 && raster.height === 960, "UTF-16 SVG lost its physical dimensions");
+    raster.close?.();
+  } finally { URL.revokeObjectURL(encodedUri); }
+  passed.push("12px/mm physical SVG dimensions, equivalent units, single dimensions, inline overrides, inspection and memory fitting");
+};
+
 /** Small independent async fixtures keep engine compilation and resource scopes bounded. */
 export const runTextureInspectionBrowserTests = async (): Promise<string[]> => {
   const passed: string[] = [];
-  for (const check of [frozenSources, publication, svgPixels, previews, etc2, nativeMips, environmentMips, orientation, sparseRaster, alphaComposites, sparseEnvironment, reactPolicy, workerEquivalence]) {
+  for (const check of [frozenSources, publication, svgPixels, ordinarySvg, svgPhysicalResolution, previews, etc2, nativeMips, environmentMips, orientation, sparseRaster, alphaComposites, sparseEnvironment, reactPolicy, workerEquivalence]) {
     console.info("Inspection fixture:", check.name);
     await check(passed);
   }

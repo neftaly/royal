@@ -30,7 +30,7 @@ the current contract.
 | Onboarding capture | Onboarding already calls `captureImage`. No demonstrated need for a separate static backend or VT opt-out; the opt-out experiment changes pixels. Retain [capture research](../../research/image-capture/README.md). |
 | Unlimited lights | Play uses `importLights: false`; Royal already has the finite 512-light path. No current consumer demonstrates a need for unbounded or clustered lighting. Retain [many-light experiments](../../research/many-lights/README.md). |
 | Automatic texture memory | Allocation and refinement are implemented. Device calibration, ETC2 resizing and prefetch have no new failing consumer workload. Retain [VT research](../../research/virtual-texturing/README.md). |
-| SVG refinement | Preview-to-target refinement is implemented. The current import measurements point to large ordinary bitmap uploads, not another SVG renderer or codec. Retain [SVG evidence](../../research/svg-preview/README.md). |
+| SVG refinement | Dedicated SVG refinement was removed in 0.0.32. Ordinary SVG images now follow the fixed-raster [image-source contract](../specs/assets-and-gltf.md#ordinary-image-sources), including texture inspection. Retain historical [SVG evidence](../../research/svg-preview/README.md). |
 | Selection outlines | Source indexing and camera-copy fixes are implemented. No current comparison establishes another renderer gap. Retain the [historical investigation](archive/selection-outline-camera-performance-2026-09-11.md). |
 
 These decisions do not remove supported capabilities or rule out future fixes.

@@ -75,8 +75,8 @@ export type TextureSourceEncoding = "ktx2-etc2" | "ktx2-native" | "ktx2-astc";
 export type GltfTextureAssetRef = TextureAssetRef & Readonly<{
   /** @internal Routes this source through the root's glTF resource reader. */
   gltfResource: true;
-  /** @internal Exact format selected by a glTF texture-source extension. */
-  mimeType?: "image/avif" | "image/webp" | "image/ktx2";
+  /** @internal Declared image type, or exact format selected by an extension. */
+  mimeType?: string;
   sourceEncoding?: TextureSourceEncoding;
 }>;
 
@@ -86,7 +86,7 @@ export type EmbeddedTextureAssetRef = Readonly<{
   contentKey: string;
   kind: "embedded-asset";
   label: string;
-  mimeType: "image/avif" | "image/jpeg" | "image/ktx2" | "image/png" | "image/webp";
+  mimeType: "image/avif" | "image/jpeg" | "image/ktx2" | "image/png" | "image/webp" | "image/svg+xml";
   sampler?: TextureAssetRef["sampler"];
   sourceEncoding?: TextureSourceEncoding;
 }>;
@@ -94,7 +94,7 @@ export type EmbeddedTextureAssetRef = Readonly<{
 export type TextureLeafSourceRef = (
   | (TextureAssetRef & Readonly<{
     gltfResource?: true;
-    mimeType?: "image/avif" | "image/webp" | "image/ktx2";
+    mimeType?: string;
     sourceEncoding?: TextureSourceEncoding;
   }>)
   | EmbeddedTextureAssetRef) & Readonly<{
@@ -177,7 +177,7 @@ const decodedTextureLeafKey = (asset: TextureLeafSourceRef): unknown => {
         ? ["src", asset.src]
         : ["content", ...identityPart(asset.contentKey, "contentKey")],
       identityPart(asset.version, "version"),
-      asset.sourceEncoding ?? "auto",
+      asset.sourceEncoding ?? asset.mimeType ?? "auto",
     ];
   return asset.astc === undefined ? leaf : ["astc-alternative", leaf, decodedTextureLeafKey(asset.astc)];
 };
