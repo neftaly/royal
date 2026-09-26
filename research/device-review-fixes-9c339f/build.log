@@ -1,0 +1,1 @@
+$ vite build --config vite.config.ts --logLevel warn

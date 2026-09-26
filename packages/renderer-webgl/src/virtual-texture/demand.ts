@@ -595,14 +595,17 @@ const addClippedTriangleDemand = (
   );
 };
 
-const collectModelDemand = (
+type DemandWork = { visited: number };
+
+const collectModelDemand = function* (
   workspace: VirtualTextureDemandWorkspace,
   textureLayout: VirtualTextureLayout,
   surface: VirtualTextureDemandSurface,
   model: Mat4,
   view: VirtualTextureDemandView,
   sampler: CanonicalTextureSampler,
-): void => {
+  work: DemandWork,
+): Generator<void> {
   multiplyMat4Into(workspace.modelViewProjection, view.viewProjection, model);
   const { geometry } = surface;
   const indices = geometry.indices;
@@ -610,6 +613,7 @@ const collectModelDemand = (
   // Clear per model/view so it cannot reuse transforms or UVs across instances.
   workspace.vertexKeys.fill(-1);
   for (let index = 0; index + 2 < indices.length && !workspace.overflow; index += 3) {
+    if (++work.visited % 64 === 0) yield;
     let commonOutsidePlanes = 0b11_1111, anyFlags = 0;
     for (let corner = 0; corner < 3; corner += 1) {
       const vertex = indices[index + corner]!;
@@ -668,20 +672,22 @@ const collectModelDemand = (
   }
 };
 
-const collectVirtualTextureSurfaceViewDemand = (
+const collectVirtualTextureSurfaceViewDemand = function* (
   workspace: VirtualTextureDemandWorkspace,
   textureLayout: VirtualTextureLayout,
   surface: VirtualTextureDemandSurface,
   view: VirtualTextureDemandView,
   sampler: CanonicalTextureSampler,
-): void => {
+  work: DemandWork,
+): Generator<void> {
   if (!worldBoundsVisible(surface.worldBounds, workspace.frustumPlanes)) return;
   const instances = surface.instances;
   if (instances === undefined || instances.count === 0) {
-    collectModelDemand(workspace, textureLayout, surface, surface.model, view, sampler);
+    yield* collectModelDemand(workspace, textureLayout, surface, surface.model, view, sampler, work);
     return;
   }
   for (let instance = 0; instance < instances.count && !workspace.overflow; instance += 1) {
+    if (++work.visited % 64 === 0) yield;
     copyInstanceModel(workspace.model, surface.model, instances.localModels, instance * 16);
     const bounds = workspace.instanceBounds;
     bounds.min[0] = Infinity;
@@ -692,12 +698,12 @@ const collectVirtualTextureSurfaceViewDemand = (
     bounds.max[2] = -Infinity;
     includeTransformedBounds(bounds, surface.geometry.bounds, workspace.model);
     if (!worldBoundsVisible(bounds, workspace.frustumPlanes)) continue;
-    collectModelDemand(workspace, textureLayout, surface, workspace.model, view, sampler);
+    yield* collectModelDemand(workspace, textureLayout, surface, workspace.model, view, sampler, work);
   }
 };
 
 /** Collects bounded demand while sharing one broad-phase frustum across an asset's surfaces. */
-export const collectVirtualTextureDemand = (
+export const collectVirtualTextureDemandSteps = function* (
   workspace: VirtualTextureDemandWorkspace,
   textureLayout: VirtualTextureLayout,
   surfaces: readonly VirtualTextureDemandSurface[],
@@ -705,7 +711,8 @@ export const collectVirtualTextureDemand = (
   sampler: CanonicalTextureSampler,
   minimumMip = 0,
   anisotropy = 1,
-): void => {
+): Generator<void> {
+  const work: DemandWork = { visited: 0 };
   const previousOverflow = workspace.overflow;
   workspace.overflow = false;
   workspace.minimumMip = minimumMip;
@@ -714,11 +721,37 @@ export const collectVirtualTextureDemand = (
   for (const view of views) {
     frustumPlanesInto(workspace.frustumPlanes, view.viewProjection);
     for (const surface of surfaces) {
-      collectVirtualTextureSurfaceViewDemand(workspace, textureLayout, surface, view, sampler);
+      if (++work.visited % 64 === 0) yield;
+      yield* collectVirtualTextureSurfaceViewDemand(workspace, textureLayout, surface, view, sampler, work);
       // The runtime restarts at a coarser minimum mip after overflow. Completing
       // this discarded pass would multiply dense/repeated-UV work needlessly.
       if (workspace.overflow) return;
     }
   }
   workspace.overflow = previousOverflow;
+};
+
+/** Synchronous oracle and small standalone callers use the same exact traversal. */
+export const collectVirtualTextureDemand = (...args: Parameters<typeof collectVirtualTextureDemandSteps>): void => {
+  const steps = collectVirtualTextureDemandSteps(...args);
+  while (!steps.next().done) { /* Complete the bounded chunks synchronously. */ }
+};
+
+/** Copy only the completed demand, never traversal scratch or partial work. */
+export const copyVirtualTextureDemand = (
+  target: VirtualTextureDemandWorkspace,
+  source: VirtualTextureDemandWorkspace,
+): void => {
+  resetVirtualTextureDemand(target);
+  target.count = source.count;
+  target.overflow = source.overflow;
+  target.minimumMip = source.minimumMip;
+  target.mipLinear = source.mipLinear;
+  target.anisotropy = source.anisotropy;
+  target.screen[FINEST_FOOTPRINT_SQUARED] = source.screen[FINEST_FOOTPRINT_SQUARED]!;
+  target.mips.set(source.mips.subarray(0, source.count));
+  target.xs.set(source.xs.subarray(0, source.count));
+  target.ys.set(source.ys.subarray(0, source.count));
+  for (const key of source.keys) target.keys.add(key);
+  for (const [key, value] of source.importance) target.importance.set(key, value);
 };

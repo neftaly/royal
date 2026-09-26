@@ -385,6 +385,7 @@ export class SurfaceGpuOwner {
   readonly #viewProjectionModel: MutableMat4 = identityMat4();
   #virtualTexture: VirtualTextureRuntime | null = null;
   #virtualTextureBindingRevision = -1;
+  #viewWorkPending = false;
 
   constructor(
     gl: WebGL2RenderingContext,
@@ -692,6 +693,9 @@ export class SurfaceGpuOwner {
       || this.#boundedVolumeLoadRequested
       || this.#admittedSurfaceCount < (this.#scene?.surfaces.length ?? 0);
   }
+
+  /** Work that needs another view update, not just a resource-publication batch. */
+  get viewWorkPending(): boolean { return this.#viewWorkPending; }
 
   setScene(scene: CanonicalSurfaceScene | null): void {
     if (this.#scene === scene) return;
@@ -1033,6 +1037,7 @@ export class SurfaceGpuOwner {
       this.#fullReconcileRequired = true;
     }
     this.#reconcilePendingResources(state);
+    this.#viewWorkPending = virtualTexturePending || this.#programs.virtualCompilationPending;
     if (scene === null) return virtualTexturePending;
     const presentationWorkPending = virtualTexturePending
       || this.#programs.virtualCompilationPending

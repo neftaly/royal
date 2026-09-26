@@ -1,0 +1,26 @@
+Benchmark report check warnings for /home/neftaly/dev/royal/research/device-validation-9c339f/quest/gltf-helmet.json:
+- report.routes[0] (gltf-helmet).cameraDrag.frameStats.gpuDurationMs did not expose EXT_disjoint_timer_query_webgl2
+- report.routes[0] (gltf-helmet).frameWork.renderCallbackDurationMs timed out partially after 4/24 samples; p95/jitter evidence is incomplete
+- report.routes[0] (gltf-helmet).frameWork.gpuDurationMs did not expose EXT_disjoint_timer_query_webgl2
+Benchmark report check passed: /home/neftaly/dev/royal/research/device-validation-9c339f/quest/gltf-helmet.json
+Benchmark report check warnings for /home/neftaly/dev/royal/research/device-validation-9c339f/quest/virtual-texture-stress.json:
+- report.routes[0] (virtual-texture-stress).cameraDrag.frameStats.gpuDurationMs did not expose EXT_disjoint_timer_query_webgl2
+- report.routes[0] (virtual-texture-stress).frameWork.renderCallbackDurationMs timed out partially after 6/24 samples; p95/jitter evidence is incomplete
+- report.routes[0] (virtual-texture-stress).frameWork.gpuDurationMs did not expose EXT_disjoint_timer_query_webgl2
+Benchmark report check failed for /home/neftaly/dev/royal/research/device-validation-9c339f/quest/virtual-texture-stress.json:
+- report.routes[0] (virtual-texture-stress).virtualTextureClose.renderer.virtualTexturing.after.manifestFailures must be a finite number
+- report.routes[0] (virtual-texture-stress).virtualTextureClose.renderer.virtualTexturing.after.manifestRequests must be a finite number
+- report.routes[0] (virtual-texture-stress).virtualTextureClose.renderer.virtualTexturing.after.manifestsReady must be a finite number
+Benchmark report check warnings for /home/neftaly/dev/royal/research/device-validation-9c339f/quest/texture-materials.json:
+- report.routes[0] (texture-materials).cameraDrag.frameStats.gpuDurationMs did not expose EXT_disjoint_timer_query_webgl2
+- report.routes[0] (texture-materials).frameWork.renderCallbackDurationMs timed out partially after 6/24 samples; p95/jitter evidence is incomplete
+- report.routes[0] (texture-materials).frameWork.gpuDurationMs did not expose EXT_disjoint_timer_query_webgl2
+Benchmark report check passed: /home/neftaly/dev/royal/research/device-validation-9c339f/quest/texture-materials.json
+Benchmark report check warnings for /home/neftaly/dev/royal/research/device-validation-9c339f/quest/gltf-scenes.json:
+- report.routes[0] (gltf-scenes).cameraDrag.frameStats.gpuDurationMs did not expose EXT_disjoint_timer_query_webgl2
+- report.routes[0] (gltf-scenes).frameWork.gpuDurationMs did not expose EXT_disjoint_timer_query_webgl2
+Benchmark report check passed: /home/neftaly/dev/royal/research/device-validation-9c339f/quest/gltf-scenes.json
+Benchmark report check warnings for /home/neftaly/dev/royal/research/device-validation-9c339f/quest/webxr-vr.json:
+- report.routes[0] (webxr-vr).cameraDrag.frameStats.gpuDurationMs did not expose EXT_disjoint_timer_query_webgl2
+Benchmark report check failed for /home/neftaly/dev/royal/research/device-validation-9c339f/quest/webxr-vr.json:
+- report.routes[0] (webxr-vr).xr.frameStats.gpuDurationMs must be an object

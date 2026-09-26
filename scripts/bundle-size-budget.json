@@ -65,11 +65,12 @@
     "inspectionWorkerpoolLazyAndTotalGzipBytes": 20000,
     "inspectionWorkerpoolWorkerGzipBytes": 12000,
     "workerpoolMigrationLazyAndTotalGzipBytes": 4096,
-    "workerpoolRuntimeUrlInitialGzipBytes": 64
+    "workerpoolRuntimeUrlInitialGzipBytes": 64,
+    "incrementalVtPresentationInitialGzipBytes": 64
   },
-  "royalInitialGzipBytes": 145746,
-  "royalIncrementalGzipBytes": 86486,
-  "royalGltfInitialGzipBytes": 146722,
+  "royalInitialGzipBytes": 145810,
+  "royalIncrementalGzipBytes": 86550,
+  "royalGltfInitialGzipBytes": 146786,
   "royalGltfIncrementalGzipBytes": 1050,
   "royalLazyGzipBytes": 250096,
   "royalTotalIncrementalGzipBytes": 335870,

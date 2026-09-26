@@ -1,0 +1,8 @@
+
+ RUN  v5.0.0 /home/neftaly/dev/royal
+
+
+ Test Files  1 passed (1)
+      Tests  54 passed (54)
+   Start at  16:39:11
+   Duration  2.82s (tests 54%, transform 39%, import 8%)

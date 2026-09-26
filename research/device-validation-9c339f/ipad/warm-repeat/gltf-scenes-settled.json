@@ -1,0 +1,96 @@
+{
+  "frame": 267,
+  "gltfInstancing": null,
+  "gltfLoadDiagnostics": {
+    "assets": [
+      {
+        "imageCandidates": 69,
+        "imageFailures": 0,
+        "imagesLoaded": 69,
+        "imageRequests": 69,
+        "lightCount": 0,
+        "nodeCount": 1,
+        "phaseMs": {
+          "firstUsable": 1367.0000000000002,
+          "imagesComplete": 2999.0000000000005,
+          "preparation": 269.0000000000002,
+          "preparationQueue": 22,
+          "externalResourceRead": 1036,
+          "sourceRead": 38,
+          "sourceReadStart": 2
+        },
+        "primitiveCount": 103,
+        "sceneIndex": 0,
+        "src": "/fixtures/scenes/Sponza/glTF/Sponza.gltf",
+        "status": "ready",
+        "variantNames": []
+      }
+    ]
+  },
+  "lifecycle": {
+    "generation": 1,
+    "interruptions": 0,
+    "recoveries": 0,
+    "state": "available"
+  },
+  "resourcePressure": {
+    "activePreparationJobs": 0,
+    "activeTexturePreparations": 0,
+    "admittedGeometryUploadBytes": 0,
+    "admittedOrdinaryTextureUploadBytes": 7820,
+    "sourceReservationLimit": 64,
+    "sourceReservations": 0,
+    "decodedTextureHandoffBytes": 0,
+    "decodedTextureHandoffThresholdBytes": 67108864,
+    "deferredGeometryUploads": 0,
+    "deferredOrdinaryTextureUploads": 0,
+    "ordinaryTextureUploadBudgetBytes": 33554432,
+    "preparationJobLimit": 8,
+    "queuedDetailPreparationJobs": 0,
+    "queuedForegroundPreparationJobs": 0,
+    "queuedPreparationJobs": 0,
+    "persistentGpuBudgetBytes": 268435456,
+    "persistentGpuDeniedClaims": 0,
+    "persistentGpuRetainedBytes": 191077924,
+    "pendingOrdinaryTextureStorageRepresentations": 0,
+    "pendingSurfaceUploads": 0
+  },
+  "textureResidency": {
+    "bytes": 165257384,
+    "compressedBytes": 0,
+    "compressedResources": 0,
+    "fitted": 68,
+    "resources": 69
+  },
+  "virtualTexturing": {
+    "idleAstcPixelHits": 1,
+    "retainedPagePixelBytes": 487872,
+    "pageQueueMs": 17.000000000005457,
+    "pageReadMs": 534.9999999999636,
+    "pageReadyWaitMs": 303079,
+    "pageTimedReads": 413,
+    "pageTimedUploads": 400,
+    "atlasGrowthFrames": 79,
+    "admittedUploadBytes": 7820,
+    "atlasBytes": 1603008,
+    "atlasPools": 1,
+    "atlasGrowthFailures": 0,
+    "desiredPages": 561,
+    "admittedPages": 23,
+    "unresidentPages": 0,
+    "automaticCandidates": 25,
+    "automaticDecodedBytes": 53770272,
+    "automaticIneligible": 1,
+    "automaticResources": 24,
+    "automaticWaiting": 0,
+    "deferredUploads": 0,
+    "failedPages": 0,
+    "pageRequests": 413,
+    "pendingPages": 0,
+    "pendingPageBytes": 0,
+    "pendingPageByteLimit": 16777216,
+    "residentPages": 23,
+    "uploadedPages": 400,
+    "uploadBudgetBytes": 33554432
+  }
+}

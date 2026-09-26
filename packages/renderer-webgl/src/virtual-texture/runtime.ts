@@ -25,7 +25,8 @@ import {
   createAutomaticRasterPageSource,
 } from "./automatic-page-source";
 import {
-  collectVirtualTextureDemand,
+  collectVirtualTextureDemandSteps,
+  copyVirtualTextureDemand,
   virtualTextureDemandLod,
   createVirtualTextureDemandWorkspace,
   resetVirtualTextureDemand,
@@ -86,6 +87,7 @@ const MAX_AUTOMATIC_UPLOAD_MS = 2;
 const MAX_ATLAS_COPY_BYTES_PER_FRAME = 1024 * 1024;
 const MAX_ATLAS_COPIES_PER_FRAME = 64;
 const MAX_DEMAND_PAGES = 512;
+const MAX_DEMAND_MS_PER_FRAME = 4;
 const MAX_AUTOMATIC_DECODED_BYTES = 64 * 1024 * 1024;
 const UNCHANGED_ATLAS = { copied: 0, pending: false, changed: false };
 const FRAME_RESULTS = [
@@ -141,6 +143,9 @@ type RuntimeResource = {
   readonly abort: AbortController;
   readonly asset: TextureSourceRef;
   demandRevision: number;
+  demandJob?: { revision: number; minimumMip: number; steps: Generator<void>; surfaces: readonly VirtualTextureDemandSurface[]; views: readonly SurfaceFrameView[] };
+  readonly desiredWorkspace: VirtualTextureDemandWorkspace;
+  readonly demandScratch: VirtualTextureDemandWorkspace;
   demandNeedsFit?: boolean;
   allocationBudgetBlocked?: boolean;
   admittedPageLimit?: number;
@@ -398,6 +403,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #compressionJob: { resource: RuntimeResource; gpu: GpuVirtualTexture; key: VirtualTexturePageKey; slot: number; abort: AbortController; blocks?: Uint8Array; fence?: WebGLSync; compressedSlot?: number; waits: number } | undefined;
   #viewCount = 0;
   #viewRevision = 0;
+  #demandCursor = 0;
   #viewState = new Float64Array(0);
   readonly #gl: WebGL2RenderingContext;
   #maxTextureSize: number | undefined;
@@ -473,6 +479,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     this.#maxTextureSize = undefined;
     for (const resource of this.#resources.values()) {
       resource.demandRevision = -1;
+      delete resource.demandJob;
       if (resource.gpu !== undefined) {
         resource.gpu.astc?.dispose(false);
         this.#budget.release(resource.gpu.budgetIdentity);
@@ -502,9 +509,12 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     let desiredPages = 0;
     let unresidentPages = 0;
     let admittedPages = 0;
+    let pendingDemandResources = 0;
     let detailWeight = 0, residentDetailWeight = 0;
     const scan = ++this.#decodedScan;
     for (const resource of this.#resources.values()) {
+      if (resource.layout !== undefined && resource.sourceFailure === undefined
+        && resource.demandRevision !== this.#viewRevision) pendingDemandResources++;
       {
         automaticResources += 1;
         if (resource.lease !== undefined && this.#seenDecoded.get(resource.lease.source) !== scan) {
@@ -528,6 +538,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       }
     }
     return {
+      ...(pendingDemandResources === 0 ? {} : { pendingDemandResources }),
       ...(detailWeight === 0 ? {} : { visibleDetailFraction: residentDetailWeight / detailWeight }),
       ...(this.#pixelCacheHits === 0 ? {} : { idleAstcPixelHits: this.#pixelCacheHits }),
       ...(this.#idleSourceReads === 0 ? {} : { idleAstcSourceReads: this.#idleSourceReads }),
@@ -564,7 +575,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     if (this.#disposed || (this.#scene === scene && !this.#sceneNeedsReconcile)) return;
     this.#sceneNeedsReconcile = false;
     this.#scene = scene;
-    for (const resource of this.#resources.values()) resource.demandRevision = -1;
+    this.#viewRevision += 1;
     const claimed = new Set<string>();
     this.#automaticCandidates = 0;
     this.#automaticIneligible = 0;
@@ -645,6 +656,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         source,
         surfaces: [],
         workspace: createVirtualTextureDemandWorkspace(MAX_DEMAND_PAGES),
+        desiredWorkspace: createVirtualTextureDemandWorkspace(MAX_DEMAND_PAGES),
+        demandScratch: createVirtualTextureDemandWorkspace(MAX_DEMAND_PAGES),
       });
     }
     for (const [key, resource] of this.#resources) {
@@ -695,7 +708,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
 
   /** Re-evaluates demand after retained instance matrices move in the same scene. */
   invalidateSceneGeometry(): void {
-    for (const resource of this.#resources.values()) resource.demandRevision = -1;
+    // Finish the captured geometry before processing the newest transforms.
+    this.#viewRevision += 1;
   }
 
   update(views: readonly SurfaceFrameView[], beginUploadFrame = true): VirtualTextureFrameUpdate {
@@ -708,12 +722,14 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     let uploadStartedAt: number | undefined;
     if (this.#demandViewsChanged(views)) { this.#viewRevision += 1; this.#lastForeground = performance.now(); }
 
+    pending = this.#updateDemand(views);
+    if (pending) this.#lastForeground = performance.now();
     this.#atlasDemand.clear();
     this.#atlasDemandBytes.clear();
     this.#atlasMinimumSlots.clear();
     const poolRequests = new Map<string, { key: string; minimumBytes: number; wantedBytes: number }>();
     for (const resource of this.#resources.values()) {
-      this.#refreshFrameDemand(resource, views);
+      this.#refreshFrameDemand(resource);
       const layout = resource.layout;
       if (layout === undefined || resource.sourceFailure !== undefined) continue;
       const key = virtualTextureAtlasKey(resource, layout);
@@ -746,7 +762,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       const previousGrowth = atlas.growth;
       const growth = this.#resizeAtlas(atlas, copyLimit);
       if (previousGrowth !== atlas.growth) for (const resource of this.#resources.values()) {
-        if (resource.gpu?.atlas === atlas) resource.demandRevision = -1;
+        if (resource.gpu?.atlas === atlas) resource.demandNeedsFit = true;
       }
       if (growth.pending) this.#pageTiming.growthFrames++;
       copyBytesRemaining = Math.max(0, copyBytesRemaining - growth.copied * pageBytes);
@@ -763,7 +779,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         if (resource.layout === undefined || resource.sourceFailure !== undefined
           || virtualTextureAtlasKey(resource, resource.layout) !== atlas.key) continue;
         resources.push(resource);
-        needsFit ||= resource.demandNeedsFit || resource.admittedPageLimit === undefined || resource.demandRevision !== this.#viewRevision;
+        needsFit ||= resource.demandNeedsFit || resource.admittedPageLimit === undefined;
       }
       if (!needsFit) continue;
       const preparationSlots = this.#preparationAtlas(atlas).slotCount;
@@ -777,7 +793,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         const limit = Math.max(1, shares.get(resource.key) ?? preparationSlots) + this.#compressedDemand(resource);
         if (resource.admittedPageLimit === limit) continue;
         resource.admittedPageLimit = limit;
-        resource.demandRevision = -1;
+        resource.demandNeedsFit = true;
       }
     }
 
@@ -785,7 +801,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     // atlas protection set. Admission must never depend on Map insertion order
     // or another resource's previous-frame visibility.
     for (const resource of this.#resources.values()) {
-      this.#refreshFrameDemand(resource, views);
+      this.#refreshFrameDemand(resource);
       if (this.#prepareFrameDemand(resource)) { webGlStateChanged = true; pending = true; }
       if (resource.workspace.count > 0 && resource.gpu === undefined && resource.sourceFailure === undefined && !resource.allocationBudgetBlocked) pending = true;
     }
@@ -1070,7 +1086,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       gpu.compressedPages++;
       gpu.atlas.slots[currentSlot] = undefined;
       gpu.pageTableDirty = gpu.pageTableRebuild = true;
-      resource.demandRevision = -1;
+      resource.demandNeedsFit = true;
       this.#publishDirtyPageTables();
       this.#compressionJob = undefined;
       this.#changed();
@@ -1091,9 +1107,65 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     }
   }
 
+  /** Retain published coverage while exact triangle demand advances in bounded chunks. */
+  #updateDemand(views: readonly SurfaceFrameView[]): boolean {
+    const resources = this.#scheduleResources;
+    const deadline = performance.now() + MAX_DEMAND_MS_PER_FRAME;
+    let visited = 0;
+    while (visited < resources.length) {
+      if (this.#demandCursor >= resources.length) this.#demandCursor = 0;
+      const resource = resources[this.#demandCursor]!;
+      const layout = resource.layout;
+      if (layout !== undefined && resource.sourceFailure === undefined && resource.demandRevision !== this.#viewRevision) {
+        if (resource.demandJob === undefined) {
+          // View owners reuse their arrays. A traversal must see one coherent view.
+          const captured = views.map(view => ({ ...view,
+            viewProjection: [...view.viewProjection] as typeof view.viewProjection,
+            viewport: { ...view.viewport },
+          }));
+          const surfaces = resource.surfaces.map(surface => ({ ...surface,
+            model: [...surface.model] as typeof surface.model,
+            worldBounds: { min: [...surface.worldBounds.min] as typeof surface.worldBounds.min,
+              max: [...surface.worldBounds.max] as typeof surface.worldBounds.max },
+            ...(surface.instances === undefined ? {} : { instances: {
+              count: surface.instances.count, localModels: surface.instances.localModels.slice(0, surface.instances.count * 16),
+            } }),
+          }));
+          resetVirtualTextureDemand(resource.demandScratch);
+          resource.demandJob = { revision: this.#viewRevision, minimumMip: 0, surfaces, views: captured,
+            steps: collectVirtualTextureDemandSteps(resource.demandScratch, layout, surfaces,
+              captured, resource.sampler, 0, this.#anisotropy.forSampler(resource.sampler)) };
+        }
+        const job = resource.demandJob;
+        for (;;) {
+          const done = job.steps.next().done;
+          if (done) {
+            if (resource.demandScratch.overflow && job.minimumMip + 1 < layout.mipCount) {
+              resetVirtualTextureDemand(resource.demandScratch);
+              job.steps = collectVirtualTextureDemandSteps(resource.demandScratch, layout, job.surfaces,
+                job.views, resource.sampler, ++job.minimumMip, this.#anisotropy.forSampler(resource.sampler));
+            } else {
+              copyVirtualTextureDemand(resource.desiredWorkspace, resource.demandScratch);
+              resource.desiredPageCount = resource.desiredWorkspace.count;
+              resource.demandRevision = job.revision;
+              resource.demandNeedsFit = true;
+              delete resource.demandJob;
+              break;
+            }
+          }
+          if (performance.now() >= deadline) return true;
+        }
+      }
+      this.#demandCursor++;
+      visited++;
+      if (performance.now() >= deadline) break;
+    }
+    return resources.some(resource => resource.sourceFailure === undefined
+      && resource.layout !== undefined && resource.demandRevision !== this.#viewRevision);
+  }
+
   #refreshFrameDemand(
     resource: RuntimeResource,
-    views: readonly SurfaceFrameView[],
   ): void {
     const layout = resource.layout;
     if (layout === undefined || resource.sourceFailure !== undefined) return;
@@ -1105,24 +1177,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       resetVirtualTextureDemand(resource.workspace);
       return;
     }
-    const demandChanged = resource.demandRevision !== this.#viewRevision;
-    if (demandChanged) {
-      for (let minimumMip = 0; minimumMip < layout.mipCount; minimumMip += 1) {
-        resetVirtualTextureDemand(resource.workspace);
-        collectVirtualTextureDemand(
-          resource.workspace,
-          layout,
-          resource.surfaces,
-          views,
-          resource.sampler,
-          minimumMip,
-          this.#anisotropy.forSampler(resource.sampler),
-        );
-        if (!resource.workspace.overflow) break;
-      }
-      resource.demandRevision = this.#viewRevision;
-      resource.desiredPageCount = resource.workspace.count;
-      resource.demandNeedsFit = true;
+    if (resource.demandNeedsFit) {
+      copyVirtualTextureDemand(resource.workspace, resource.desiredWorkspace);
       this.#cancelStalePageReads(resource);
     }
     if (resource.workspace.count > 0 && resource.failedPages.size >= resource.workspace.count
@@ -1169,7 +1225,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         || (atlas === undefined && this.#atlasAllowance(undefined, virtualTextureAtlasKey(resource, layout)) < pageBytes);
       if (resource.allocationBudgetBlocked) return false;
       if (!this.#uploadBudget.tryAdmitAllocation()) {
-        resource.demandRevision = -1;
+        resource.demandNeedsFit = true;
         return false;
       }
       try {
@@ -1270,6 +1326,14 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       Math.max(0, Math.floor(this.#budget.budgetBytes * 0.75) - otherBytes));
   }
 
+  #failedAtlasGrowthFingerprint(atlas: GpuVirtualTextureAtlas, demand: number): string {
+    // Failed migrations must not wake each other by reserving and releasing
+    // temporary replacements. Retry after committed capacity or demand changes.
+    let available = this.#budget.availableBytes;
+    for (const pool of this.#atlases.values()) available += pool.growth?.replacement.allocationBytes ?? 0;
+    return `failed:${demand}:${available}:${this.#atlasShares.get(atlas.key)}:${this.#uploadedPages}`;
+  }
+
   #resizeAtlas(atlas: GpuVirtualTextureAtlas, copyLimit: number) {
     const demand = this.#atlasDemand.get(atlas.key) ?? 0;
     let missingBytes = 0, replacementBytes = 0;
@@ -1321,7 +1385,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     }
     const fingerprint = `${demand}:${this.#budget.availableBytes}:${this.#atlasAllowance(atlas)}:${this.#uploadedPages}`;
     if (atlas.growth === undefined) {
-      if (atlas.blockedGrowth === fingerprint) return result(false);
+      if (atlas.blockedGrowth === fingerprint
+        || atlas.blockedGrowth === this.#failedAtlasGrowthFingerprint(atlas, demand)) return result(false);
       // Low demand alone is not a reason to discard reusable resident pages.
       // Compact only to make room for competing demand or a reduced pool share.
       if (shrinking && !pressure && !capacityLimited && !shareLimited) return result(false);
@@ -1397,7 +1462,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       } catch (error) {
         this.#lastAtlasGrowthFailure = `allocate: ${String(error)}`;
         this.#atlasGrowthFailures += 1;
-        atlas.blockedGrowth = fingerprint;
+        atlas.blockedGrowth = this.#failedAtlasGrowthFingerprint(atlas, demand);
         return result(false);
       }
     }
@@ -1434,7 +1499,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         this.#lastAtlasGrowthFailure = `validate: ${String(error)}`;
         destroyGpuVirtualTextureAtlas(this.#gl, replacement, this.#budget);
         delete atlas.growth;
-        atlas.blockedGrowth = `${demand}:${this.#budget.availableBytes}:${this.#atlasAllowance(atlas)}:${this.#uploadedPages}`;
+        atlas.blockedGrowth = this.#failedAtlasGrowthFingerprint(atlas, demand);
         this.#atlasGrowthFailures += 1;
         changed = true;
         return result(false);
@@ -1477,7 +1542,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       this.#lastAtlasGrowthFailure = `copy: ${String(error)}`;
       destroyGpuVirtualTextureAtlas(this.#gl, growth.replacement, this.#budget);
       delete atlas.growth;
-      atlas.blockedGrowth = `${demand}:${this.#budget.availableBytes}:${this.#atlasAllowance(atlas)}:${this.#uploadedPages}`;
+      atlas.blockedGrowth = this.#failedAtlasGrowthFingerprint(atlas, demand);
       this.#atlasGrowthFailures += 1;
       return result(false);
     }
@@ -1518,14 +1583,14 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         gpu.pageTableDirty = true;
         gpu.pageTableRebuild = true;
       }
-      resource.demandRevision = -1;
+      resource.demandNeedsFit = true;
     }
     this.#atlases.set(atlas.key, replacement);
     delete atlas.growth;
     destroyGpuVirtualTextureAtlas(this.#gl, atlas, this.#budget);
     this.#bindingRevision += 1;
     changed = true;
-    return result(false);
+    return result(true);
   }
 
   #textureSizeLimit(): number {

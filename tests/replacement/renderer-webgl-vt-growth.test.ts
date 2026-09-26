@@ -276,8 +276,12 @@ describe("demand-grown RGBA atlases", () => {
     } finally { runtime.dispose(); clock.mockRestore(); }
   });
 
-  it("keeps old residency when a pressure-driven shrink copy fails", async () => {
+  it.each([false, true])("keeps old residency when a pressure-driven shrink copy fails (chunked=%s)", async (chunked) => {
     const { runtime, view, texture, gl, budget } = await harness(1024, 16 * 1024 * 1024);
+    if (chunked) {
+      let now = 0;
+      vi.spyOn(performance, "now").mockImplementation(() => now += 5);
+    }
     try {
       view.viewport.width = view.viewport.height = 1024;
       await waitFor(() => {
@@ -301,8 +305,11 @@ describe("demand-grown RGBA atlases", () => {
       expect(runtime.runtimeSnapshot().residentPages).toBeGreaterThanOrEqual(85);
       // Once competing requests settle, unchanged failed migrations must stop retrying.
       await waitFor(() => {
-        runtime.update([view]);
-        expect(runtime.runtimeSnapshot().pendingPages).toBe(0);
+        const update = runtime.update([view]);
+        const snapshot = runtime.runtimeSnapshot();
+        expect(snapshot.pendingDemandResources ?? 0).toBe(0);
+        expect(snapshot.pendingPages).toBe(0);
+        expect(update.pending).toBe(false);
       });
       for (let frame = 0; frame < 20; frame++) runtime.update([view]);
       const allocations = vi.mocked(gl.texStorage2D).mock.calls.length;
@@ -550,8 +557,11 @@ describe("demand-grown RGBA atlases", () => {
       view.viewport.width = view.viewport.height = 2048;
       let coarse = false;
       await waitFor(() => {
-        runtime.update([view]);
+        const update = runtime.update([view]);
         const snapshot = runtime.runtimeSnapshot();
+        // The host stops rendering when pending is false. A coarse intermediate
+        // migration must schedule the growth that can now use its freed budget.
+        if (snapshot.residentPages === 1 && snapshot.admittedPages === 1) expect(update.pending).toBe(true);
         coarse ||= snapshot.residentPages === 1;
         expect(runtime.automaticBinding(texture)).toBeDefined();
         expect(snapshot.residentPages).toBeGreaterThan(0);
@@ -719,8 +729,12 @@ describe("demand-grown RGBA atlases", () => {
     expect(budget.snapshot().retainedBytes).toBe(0);
   });
 
-  it.each(["allocation", "copy"])("retains coverage and avoids retry loops on %s failure", async (failure) => {
+  it.each(["allocation", "copy"].flatMap(failure =>
+    ["demand", "capacity"].map(recovery => ({ failure, recovery }))))(
+    "retains coverage after $failure failure and retries on changed $recovery", async ({ failure, recovery }) => {
     const { runtime, view, gl, budget, texture } = await harness();
+    const otherAllocation = {};
+    expect(budget.tryClaim(otherAllocation, 1024 * 1024)).toBe(true);
     const original = runtime.automaticBinding(texture);
     const retained = budget.snapshot().retainedBytes;
     try {
@@ -738,7 +752,17 @@ describe("demand-grown RGBA atlases", () => {
       for (let i = 0; i < 5; i++) runtime.update([view]);
       expect(vi.mocked(gl.texStorage2D).mock.calls.length).toBe(allocations);
       expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 5, atlasGrowthFailures: 1 });
-    } finally { runtime.dispose(); }
+      if (recovery === "demand") view.viewport.width = view.viewport.height = 512;
+      else budget.release(otherAllocation);
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({
+          residentPages: recovery === "demand" ? 21 : 85,
+          pendingPages: 0, unresidentPages: 0, atlasGrowthFailures: 1,
+        });
+      });
+      expect(runtime.automaticBinding(texture)).not.toBe(original);
+    } finally { runtime.dispose(); budget.release(otherAllocation); }
     expect(budget.snapshot().retainedBytes).toBe(0);
   });
 

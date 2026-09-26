@@ -51,6 +51,8 @@ export type VirtualTextureFrameUpdate = Readonly<{
 }>;
 
 export type VirtualTextureRuntimeSnapshot = Readonly<{
+  /** Resources whose exact demand is still being scanned for the current view. */
+  pendingDemandResources?: number;
   /** Cumulative page-stage elapsed time; parallel jobs overlap. Growth counts pool-frames. */
   pageQueueMs?: number;
   /** Estimated projected contribution with admitted detail resident; not GPU visibility feedback. */

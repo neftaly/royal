@@ -1,0 +1,33 @@
+
+ RUN  v5.0.0 /home/neftaly/dev/royal
+
+ ❯ tests/replacement/renderer-webgl-vt-growth.test.ts (52 tests | 1 failed | 50 skipped) 1136ms
+   ❯ demand-grown RGBA atlases (52)
+     × keeps old residency when a pressure-driven shrink copy fails (chunked=true) 1050ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/replacement/renderer-webgl-vt-growth.test.ts > demand-grown RGBA atlases > keeps old residency when a pressure-driven shrink copy fails (chunked=true)
+AssertionError: {"snapshot":{"visibleDetailFraction":1,"pageQueueMs":485.0298040000007,"pageReadMs":606.5054169999999,"pageReadyWaitMs":23852.469678,"pageTimedReads":102,"pageTimedUploads":102,"atlasGrowthFrames":1200,"admittedUploadBytes":540800,"atlasBytes":13925600,"atlasPools":2,"atlasGrowthFailures":597,"lastAtlasGrowthFailure":"copy: Error: copy failed","desiredPages":86,"admittedPages":22,"unresidentPages":0,"automaticCandidates":2,"automaticDecodedBytes":4194304,"automaticIneligible":0,"automaticResources":2,"automaticWaiting":0,"deferredUploads":0,"failedPages":0,"pageRequests":102,"pendingPages":0,"pendingPageBytes":0,"pendingPageByteLimit":16777216,"residentPages":102,"uploadedPages":102,"uploadBudgetBytes":4194304},"allocations":603}: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/replacement/renderer-webgl-vt-growth.test.ts:312:110
+    310|         expect(snapshot.pendingDemandResources ?? 0).toBe(0);
+    311|         expect(snapshot.pendingPages).toBe(0);
+    312|         expect(update.pending, JSON.stringify({ snapshot, allocations:…
+       |                                                                                                              ^
+    313|       });
+    314|       for (let frame = 0; frame < 20; frame++) runtime.update([view]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 50 skipped (52)
+   Start at  16:37:18
+   Duration  2.51s (tests 48%, transform 44%, import 8%)

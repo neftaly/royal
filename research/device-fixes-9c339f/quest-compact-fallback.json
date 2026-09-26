@@ -1,0 +1,636 @@
+{
+  "revision": "9c339f99bb3c117a3aa9fccfe91758fef44787ec",
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/152.0.0.44.30.1069357998 Chrome/152.0.7977.64 VR Safari/537.36",
+  "gpu": "Adreno (TM) 650",
+  "cases": [
+    {
+      "bitmap": false,
+      "mipmapped": false,
+      "stages": [
+        {
+          "name": "full",
+          "bytes": 8388608,
+          "expectedBytes": 8388608,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": false
+        },
+        {
+          "name": "compact",
+          "bytes": 524288,
+          "expectedBytes": 524288,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": false
+        },
+        {
+          "name": "compact-repeat",
+          "bytes": 524288,
+          "expectedBytes": 524288,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": true
+        },
+        {
+          "name": "restored",
+          "bytes": 8388608,
+          "expectedBytes": 8388608,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": false
+        }
+      ],
+      "events": [
+        {
+          "key": "probe",
+          "compact": false
+        },
+        {
+          "key": "probe",
+          "compact": true
+        },
+        {
+          "key": "probe",
+          "compact": false
+        }
+      ],
+      "pass": true
+    },
+    {
+      "bitmap": false,
+      "mipmapped": true,
+      "stages": [
+        {
+          "name": "full",
+          "bytes": 11184812,
+          "expectedBytes": 11184812,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": false
+        },
+        {
+          "name": "compact",
+          "bytes": 699052,
+          "expectedBytes": 699052,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": false
+        },
+        {
+          "name": "compact-repeat",
+          "bytes": 699052,
+          "expectedBytes": 699052,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": true
+        },
+        {
+          "name": "restored",
+          "bytes": 11184812,
+          "expectedBytes": 11184812,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": false
+        }
+      ],
+      "events": [
+        {
+          "key": "probe",
+          "compact": false
+        },
+        {
+          "key": "probe",
+          "compact": true
+        },
+        {
+          "key": "probe",
+          "compact": false
+        }
+      ],
+      "pass": true
+    },
+    {
+      "bitmap": true,
+      "mipmapped": false,
+      "stages": [
+        {
+          "name": "full",
+          "bytes": 8388608,
+          "expectedBytes": 8388608,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": false
+        },
+        {
+          "name": "compact",
+          "bytes": 524288,
+          "expectedBytes": 524288,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": false
+        },
+        {
+          "name": "compact-repeat",
+          "bytes": 524288,
+          "expectedBytes": 524288,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": true
+        },
+        {
+          "name": "restored",
+          "bytes": 8388608,
+          "expectedBytes": 8388608,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": false
+        }
+      ],
+      "events": [
+        {
+          "key": "probe",
+          "compact": false
+        },
+        {
+          "key": "probe",
+          "compact": true
+        },
+        {
+          "key": "probe",
+          "compact": false
+        }
+      ],
+      "pass": true
+    },
+    {
+      "bitmap": true,
+      "mipmapped": true,
+      "stages": [
+        {
+          "name": "full",
+          "bytes": 11184812,
+          "expectedBytes": 11184812,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": false
+        },
+        {
+          "name": "compact",
+          "bytes": 699052,
+          "expectedBytes": 699052,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": false
+        },
+        {
+          "name": "compact-repeat",
+          "bytes": 699052,
+          "expectedBytes": 699052,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": true
+        },
+        {
+          "name": "restored",
+          "bytes": 11184812,
+          "expectedBytes": 11184812,
+          "samples": [
+            [
+              255,
+              0,
+              0,
+              255
+            ],
+            [
+              0,
+              255,
+              0,
+              255
+            ],
+            [
+              0,
+              0,
+              255,
+              255
+            ],
+            [
+              255,
+              255,
+              255,
+              128
+            ]
+          ],
+          "error": 0,
+          "framebufferComplete": true,
+          "reused": false
+        }
+      ],
+      "events": [
+        {
+          "key": "probe",
+          "compact": false
+        },
+        {
+          "key": "probe",
+          "compact": true
+        },
+        {
+          "key": "probe",
+          "compact": false
+        }
+      ],
+      "pass": true
+    }
+  ],
+  "pass": true
+}

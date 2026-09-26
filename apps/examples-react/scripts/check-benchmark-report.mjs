@@ -617,20 +617,25 @@ const checkVirtualTextureClose = (route, routeLabel, enabled) => {
     errors.push(`${routeLabel}.virtualTextureClose.renderer.virtualTexturing.available must be true`);
   }
   if (!requireObject(virtualTexturing.after, `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after`)) return;
-  for (const counter of ['failedPages', 'manifestFailures', 'pendingPages']) {
+  requireZero(virtualTexturing.after.pendingDemandResources ?? 0,
+    `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after.pendingDemandResources`);
+  for (const counter of ['failedPages', 'pendingPages', 'unresidentPages']) {
     requireZero(
       virtualTexturing.after[counter],
       `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after.${counter}`,
     );
   }
   requirePositiveNumber(
-    virtualTexturing.after.manifestRequests,
-    `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after.manifestRequests`,
+    virtualTexturing.after.desiredPages,
+    `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after.desiredPages`,
   );
   requirePositiveNumber(
-    virtualTexturing.after.manifestsReady,
-    `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after.manifestsReady`,
+    virtualTexturing.after.admittedPages,
+    `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after.admittedPages`,
   );
+  if (virtualTexturing.after.admittedPages !== virtualTexturing.after.desiredPages) {
+    errors.push(`${routeLabel}.virtualTextureClose did not admit all desired pages`);
+  }
   requirePositiveNumber(
     virtualTexturing.after.residentPages,
     `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after.residentPages`,
@@ -867,7 +872,7 @@ if (requireObject(report, 'report')) {
         checkCameraDrag(route, routeLabel, cameraDragEnabled, gpuTimersEnabled);
         checkFrameWork(route, routeLabel, gpuTimersEnabled);
         checkVirtualTextureClose(route, routeLabel, virtualTextureCloseEnabled);
-        checkXrGpuTimers(route, routeLabel, gpuTimersEnabled);
+        checkXrGpuTimers(route, routeLabel, gpuTimersEnabled && xrEnabled);
         if (xrEnabled) checkXrRoute(route, routeLabel);
         if (route.profile?.kind === 'gltf-instancing') {
           checkInstancingRoute(route, routeLabel);

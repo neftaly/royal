@@ -1,0 +1,12 @@
+
+ RUN  v5.0.0 /home/neftaly/dev/royal
+
+
+ Test Files  4 passed (4)
+      Tests  85 passed (85)
+   Start at  08:31:31
+   Duration  2.98s (transform 70%, tests 17%, import 13%)
+
+  Transform  transforming modules took 4.95s · 70% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

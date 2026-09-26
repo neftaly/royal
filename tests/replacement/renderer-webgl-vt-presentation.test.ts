@@ -32,7 +32,7 @@ it.each([
     getParameter: vi.fn(parameter => parameter === 0x84ff ? limit : parameters(parameter)),
     getUniformLocation: vi.fn((_program, name) => ({ name })),
   }, requested === undefined ? {} : { anisotropy: requested });
-  const collect = vi.spyOn(demand, "collectVirtualTextureDemand");
+  const collect = vi.spyOn(demand, "collectVirtualTextureDemandSteps");
   try {
     root.setSize({ cssWidth: 256, cssHeight: 256, pixelRatio: 1 });
     root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [

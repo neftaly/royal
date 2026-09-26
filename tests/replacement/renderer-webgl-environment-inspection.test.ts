@@ -1,3 +1,4 @@
+import { deepStrictEqual } from "node:assert";
 import { describe, expect, it } from "vitest";
 import { inspectionArea } from "../../packages/renderer-webgl/src/texture/inspection-area";
 import { environmentInspectionPixels } from "../../packages/renderer-webgl/src/environment/inspection-pixels";
@@ -53,8 +54,10 @@ describe("HDR inspection lookup equivalence", () => {
       levels: [{ size, level: 0, faces: [5, 3, 1, 4, 2, 0].map(face => ({ face, byteOffset: (7 + face * size * size) * 4, byteLength: size * size * 4 })) }],
     } as unknown as PreparedRoyalEnvironment;
     const before = words.slice();
-    expect(environmentInspectionPixels(source)).toEqual(reference(source));
-    expect(words).toEqual(before);
+    // Native typed-array comparison retains the byte-exact oracle without
+    // walking hundreds of thousands of elements through matcher bookkeeping.
+    deepStrictEqual(environmentInspectionPixels(source), reference(source));
+    deepStrictEqual(words, before);
     expect(() => environmentInspectionPixels(source, 1)).toThrow("requires environment faces");
   });
 });

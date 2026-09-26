@@ -1401,7 +1401,7 @@ const installBenchmarkHooks = async (session) => {
     const timeout = (ms) => new Promise((resolve) => setTimeout(() => resolve(null), ms));
     const drawPromise = nextObservedDraw(250);
     const windowRafPromise = new Promise((resolve) => {
-      requestAnimationFrame((time) => resolve(time));
+      requestAnimationFrame(() => resolve(performance.now()));
     });
     const xrPromise = xr.activeSession === null
       ? Promise.resolve(null)
@@ -1492,7 +1492,7 @@ const installBenchmarkHooks = async (session) => {
         resolve(value);
       };
       const timeout = setTimeout(() => finish(null), timeoutMs);
-      requestAnimationFrame((time) => finish(time));
+      requestAnimationFrame(() => finish(performance.now()));
     });
     dispatchPointer('pointerdown');
     const gpuGl = lastDrawGl;
@@ -2412,7 +2412,10 @@ Number(document.querySelector('canvas[data-vt-distance]')?.getAttribute('data-vt
     const nextResourceCount = performance.getEntriesByType('resource').length;
     const pending = snapshot?.virtualTexturing?.pendingPages ?? 0;
     const outstanding = snapshot?.virtualTexturing?.outstandingPageRequests ?? 0;
-    if (pending === 0 && outstanding === 0 && nextResourceCount === resourceCount) {
+    const vt = snapshot?.virtualTexturing;
+    if (pending === 0 && outstanding === 0 && (vt?.pendingDemandResources ?? 0) === 0
+      && (vt?.unresidentPages ?? 0) === 0 && vt?.desiredPages === vt?.admittedPages
+      && nextResourceCount === resourceCount) {
       stableSince ??= performance.now();
       if (performance.now() - stableSince >= 250) {
         await new Promise((resolve) => requestAnimationFrame(() => resolve()));

@@ -1,0 +1,5 @@
+$ pnpm -r --if-present build
+$ vite build --config ../../vite.config.ts --logLevel warn && tsc -b tsconfig.build.json --force
+$ vite build --config ../../vite.config.ts --logLevel warn && tsc -p tsconfig.build.json
+$ vite build --config ../../vite.config.ts --logLevel warn && tsc -p tsconfig.build.json
+$ vite build --config vite.config.ts --logLevel warn

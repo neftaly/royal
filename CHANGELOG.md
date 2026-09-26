@@ -3,6 +3,13 @@
 Royal follows semantic versioning once packages are published. Until then,
 versions identify source-level prerelease checkpoints in this repository.
 
+## Unreleased
+
+- Advance exact virtual-texture demand within a per-frame time budget across triangles, small meshes, and instances. Preserve captured transforms across animation and scene replacement, and continue refinement without camera input during progressive scene loading.
+- Keep rendering after intermediate atlas compaction so freed memory can restore detail.
+- Stop failed atlas migrations from repeatedly retriggering each other through temporary memory reservations; retry when committed capacity or demand changes.
+- Measure benchmark latency with elapsed wall time and validate current virtual-texture counters without requiring immersive evidence for browser-only XR routes.
+
 ## 0.0.35 - 2026-09-23
 
 - Preserve ordinary glTF image MIME types through application resource readers and HTTP loading. Accept SVG image sources, including embedded GLB images, as fixed raster textures with ordinary memory fitting and inspection. Declared physical dimensions rasterize at 12 pixels/mm (304.8 DPI); object scaling and camera zoom do not rerasterize them.

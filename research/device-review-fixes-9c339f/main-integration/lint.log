@@ -1,0 +1,5 @@
+$ pnpm -r --if-present lint
+$ oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style
+$ oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style src
+$ oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style src
+$ oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style src

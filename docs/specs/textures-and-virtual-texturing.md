@@ -246,6 +246,18 @@ filtering, the existing isotropic LOD and single-tap path remain in use.
 
 Scene publication indexes each VT resource directly to its canonical demand
 surfaces. Per-frame demand MUST NOT rescan unrelated surfaces once per resource.
+Exact triangle traversal advances in chunks under a shared per-frame CPU time
+budget. Work accounting spans surfaces, instances (including culled instances),
+and triangles. A traversal captures its view, model transforms, bounds, and active
+instance matrices and finishes even when the camera or geometry moves;
+only complete demand is published, then newer views and geometry are processed.
+Retained textures also finish their captured work across scene replacement. Previously
+published coverage remains available throughout. Pending traversal schedules
+presentation frames even during progressive resource publication. Capacity-only
+changes refit the retained desired demand without rescanning geometry. The sparse
+`pendingDemandResources` diagnostic counts resources awaiting current-view or
+current-geometry demand; convergence checks MUST wait for this count to reach zero.
+
 Each ordered view computes one retained frustum broad phase for all of those
 surfaces. Canonical world bounds reject off-screen surfaces before triangle
 clipping; surfaces that survive still use exact clipped projected coverage, so
@@ -359,8 +371,9 @@ batches followed by empty slots. Error validation occurs only after completion,
 before publication. This separation matters on
 WebKit, where creating a fence immediately after work can itself block. A
 failed fence or 120 unsuccessful frame polls abandons that replacement.
-Failed migration preserves the old atlas and retries when demand, available
-capacity, or uploaded coverage changes.
+Failed migration preserves the old atlas and retries when demand, committed
+capacity, or uploaded coverage changes. Temporary replacement reservations from
+other RGBA pools MUST NOT retrigger failed migrations when they roll back.
 
 RGBA pools also shrink when the rounded demand fits at most half their slots.
 A two-second low-demand delay avoids reallocating for brief camera changes;

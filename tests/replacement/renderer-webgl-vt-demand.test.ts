@@ -10,6 +10,8 @@ import type { CanonicalTextureSampler } from "../../packages/renderer-webgl/src/
 import { transformedWorldBounds } from "../../packages/renderer-webgl/src/surface/surface-visibility";
 import {
   collectVirtualTextureDemand,
+  collectVirtualTextureDemandSteps,
+  copyVirtualTextureDemand,
   createVirtualTextureDemandWorkspace,
   resetVirtualTextureDemand,
   truncateVirtualTextureDemand,
@@ -38,6 +40,30 @@ const view = (projection = identityMat4()) => ({
 });
 
 describe("VT2 clipped projected demand", () => {
+  it("resumes dense triangle scans without exposing partial demand or losing coverage", () => {
+    const dense = { ...surface, geometry: { ...surface.geometry,
+      indices: new Uint16Array(Array.from({ length: 200 }, () => [...surface.geometry.indices]).flat()),
+    } };
+    const expected = createVirtualTextureDemandWorkspace(512);
+    collectVirtualTextureDemand(expected, manifest, [dense], [view()], sampler);
+    const scratch = createVirtualTextureDemandWorkspace(512);
+    const published = createVirtualTextureDemandWorkspace(512);
+    const steps = collectVirtualTextureDemandSteps(scratch, manifest, [dense], [view()], sampler);
+    let chunks = 0;
+    while (!steps.next().done) {
+      chunks++;
+      expect(published.count).toBe(0);
+    }
+    expect(chunks).toBeGreaterThan(1);
+    copyVirtualTextureDemand(published, scratch);
+    expect(published.keys).toEqual(expected.keys);
+    expect(published.importance).toEqual(expected.importance);
+    truncateVirtualTextureDemand(published, 1);
+    copyVirtualTextureDemand(published, scratch);
+    expect(published.keys).toEqual(expected.keys);
+    expect(published.mips.slice(0, published.count)).toEqual(expected.mips.slice(0, expected.count));
+  });
+
   it("uses the minor ellipse axis with a bounded anisotropy ratio, including rotated and sheared footprints", () => {
     expect(virtualTextureFootprintSquared(16, 0, 0, 2, 1)).toBe(256);
     expect(virtualTextureFootprintSquared(16, 0, 0, 2, 4)).toBe(16);
@@ -553,4 +579,27 @@ describe("VT2 clipped projected demand", () => {
     );
     expect([...instanced.keys]).toEqual([...visibleOnly.keys]);
   });
+});
+
+it("many small surfaces must yield before completing all work", () => {
+ const scratch = createVirtualTextureDemandWorkspace(512);
+ const steps = collectVirtualTextureDemandSteps(scratch, manifest, Array(10000).fill(surface), [view()], sampler);
+ const first = steps.next();
+ expect(first.done).not.toBe(true);
+});
+
+it.each([false, true])("yields across small instances even when culled=%s", (culled) => {
+  const count = 1000;
+  const localModels = new Float32Array(count * 16);
+  for (let i = 0; i < count; i++) {
+    const model = identityMat4();
+    if (culled) model[12] = 100;
+    localModels.set(model, i * 16);
+  }
+  const scratch = createVirtualTextureDemandWorkspace(512);
+  const steps = collectVirtualTextureDemandSteps(scratch, manifest,
+    [{ ...surface, instances: { count, localModels } }], [view()], sampler);
+  expect(steps.next().done).not.toBe(true);
+  while (!steps.next().done) { /* Complete traversal after observing a yield. */ }
+  expect(scratch.count > 0).toBe(!culled);
 });

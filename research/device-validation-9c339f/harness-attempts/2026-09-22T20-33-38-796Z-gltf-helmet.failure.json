@@ -1,0 +1,20 @@
+{
+  "browserDiagnostics": {
+    "droppedEntries": 0,
+    "entries": []
+  },
+  "cameraDrag": true,
+  "coldCache": true,
+  "error": "Error: Timed out waiting for WebKit response after 60000ms\n    at Timeout._onTimeout (file:///home/neftaly/dev/royal/apps/examples-react/scripts/ipad-safari-benchmark.mjs:219:16)\n    at listOnTimeout (node:internal/timers:605:17)\n    at process.processTimers (node:internal/timers:541:7)",
+  "expectedSource": {
+    "buildId": "9c339f99bb3c-clean-mud4qg2z",
+    "builtAt": "2026-09-22T20:31:32.804Z",
+    "dirty": false,
+    "revision": "9c339f99bb3c117a3aa9fccfe91758fef44787ec"
+  },
+  "generatedAt": "2026-09-22T20:33:38.796Z",
+  "page": {
+    "captureError": "Timed out waiting for WebKit response after 5000ms"
+  },
+  "route": "/gltf-helmet"
+}

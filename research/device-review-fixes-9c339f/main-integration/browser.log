@@ -1,0 +1,116 @@
+
+DevTools listening on ws://127.0.0.1:4574/devtools/browser/4365def8-1d12-40a5-8ae3-96e9581a0d79
+  ➜  Local:   http://127.0.0.1:4573/
+connecting browser smoke CDP session
+[3179537:3179578:0926/164057.289299:ERROR:crypto/nss_util.cc:377] After loading Root Certs, loaded==false: NSS error code: -8018
+connected browser smoke CDP session
+gpu software behavior oracle (verified by rendered routes)
+[3179585:3179585:0926/164057.850836:ERROR:gpu/command_buffer/service/gl_utils.cc:427] [.WebGL-0x160c001b1600]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[3179585:3179585:0926/164057.892148:ERROR:gpu/command_buffer/service/gl_utils.cc:427] [.WebGL-0x160c001b1600]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[3179585:3179585:0926/164057.898305:ERROR:gpu/command_buffer/service/gl_utils.cc:427] [.WebGL-0x160c001b1600]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[3179585:3179585:0926/164058.001037:ERROR:gpu/command_buffer/service/gl_utils.cc:427] [.WebGL-0x160c001b1600]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+ok cube buckets=18 painted=0.114 luma=0.240 p25=0.061 p50=0.281 p75=0.473 chroma=0.515 saturation=0.881
+ok wireframe buckets=12 painted=0.015 luma=0.735 p25=0.754 p50=0.757 p75=0.764 chroma=0.623 saturation=0.650
+[3179537:3179574:0926/164101.538242:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+ok picking buckets=81 painted=0.449 luma=0.189 p25=0.098 p50=0.098 p75=0.237 chroma=0.068 saturation=0.349
+[3179537:3179537:0926/164122.044238:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.Properties.GetAll: object_path= /org/freedesktop/UPower/devices/DisplayDevice: org.freedesktop.DBus.Error.NoReply: Did not receive a reply. Possible causes include: the remote application did not send a reply, the message bus security policy blocked the reply, the reply timeout expired, or the network connection was broken.
+ok texture-transition kind=base-color fallback=0.322,0.294,0.259 authored=0.086,0.093,0.061
+ok texture-materials buckets=78 painted=0.121 luma=0.337 p25=0.170 p50=0.286 p75=0.511 chroma=0.070 saturation=0.305
+[3179537:3179574:0926/164124.796127:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+ok texture-transition kind=virtual fallback=0.498,0.498,0.498 authored=0.398,0.325,0.371
+ok virtual-texture-stress buckets=85 painted=0.720 luma=0.452 p25=0.321 p50=0.509 p75=0.597 chroma=0.376 saturation=0.594
+ok standard-lighting buckets=57 painted=0.093 luma=0.362 p25=0.224 p50=0.399 p75=0.472 chroma=0.388 saturation=0.656
+ok bounded-volume zero-contribution pixel parity
+ok bounded-volume buckets=13 painted=0.043 luma=0.255 p25=0.070 p50=0.166 p75=0.406 chroma=0.352 saturation=0.714
+probe secondary-texture normal
+[3179537:3179574:0926/164212.941042:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+ok texture-transition kind=secondary probe=normal fallback=0.078,0.183,0.216 authored=0.318,0.448,0.508 {
+  changedPixels: 13745,
+  changedRatio: 0.052433013916015625,
+  materialChangedPixels: 6558,
+  materialChangedRatio: 0.0500335693359375,
+  materialMaximumDelta: 0.734640522875817,
+  materialMeanDelta: 0.011530767702588863,
+  maximumDelta: 0.734640522875817,
+  meanDelta: 0.01159304949193209
+} {
+  changedPixels: 0,
+  changedRatio: 0,
+  materialChangedPixels: 0,
+  materialChangedRatio: 0,
+  materialMaximumDelta: 0,
+  materialMeanDelta: 0,
+  maximumDelta: 0,
+  meanDelta: 0
+}
+ok gltf-helmet buckets=76 painted=0.053 luma=0.407 p25=0.238 p50=0.427 p75=0.524 chroma=0.118 saturation=0.301
+probe secondary-texture metallic-roughness
+ok texture-transition kind=secondary probe=metallic-roughness fallback=0.078,0.183,0.216 authored=0.318,0.448,0.508 {
+  changedPixels: 13745,
+  changedRatio: 0.052433013916015625,
+  materialChangedPixels: 6558,
+  materialChangedRatio: 0.0500335693359375,
+  materialMaximumDelta: 0.734640522875817,
+  materialMeanDelta: 0.011530767702588863,
+  maximumDelta: 0.734640522875817,
+  meanDelta: 0.01159304949193209
+} {
+  changedPixels: 0,
+  changedRatio: 0,
+  materialChangedPixels: 0,
+  materialChangedRatio: 0,
+  materialMaximumDelta: 0,
+  materialMeanDelta: 0,
+  maximumDelta: 0,
+  meanDelta: 0
+}
+ok gltf-helmet buckets=76 painted=0.053 luma=0.407 p25=0.238 p50=0.427 p75=0.524 chroma=0.118 saturation=0.301
+probe secondary-texture occlusion
+ok texture-transition kind=secondary probe=occlusion fallback=0.078,0.183,0.216 authored=0.318,0.448,0.508 {
+  changedPixels: 13745,
+  changedRatio: 0.052433013916015625,
+  materialChangedPixels: 6558,
+  materialChangedRatio: 0.0500335693359375,
+  materialMaximumDelta: 0.734640522875817,
+  materialMeanDelta: 0.011530767702588863,
+  maximumDelta: 0.734640522875817,
+  meanDelta: 0.01159304949193209
+} {
+  changedPixels: 0,
+  changedRatio: 0,
+  materialChangedPixels: 0,
+  materialChangedRatio: 0,
+  materialMaximumDelta: 0,
+  materialMeanDelta: 0,
+  maximumDelta: 0,
+  meanDelta: 0
+}
+ok gltf-helmet buckets=76 painted=0.053 luma=0.407 p25=0.238 p50=0.427 p75=0.524 chroma=0.118 saturation=0.301
+probe secondary-texture emissive
+ok texture-transition kind=secondary probe=emissive fallback=0.318,0.448,0.508 authored=0.318,0.448,0.508 {
+  changedPixels: 129,
+  changedRatio: 0.000492095947265625,
+  materialChangedPixels: 103,
+  materialChangedRatio: 0.00078582763671875,
+  materialMaximumDelta: 0.006535947712418301,
+  materialMeanDelta: 0.000004956613179125802,
+  maximumDelta: 0.00784313725490196,
+  meanDelta: 0.0000031664480570874096
+} {
+  changedPixels: 0,
+  changedRatio: 0,
+  materialChangedPixels: 0,
+  materialChangedRatio: 0,
+  materialMaximumDelta: 0,
+  materialMeanDelta: 0,
+  maximumDelta: 0,
+  meanDelta: 0
+}
+ok gltf-helmet buckets=76 painted=0.053 luma=0.407 p25=0.238 p50=0.427 p75=0.524 chroma=0.118 saturation=0.301
+ok gltf-scenes buckets=45 painted=0.999 luma=0.221 p25=0.131 p50=0.198 p75=0.291 chroma=0.039 saturation=0.205
+ok gltf-instancing buckets=193 painted=0.235 luma=0.499 p25=0.448 p50=0.504 p75=0.556 chroma=0.272 saturation=0.414
+ok gltf-lab buckets=1 painted=0.195 luma=0.270 p25=0.270 p50=0.270 p75=0.271 chroma=0.854 saturation=0.919
+ok gltf-lod buckets=22 painted=0.085 luma=0.741 p25=0.756 p50=0.758 p75=0.758 chroma=0.577 saturation=0.615
+ok gltf-variants buckets=10 painted=0.089 luma=0.645 p25=0.454 p50=0.737 p75=0.753 chroma=0.395 saturation=0.436
+ok webxr-vr vao-ownership buckets=94 painted=0.425 luma=0.592 p25=0.579 p50=0.595 p75=0.615 chroma=0.167 saturation=0.235
+ok react-canvas-lifecycle frames=1->4 pageRequests=9

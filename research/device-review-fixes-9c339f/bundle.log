@@ -1,0 +1,10 @@
+$ node scripts/check-bundle-size.mjs
+React baseline:       59.3 kB gzip
+Royal initial:        145.5 kB gzip
+Royal incremental:    86.3 kB gzip
+Royal glTF initial:   146.5 kB gzip
+glTF authoring delta: 1.0 kB gzip
+Royal lazy chunks:    220.1 kB gzip
+Royal worker assets:  112.7 kB gzip
+Royal deployed JS:    365.6 kB gzip
+Royal-only graph:     306.3 kB gzip

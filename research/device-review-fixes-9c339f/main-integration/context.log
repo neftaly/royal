@@ -1,0 +1,13 @@
+
+DevTools listening on ws://127.0.0.1:4574/devtools/browser/df7e7d29-163b-4293-be8b-d5484617f64d
+  ➜  Local:   http://127.0.0.1:4573/
+connecting browser smoke CDP session
+connected browser smoke CDP session
+gpu software behavior oracle (verified by rendered routes)
+[3183319:3183351:0926/164305.081233:ERROR:crypto/nss_util.cc:377] After loading Root Certs, loaded==false: NSS error code: -8018
+[3183372:3183372:0926/164305.352066:ERROR:gpu/command_buffer/service/gl_utils.cc:427] [.WebGL-0x10a4001b2e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[3183372:3183372:0926/164305.376625:ERROR:gpu/command_buffer/service/gl_utils.cc:427] [.WebGL-0x10a4001b2e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[3183372:3183372:0926/164305.380036:ERROR:gpu/command_buffer/service/gl_utils.cc:427] [.WebGL-0x10a4001b2e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[3183372:3183372:0926/164305.463669:ERROR:gpu/command_buffer/service/gl_utils.cc:427] [.WebGL-0x10a4001b2e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+ok context-loss generation=2 painted=9166
+ok cube buckets=18 painted=0.114 luma=0.240 p25=0.061 p50=0.281 p75=0.473 chroma=0.515 saturation=0.881

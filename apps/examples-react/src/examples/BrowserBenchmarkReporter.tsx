@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import { frameStats as summarizeFrameStats } from "../benchmark-statistics";
+import { measureCameraFrame, nextBenchmarkFrame as nextRaf } from "../benchmark-frame-clock";
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Example } from '../examples';
 import { benchmarkWarnings } from '../benchmark-warnings';
@@ -441,19 +442,6 @@ const deltaRendererSnapshot = (
   };
 };
 
-const nextRaf = (deadline: number): Promise<number | null> =>
-  new Promise((resolve) => {
-    let settled = false;
-    const finish = (value: number | null): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      resolve(value);
-    };
-    const timeout = setTimeout(() => finish(null), Math.max(1, deadline - performance.now()));
-    requestAnimationFrame((time) => finish(time));
-  });
-
 const waitForReady = async (timeoutMs: number): Promise<boolean> => {
   const deadline = performance.now() + timeoutMs;
   let stableResourceCount = -1;
@@ -535,11 +523,13 @@ const sampleCameraDragFrames = async (
   const deltas: number[] = [];
   try {
     for (let index = 0; index < frames; index += 1) {
-      const startedAt = performance.now();
-      dispatch('pointermove', clientXAt(index + 1), 1);
-      const frameAt = await nextRaf(deadline);
-      if (frameAt === null) break;
-      deltas.push(frameAt - startedAt);
+      const elapsed = await measureCameraFrame(
+        () => dispatch('pointermove', clientXAt(index + 1), 1),
+        () => rendererSnapshot()?.frame,
+        deadline,
+      );
+      if (elapsed === null) break;
+      deltas.push(elapsed);
     }
   } finally {
     dispatch('pointerup', clientXAt(deltas.length), 0);

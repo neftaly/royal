@@ -1,0 +1,652 @@
+{
+  "source": {
+    "buildId": "9c339f99bb3c-dirty-muf8dvap",
+    "builtAt": "2026-09-24T07:49:16.816Z",
+    "dirty": true,
+    "revision": "9c339f99bb3c117a3aa9fccfe91758fef44787ec"
+  },
+  "before": {
+    "frame": 168,
+    "gltfInstancing": null,
+    "gltfLoadDiagnostics": {
+      "assets": [
+        {
+          "imageCandidates": 69,
+          "imageFailures": 0,
+          "imagesLoaded": 69,
+          "imageRequests": 69,
+          "lightCount": 0,
+          "nodeCount": 1,
+          "phaseMs": {
+            "firstUsable": 1975.7999999999302,
+            "imagesComplete": 4606.199999999953,
+            "preparation": 572.5,
+            "preparationQueue": 26.900000000023283,
+            "externalResourceRead": 1347,
+            "sourceRead": 26.899999999906868,
+            "sourceReadStart": 2.5
+          },
+          "primitiveCount": 103,
+          "sceneIndex": 0,
+          "src": "/fixtures/scenes/Sponza/glTF/Sponza.gltf",
+          "status": "ready",
+          "variantNames": []
+        }
+      ]
+    },
+    "lifecycle": {
+      "generation": 1,
+      "interruptions": 0,
+      "recoveries": 0,
+      "state": "available"
+    },
+    "resourcePressure": {
+      "activePreparationJobs": 0,
+      "activeTexturePreparations": 0,
+      "admittedGeometryUploadBytes": 0,
+      "admittedOrdinaryTextureUploadBytes": 340,
+      "sourceReservationLimit": 64,
+      "sourceReservations": 0,
+      "decodedTextureHandoffBytes": 0,
+      "decodedTextureHandoffThresholdBytes": 67108864,
+      "deferredGeometryUploads": 0,
+      "deferredOrdinaryTextureUploads": 0,
+      "ordinaryTextureUploadBudgetBytes": 33554432,
+      "preparationJobLimit": 8,
+      "queuedDetailPreparationJobs": 0,
+      "queuedForegroundPreparationJobs": 0,
+      "queuedPreparationJobs": 0,
+      "persistentGpuBudgetBytes": 268435456,
+      "persistentGpuDeniedClaims": 0,
+      "persistentGpuRetainedBytes": 220307044,
+      "pendingOrdinaryTextureStorageRepresentations": 0,
+      "pendingSurfaceUploads": 0
+    },
+    "textureResidency": {
+      "bytes": 165257384,
+      "compressedBytes": 0,
+      "compressedResources": 0,
+      "fitted": 68,
+      "resources": 69
+    },
+    "virtualTexturing": {
+      "visibleDetailFraction": 1,
+      "idleAstcPixelHits": 3,
+      "retainedPagePixelBytes": 348480,
+      "idleAstcBytes": 185856,
+      "pageQueueMs": 11.500000000349246,
+      "pageReadMs": 498.1999999996042,
+      "pageReadyWaitMs": 19968.59999999951,
+      "pageTimedReads": 502,
+      "pageTimedUploads": 502,
+      "atlasGrowthFrames": 23,
+      "admittedUploadBytes": 340,
+      "atlasBytes": 35870208,
+      "atlasPools": 1,
+      "atlasGrowthFailures": 0,
+      "desiredPages": 488,
+      "admittedPages": 488,
+      "unresidentPages": 0,
+      "automaticCandidates": 25,
+      "automaticDecodedBytes": 53654112,
+      "automaticIneligible": 1,
+      "automaticResources": 24,
+      "automaticWaiting": 0,
+      "deferredUploads": 0,
+      "failedPages": 0,
+      "pageRequests": 502,
+      "pendingPages": 0,
+      "pendingPageBytes": 0,
+      "pendingPageByteLimit": 16777216,
+      "residentPages": 502,
+      "uploadedPages": 502,
+      "uploadBudgetBytes": 33554432
+    }
+  },
+  "probe": {
+    "running": false,
+    "before": {
+      "frame": 168,
+      "gltfInstancing": null,
+      "gltfLoadDiagnostics": {
+        "assets": [
+          {
+            "imageCandidates": 69,
+            "imageFailures": 0,
+            "imagesLoaded": 69,
+            "imageRequests": 69,
+            "lightCount": 0,
+            "nodeCount": 1,
+            "phaseMs": {
+              "firstUsable": 1975.7999999999302,
+              "imagesComplete": 4606.199999999953,
+              "preparation": 572.5,
+              "preparationQueue": 26.900000000023283,
+              "externalResourceRead": 1347,
+              "sourceRead": 26.899999999906868,
+              "sourceReadStart": 2.5
+            },
+            "primitiveCount": 103,
+            "sceneIndex": 0,
+            "src": "/fixtures/scenes/Sponza/glTF/Sponza.gltf",
+            "status": "ready",
+            "variantNames": []
+          }
+        ]
+      },
+      "lifecycle": {
+        "generation": 1,
+        "interruptions": 0,
+        "recoveries": 0,
+        "state": "available"
+      },
+      "resourcePressure": {
+        "activePreparationJobs": 0,
+        "activeTexturePreparations": 0,
+        "admittedGeometryUploadBytes": 0,
+        "admittedOrdinaryTextureUploadBytes": 340,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0,
+        "decodedTextureHandoffBytes": 0,
+        "decodedTextureHandoffThresholdBytes": 67108864,
+        "deferredGeometryUploads": 0,
+        "deferredOrdinaryTextureUploads": 0,
+        "ordinaryTextureUploadBudgetBytes": 33554432,
+        "preparationJobLimit": 8,
+        "queuedDetailPreparationJobs": 0,
+        "queuedForegroundPreparationJobs": 0,
+        "queuedPreparationJobs": 0,
+        "persistentGpuBudgetBytes": 268435456,
+        "persistentGpuDeniedClaims": 0,
+        "persistentGpuRetainedBytes": 220307044,
+        "pendingOrdinaryTextureStorageRepresentations": 0,
+        "pendingSurfaceUploads": 0
+      },
+      "textureResidency": {
+        "bytes": 165257384,
+        "compressedBytes": 0,
+        "compressedResources": 0,
+        "fitted": 68,
+        "resources": 69
+      },
+      "virtualTexturing": {
+        "visibleDetailFraction": 1,
+        "idleAstcPixelHits": 3,
+        "retainedPagePixelBytes": 348480,
+        "idleAstcBytes": 185856,
+        "pageQueueMs": 11.500000000349246,
+        "pageReadMs": 498.1999999996042,
+        "pageReadyWaitMs": 19968.59999999951,
+        "pageTimedReads": 502,
+        "pageTimedUploads": 502,
+        "atlasGrowthFrames": 23,
+        "admittedUploadBytes": 340,
+        "atlasBytes": 35870208,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 488,
+        "admittedPages": 488,
+        "unresidentPages": 0,
+        "automaticCandidates": 25,
+        "automaticDecodedBytes": 53654112,
+        "automaticIneligible": 1,
+        "automaticResources": 24,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 502,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 502,
+        "uploadedPages": 502,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/152.0.0.44.30.1069357998 Chrome/152.0.7977.64 VR Safari/537.36",
+    "samples": [
+      {
+        "ms": 27.900000000023283,
+        "frameDelta": 1
+      },
+      {
+        "ms": 6.800000000046566,
+        "frameDelta": 1
+      },
+      {
+        "ms": 26.699999999953434,
+        "frameDelta": 1
+      },
+      {
+        "ms": 54.89999999990687,
+        "frameDelta": 1
+      },
+      {
+        "ms": 11.399999999906868,
+        "frameDelta": 1
+      },
+      {
+        "ms": 27.099999999976717,
+        "frameDelta": 1
+      },
+      {
+        "ms": 11.599999999976717,
+        "frameDelta": 1
+      },
+      {
+        "ms": 34.40000000002328,
+        "frameDelta": 1
+      },
+      {
+        "ms": 21,
+        "frameDelta": 1
+      },
+      {
+        "ms": 24,
+        "frameDelta": 1
+      },
+      {
+        "ms": 46,
+        "frameDelta": 1
+      },
+      {
+        "ms": 7.300000000046566,
+        "frameDelta": 1
+      },
+      {
+        "ms": 13.5,
+        "frameDelta": 1
+      },
+      {
+        "ms": 8.5,
+        "frameDelta": 1
+      },
+      {
+        "ms": 28.199999999953434,
+        "frameDelta": 1
+      },
+      {
+        "ms": 30.099999999976717,
+        "frameDelta": 1
+      },
+      {
+        "ms": 9.5,
+        "frameDelta": 1
+      },
+      {
+        "ms": 12.699999999953434,
+        "frameDelta": 1
+      },
+      {
+        "ms": 43.699999999953434,
+        "frameDelta": 1
+      },
+      {
+        "ms": 22.900000000023283,
+        "frameDelta": 1
+      },
+      {
+        "ms": 22.5,
+        "frameDelta": 1
+      },
+      {
+        "ms": 8.300000000046566,
+        "frameDelta": 1
+      },
+      {
+        "ms": 37.09999999997672,
+        "frameDelta": 1
+      },
+      {
+        "ms": 20.400000000023283,
+        "frameDelta": 1
+      },
+      {
+        "ms": 20.699999999953434,
+        "frameDelta": 1
+      },
+      {
+        "ms": 11.599999999976717,
+        "frameDelta": 1
+      },
+      {
+        "ms": 21.300000000046566,
+        "frameDelta": 1
+      },
+      {
+        "ms": 23.199999999953434,
+        "frameDelta": 1
+      },
+      {
+        "ms": 10.800000000046566,
+        "frameDelta": 1
+      },
+      {
+        "ms": 21.900000000023283,
+        "frameDelta": 1
+      },
+      {
+        "ms": 13.199999999953434,
+        "frameDelta": 1
+      },
+      {
+        "ms": 20.300000000046566,
+        "frameDelta": 1
+      },
+      {
+        "ms": 11.099999999976717,
+        "frameDelta": 1
+      },
+      {
+        "ms": 10.199999999953434,
+        "frameDelta": 1
+      },
+      {
+        "ms": 22.600000000093132,
+        "frameDelta": 1
+      },
+      {
+        "ms": 11.79999999993015,
+        "frameDelta": 1
+      },
+      {
+        "ms": 21.5,
+        "frameDelta": 1
+      },
+      {
+        "ms": 22.800000000046566,
+        "frameDelta": 1
+      },
+      {
+        "ms": 22.300000000046566,
+        "frameDelta": 1
+      },
+      {
+        "ms": 21.79999999993015,
+        "frameDelta": 1
+      },
+      {
+        "ms": 21.900000000023283,
+        "frameDelta": 1
+      },
+      {
+        "ms": 12.400000000023283,
+        "frameDelta": 1
+      },
+      {
+        "ms": 21.70000000006985,
+        "frameDelta": 1
+      },
+      {
+        "ms": 23.79999999993015,
+        "frameDelta": 1
+      },
+      {
+        "ms": 10.20000000006985,
+        "frameDelta": 1
+      },
+      {
+        "ms": 21.099999999976717,
+        "frameDelta": 1
+      },
+      {
+        "ms": 10,
+        "frameDelta": 1
+      },
+      {
+        "ms": 13.400000000023283,
+        "frameDelta": 1
+      },
+      {
+        "ms": 43.90000000002328,
+        "frameDelta": 1
+      },
+      {
+        "ms": 10.400000000023283,
+        "frameDelta": 1
+      },
+      {
+        "ms": 23,
+        "frameDelta": 1
+      },
+      {
+        "ms": 22.099999999976717,
+        "frameDelta": 1
+      },
+      {
+        "ms": 10.199999999953434,
+        "frameDelta": 1
+      },
+      {
+        "ms": 23.5,
+        "frameDelta": 1
+      },
+      {
+        "ms": 19.400000000023283,
+        "frameDelta": 1
+      },
+      {
+        "ms": 12.100000000093132,
+        "frameDelta": 1
+      },
+      {
+        "ms": 22.099999999976717,
+        "frameDelta": 1
+      },
+      {
+        "ms": 12.29999999993015,
+        "frameDelta": 1
+      },
+      {
+        "ms": 21.600000000093132,
+        "frameDelta": 1
+      },
+      {
+        "ms": 23.899999999906868,
+        "frameDelta": 1
+      }
+    ],
+    "after": {
+      "frame": 228,
+      "gltfInstancing": null,
+      "gltfLoadDiagnostics": {
+        "assets": [
+          {
+            "imageCandidates": 69,
+            "imageFailures": 0,
+            "imagesLoaded": 69,
+            "imageRequests": 69,
+            "lightCount": 0,
+            "nodeCount": 1,
+            "phaseMs": {
+              "firstUsable": 1975.7999999999302,
+              "imagesComplete": 4606.199999999953,
+              "preparation": 572.5,
+              "preparationQueue": 26.900000000023283,
+              "externalResourceRead": 1347,
+              "sourceRead": 26.899999999906868,
+              "sourceReadStart": 2.5
+            },
+            "primitiveCount": 103,
+            "sceneIndex": 0,
+            "src": "/fixtures/scenes/Sponza/glTF/Sponza.gltf",
+            "status": "ready",
+            "variantNames": []
+          }
+        ]
+      },
+      "lifecycle": {
+        "generation": 1,
+        "interruptions": 0,
+        "recoveries": 0,
+        "state": "available"
+      },
+      "resourcePressure": {
+        "activePreparationJobs": 0,
+        "activeTexturePreparations": 0,
+        "admittedGeometryUploadBytes": 0,
+        "admittedOrdinaryTextureUploadBytes": 0,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0,
+        "decodedTextureHandoffBytes": 0,
+        "decodedTextureHandoffThresholdBytes": 67108864,
+        "deferredGeometryUploads": 0,
+        "deferredOrdinaryTextureUploads": 0,
+        "ordinaryTextureUploadBudgetBytes": 33554432,
+        "preparationJobLimit": 8,
+        "queuedDetailPreparationJobs": 0,
+        "queuedForegroundPreparationJobs": 0,
+        "queuedPreparationJobs": 0,
+        "persistentGpuBudgetBytes": 268435456,
+        "persistentGpuDeniedClaims": 0,
+        "persistentGpuRetainedBytes": 220307044,
+        "pendingOrdinaryTextureStorageRepresentations": 0,
+        "pendingSurfaceUploads": 0
+      },
+      "textureResidency": {
+        "bytes": 165257384,
+        "compressedBytes": 0,
+        "compressedResources": 0,
+        "fitted": 68,
+        "resources": 69
+      },
+      "virtualTexturing": {
+        "pendingDemandResources": 24,
+        "visibleDetailFraction": 1,
+        "idleAstcPixelHits": 3,
+        "retainedPagePixelBytes": 557568,
+        "idleAstcBytes": 185856,
+        "pageQueueMs": 11.900000000372529,
+        "pageReadMs": 505.59999999962747,
+        "pageReadyWaitMs": 20128.79999999958,
+        "pageTimedReads": 509,
+        "pageTimedUploads": 509,
+        "atlasGrowthFrames": 23,
+        "admittedUploadBytes": 0,
+        "atlasBytes": 35870208,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 500,
+        "admittedPages": 500,
+        "unresidentPages": 0,
+        "automaticCandidates": 25,
+        "automaticDecodedBytes": 53863200,
+        "automaticIneligible": 1,
+        "automaticResources": 24,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 509,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 509,
+        "uploadedPages": 509,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    "p50Ms": 21.5,
+    "p95Ms": 43.90000000002328,
+    "maxMs": 54.89999999990687,
+    "pass": true
+  },
+  "settled": {
+    "frame": 311,
+    "gltfInstancing": null,
+    "gltfLoadDiagnostics": {
+      "assets": [
+        {
+          "imageCandidates": 69,
+          "imageFailures": 0,
+          "imagesLoaded": 69,
+          "imageRequests": 69,
+          "lightCount": 0,
+          "nodeCount": 1,
+          "phaseMs": {
+            "firstUsable": 1975.7999999999302,
+            "imagesComplete": 4606.199999999953,
+            "preparation": 572.5,
+            "preparationQueue": 26.900000000023283,
+            "externalResourceRead": 1347,
+            "sourceRead": 26.899999999906868,
+            "sourceReadStart": 2.5
+          },
+          "primitiveCount": 103,
+          "sceneIndex": 0,
+          "src": "/fixtures/scenes/Sponza/glTF/Sponza.gltf",
+          "status": "ready",
+          "variantNames": []
+        }
+      ]
+    },
+    "lifecycle": {
+      "generation": 1,
+      "interruptions": 0,
+      "recoveries": 0,
+      "state": "available"
+    },
+    "resourcePressure": {
+      "activePreparationJobs": 0,
+      "activeTexturePreparations": 0,
+      "admittedGeometryUploadBytes": 0,
+      "admittedOrdinaryTextureUploadBytes": 0,
+      "sourceReservationLimit": 64,
+      "sourceReservations": 0,
+      "decodedTextureHandoffBytes": 0,
+      "decodedTextureHandoffThresholdBytes": 67108864,
+      "deferredGeometryUploads": 0,
+      "deferredOrdinaryTextureUploads": 0,
+      "ordinaryTextureUploadBudgetBytes": 33554432,
+      "preparationJobLimit": 8,
+      "queuedDetailPreparationJobs": 0,
+      "queuedForegroundPreparationJobs": 0,
+      "queuedPreparationJobs": 0,
+      "persistentGpuBudgetBytes": 268435456,
+      "persistentGpuDeniedClaims": 0,
+      "persistentGpuRetainedBytes": 220307044,
+      "pendingOrdinaryTextureStorageRepresentations": 0,
+      "pendingSurfaceUploads": 0
+    },
+    "textureResidency": {
+      "bytes": 165257384,
+      "compressedBytes": 0,
+      "compressedResources": 0,
+      "fitted": 68,
+      "resources": 69
+    },
+    "virtualTexturing": {
+      "visibleDetailFraction": 1,
+      "idleAstcPixelHits": 4,
+      "idleAstcSourceReads": 1,
+      "retainedPagePixelBytes": 487872,
+      "idleAstcBytes": 185856,
+      "pageQueueMs": 11.900000000372529,
+      "pageReadMs": 505.59999999962747,
+      "pageReadyWaitMs": 20128.79999999958,
+      "pageTimedReads": 509,
+      "pageTimedUploads": 509,
+      "atlasGrowthFrames": 23,
+      "admittedUploadBytes": 0,
+      "atlasBytes": 35870208,
+      "atlasPools": 1,
+      "atlasGrowthFailures": 0,
+      "desiredPages": 488,
+      "admittedPages": 488,
+      "unresidentPages": 0,
+      "automaticCandidates": 25,
+      "automaticDecodedBytes": 53801248,
+      "automaticIneligible": 1,
+      "automaticResources": 24,
+      "automaticWaiting": 0,
+      "deferredUploads": 0,
+      "failedPages": 0,
+      "pageRequests": 509,
+      "pendingPages": 0,
+      "pendingPageBytes": 0,
+      "pendingPageByteLimit": 16777216,
+      "residentPages": 509,
+      "uploadedPages": 509,
+      "uploadBudgetBytes": 33554432
+    }
+  }
+}

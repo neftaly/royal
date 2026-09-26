@@ -1882,7 +1882,11 @@ export class CanvasRoot implements RendererRoot {
         );
         this.#surfaceResourcesPending = this.#surfaceGpu.surfacePublicationsPending();
         if (worldPending || overlayPending) {
-          if (this.#surfaceResourcesPending || this.#overlay.resourcesPending) {
+          if (worldPending && this.#surfaceGpu.viewWorkPending) {
+            // Demand traversal and atlas migration cannot advance in a resource-
+            // only flush, even while other surfaces are still being published.
+            this.#invalidatePresentation();
+          } else if (this.#surfaceResourcesPending || this.#overlay.resourcesPending) {
             this.#clock.invalidate();
           } else if (worldPending) this.#invalidatePresentation();
           else this.#invalidateOverlayPresentation();

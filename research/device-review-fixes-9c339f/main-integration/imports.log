@@ -1,0 +1,14 @@
+$ node scripts/package-import-smoke.mjs
+ok @royal/renderer-core
+ok @royal/renderer-core/render-object
+ok @royal/renderer-core/package.json
+ok @royal/renderer-webgl
+ok @royal/renderer-webgl/capture
+ok @royal/renderer-webgl/ktx2
+ok @royal/renderer-webgl/xr
+ok @royal/renderer-webgl/package.json
+ok @royal/react
+ok @royal/react/capture
+ok @royal/react/scene
+ok @royal/react/xr
+ok @royal/react/package.json
