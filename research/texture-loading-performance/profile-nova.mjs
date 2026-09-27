@@ -39,6 +39,12 @@ try{
  }
  await session.call('Page.addScriptToEvaluateOnNewDocument',{source:await readFile(new URL((timingOnly||cpuOnly)?'./timing-probe.js':'./browser-probe.js',import.meta.url),'utf8')});
  await session.call('Page.addScriptToEvaluateOnNewDocument',{source:`window.__royalLoadingProbe.sample=()=>{${await readFile(new URL('./device-sample.js',import.meta.url),'utf8')}};`});
+ if(process.env.ROYAL_PROFILE_SUPPORT_COUNTS==='1')await session.call('Page.addScriptToEvaluateOnNewDocument',{source:`
+ const supportWorkers=new WeakSet();const NativeWorker=Worker;
+ window.Worker=new Proxy(NativeWorker,{construct(target,args){const worker=Reflect.construct(target,args);if(String(args[0]).includes('support-worker'))supportWorkers.add(worker);return worker;}});
+ const post=NativeWorker.prototype.postMessage;
+ NativeWorker.prototype.postMessage=function(message,...args){if(supportWorkers.has(this)&&message?.method==='prepare'){const counts=window.__royalLoadingProbe.counts;counts.supportPreparations=(counts.supportPreparations??0)+1;}return post.call(this,message,...args);};
+ `});
  const requests=new Map();
  session.on('Network.requestWillBeSent',e=>{const r={id:e.requestId,url:e.request.url,type:e.type,start:e.timestamp};requests.set(e.requestId,r);result.requests.push(r);});
  session.on('Network.responseReceived',e=>Object.assign(requests.get(e.requestId)??{}, {status:e.response.status,mime:e.response.mimeType,response:e.timestamp,timing:e.response.timing,fromCache:e.response.fromDiskCache}));

@@ -35,6 +35,29 @@ describe("browser texture decode shell", () => {
     releases.splice(0).forEach(release => release()); await Promise.all(small);
   });
 
+  it("keeps aggregate native raster bytes bounded with sixteen preparation slots", async () => {
+    const releases: (() => void)[] = [];
+    const create = vi.fn(() => new Promise<ImageBitmap>(resolve => releases.push(() => resolve({
+      width: 1, height: 1, close: vi.fn(),
+    } as unknown as ImageBitmap))));
+    vi.stubGlobal("createImageBitmap", create);
+    const decoder = createBrowserTextureDecoder(16);
+    const pending = Array.from({ length: 5 }, (_, index) => decoder.decode({
+      kind: "embedded-asset", label: `medium-${index}`, contentKey: `medium-${index}`,
+      bytes: createAvifHeader(2048, 2048), mimeType: "image/avif",
+    }, new AbortController().signal, 4));
+    // Each source costs 16 MiB plus encoded bytes: only three fit together.
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(3));
+    releases.shift()!();
+    await pending[0];
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(4));
+    releases.shift()!();
+    await pending[1];
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(5));
+    releases.splice(0).forEach(release => release());
+    await Promise.all(pending);
+  });
+
   it("transports known external sources ahead of bitmap decode without refetching", async () => {
     const bitmap = { close: vi.fn(), height: 4, width: 4 } as unknown as ImageBitmap;
     const createImageBitmap = vi.fn(async () => bitmap);

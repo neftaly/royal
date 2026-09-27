@@ -841,7 +841,10 @@ export class CanvasRoot implements RendererRoot {
         onListenerError: (error) => platform.onListenerError(error),
         onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
         ...(platform.now === undefined ? {} : { now: platform.now }),
-      }, Math.floor(resolvedOptions.persistentGpuByteBudget * 0.75), 4));
+      }, Math.floor(resolvedOptions.persistentGpuByteBudget * 0.75),
+      // Native byte admission bounds browser decode pressure independently of
+      // transport/preparation concurrency. Custom decoders do not share that gate.
+      browserTextureDecoder === undefined ? 4 : 16));
       this.#context = new ContextLifecycleOwner(platform.onListenerError);
       this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());
       construction.defer(() => {

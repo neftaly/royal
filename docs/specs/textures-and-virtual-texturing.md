@@ -468,7 +468,9 @@ Ordinary sources expose `useTextureAssetStatus(srcOrRef)`. Automatic VT progress
 ### Browser decode pressure and context recovery
 
 Native raster decodes share a 64 MiB estimated in-flight byte allowance as well
-as the decode-count limit. Source dimensions, rather than fitted output size,
+as the decode-count limit. The root admits sixteen browser texture preparations
+so transport and small decodes overlap; injected custom decoders retain a
+four-preparation ceiling because they do not share the native byte gate. Source dimensions, rather than fitted output size,
 control admission. An oversized or uninspectable raster runs alone; the allowance
 is a concurrency gate, not a hard cap on browser-native memory. Large AVIF rasters
 that require fitting use an image element and fitted canvas without first creating

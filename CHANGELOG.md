@@ -5,6 +5,8 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+- Allow sixteen browser texture preparations behind the native decode byte gate so small images can advance together; custom decoders retain the four-job ceiling.
+
 - Bound concurrent native raster decodes by estimated source bytes and fit large AVIF images without a full-size ImageBitmap intermediate. Request CPU-backed staging canvases and release their pixels after use.
 - Recover allocation failures that precede context-loss events, discard stale browser pixel sources and in-flight decode results, and restore blend/draw state after WebGL recovery.
 
