@@ -398,7 +398,7 @@ export const composeSurfaceTextureBindingsInto = (
   }
 };
 
-/** Only compact storage when every use is a base-color map with a resident VT root. */
+/** Only compact storage when every use is a base-color map with an available paging source or VT root. */
 export const collectVirtualFallbackStorageKeys = (
   materials: Iterable<CanonicalSurfaceMaterial>,
   available: (asset: TextureSourceRef) => boolean,

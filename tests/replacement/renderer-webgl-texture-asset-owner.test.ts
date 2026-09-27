@@ -19,6 +19,74 @@ const decoded = (close = vi.fn()): DecodedTextureSource => ({
 });
 
 describe("ordinary texture asset lifecycle owner", () => {
+  it("re-decodes browser-backed pixels after a GPU-process reset before their first upload", async () => {
+    const staleClose = vi.fn();
+    const stale = { ...decoded(staleClose), contextBound: true as const };
+    const fresh = { ...decoded(), contextBound: true as const };
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>().mockResolvedValueOnce(stale).mockResolvedValue(fresh);
+    const owner = new TextureAssetOwner({ decode, onAssetChanged: vi.fn(), onListenerError: vi.fn(), onSnapshotChanged: vi.fn() });
+    const asset = imageTexture("/context-backed.avif");
+    try {
+      owner.reconcile([asset]);
+      await waitFor(() => expect(owner.getSnapshot(asset).status).toBe("ready"));
+      owner.invalidateResidency();
+      expect(staleClose).toHaveBeenCalledOnce();
+      expect(owner.decoded(asset)).toBeUndefined();
+      await waitFor(() => expect(owner.decoded(asset)).toBe(fresh));
+      expect(decode).toHaveBeenCalledTimes(2);
+    } finally { owner.dispose(); }
+  });
+
+  it("retries browser pixels whose decode straddles context restoration", async () => {
+    let resolve!: (value: DecodedTextureSource) => void;
+    const close = vi.fn();
+    const fresh = { ...decoded(), contextBound: true as const };
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>()
+      .mockImplementationOnce(() => new Promise((done) => { resolve = done; }))
+      .mockResolvedValue(fresh);
+    const owner = new TextureAssetOwner({ decode, onAssetChanged: vi.fn(), onListenerError: vi.fn(), onSnapshotChanged: vi.fn() });
+    const asset = imageTexture("/in-flight-context.avif");
+    try {
+      owner.reconcile([asset]);
+      owner.invalidateResidency();
+      const stale = { ...decoded(close), contextBound: true as const };
+      resolve(stale);
+      await waitFor(() => expect(owner.decoded(asset)).toBe(fresh));
+      expect(close).toHaveBeenCalledOnce();
+      expect(decode).toHaveBeenCalledTimes(2);
+    } finally { owner.dispose(); }
+  });
+
+  it("prepares only the active working set across a tenfold catalogue and resumes after movement", async () => {
+    const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>().mockImplementation(async () => decoded());
+    const progress = vi.fn();
+    const owner = new TextureAssetOwner({ decode, onAssetChanged: vi.fn(), onListenerError: vi.fn(), onSnapshotChanged: progress });
+    const assets = Array.from({ length: 1000 }, (_, i) => imageTexture(`/working-set-${i}.png`));
+    const pageable = new Set(assets.map(textureStorageKey));
+    const active = new Set(assets.slice(0, 10).map(textureStorageKey));
+    try {
+      owner.reconcile(assets, [], 32 * 1024 * 1024, pageable, active);
+      await waitFor(() => expect(decode).toHaveBeenCalledTimes(10));
+      owner.releaseUploaded([...active]);
+      expect(owner.snapshot().pendingStorageRepresentations).toBe(0);
+      expect(owner.snapshot().sourceReservations).toBe(0);
+      expect(owner.getSourceSnapshot(assets[999]!)).toEqual({ status: "idle" });
+      const next = new Set(assets.slice(990).map(textureStorageKey));
+      owner.reconcile(assets, [], 32 * 1024 * 1024, pageable, next);
+      owner.invalidateStorageResidency([...active]);
+      await waitFor(() => expect(decode).toHaveBeenCalledTimes(20));
+      owner.releaseUploaded([...next]);
+      expect(owner.snapshot().pendingStorageRepresentations).toBe(0);
+      expect(owner.snapshot().sourceReservations).toBe(0);
+      progress.mockClear();
+      owner.invalidateResidency();
+      expect(progress).toHaveBeenCalledOnce();
+      expect(owner.getSourceSnapshot(assets[500]!)).toEqual({ status: "idle" });
+      await waitFor(() => expect(decode).toHaveBeenCalledTimes(30));
+      owner.releaseUploaded([...next]);
+      expect(owner.snapshot().sourceReservations).toBe(0);
+    } finally { owner.dispose(); }
+  });
   it("keeps an explicitly encoded ETC2 source distinct from auto-decoded bytes", () => {
     const ordinary = textureAsset({ contentKey: "hero", src: "/content" });
     const etc2 = { ...ordinary, sourceEncoding: "ktx2-etc2" as const };
@@ -905,6 +973,12 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(owner.getSnapshot(asset)).toEqual({ height: 32, status: "ready", width: 64 });
     expect(changed).toHaveBeenCalledTimes(2);
     expect(snapshotChanged).toHaveBeenCalledTimes(1);
+    expect(owner.snapshot().deniedStorageRepresentations).toBe(1);
+    owner.reconcile([asset]);
+    await waitFor(() => expect(owner.decoded(asset)).toBeDefined());
+    owner.releaseUploaded([textureStorageKey(asset)]);
+    expect(owner.snapshot().deniedStorageRepresentations ?? 0).toBe(0);
+    owner.dispose();
   });
 
   it("aborts and closes released content while ignoring stale completion", async () => {
@@ -954,4 +1028,23 @@ describe("ordinary texture asset lifecycle owner", () => {
     expect(changed).toHaveBeenCalledWith(decodedTextureKey(asset));
     expect(snapshotChanged).toHaveBeenCalledWith(decodedTextureKey(asset));
   });
+});
+
+
+it("charges pixels returned by an evicted lease until their ordinary upload completes", async () => {
+  const close = vi.fn(), source = decoded(close);
+  const owner = new TextureAssetOwner({ decode: async () => source, onAssetChanged: vi.fn(),
+    onListenerError: vi.fn(), onSnapshotChanged: vi.fn() });
+  const asset = imageTexture("/evicted-before-upload.png");
+  owner.reconcile([asset]);
+  await waitFor(() => expect(owner.getSnapshot(asset).status).toBe("ready"));
+  const lease = owner.acquireDecoded(asset)!;
+  expect(owner.snapshot().decodedHandoffBytes).toBe(0);
+  lease.release();
+  expect(owner.snapshot().decodedHandoffBytes).toBe(64 * 32 * 4);
+  expect(close).not.toHaveBeenCalled();
+  owner.releaseUploaded([textureStorageKey(asset)]);
+  expect(owner.snapshot().decodedHandoffBytes).toBe(0);
+  expect(close).toHaveBeenCalledOnce();
+  owner.dispose();
 });

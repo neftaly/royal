@@ -20,3 +20,8 @@ export const automaticVirtualTextureHasPreview = (
 
 export const texturePreviewReady = (preview: TexturePreviewSource): boolean =>
   preview.raster !== undefined;
+
+/** Shared atlases need no private 24-page reservation for each raster source. */
+export const reloadableRasterPagingEligible = (source: DecodedTextureSource): boolean =>
+  source.kind === undefined
+  && (source.sourceWidth ?? source.width) * (source.sourceHeight ?? source.height) > 2 * AUTOMATIC_VT_PAGE_SIZE ** 2;

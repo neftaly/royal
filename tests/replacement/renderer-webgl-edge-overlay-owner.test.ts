@@ -600,7 +600,7 @@ describe("edge-overlay batch ownership", () => {
     owner.dispose();
   });
 
-  it("releases a retained batch before a required target grows", () => {
+  it("preserves the old target when transactional growth cannot fit", () => {
     const gl = fakeGl();
     const budget = new PersistentGpuBudgetOwner(1_036);
     const owner = new EdgeOverlayOwner(
@@ -634,8 +634,11 @@ describe("edge-overlay batch ownership", () => {
 
     expect(gl.deleteBuffer).toHaveBeenCalledOnce();
     expect(gl.drawElementsInstanced).not.toHaveBeenCalled();
-    expect(gl.drawElements).toHaveBeenCalledTimes(2);
-    expect(budget.snapshot()).toMatchObject({ deniedClaims: 0, retainedBytes: 990 });
+    expect(gl.drawElements).not.toHaveBeenCalled();
+    expect(budget.snapshot()).toMatchObject({ deniedClaims: 1, retainedBytes: 900 });
+    owner.drawViews([view()], null, new WebGlStateOwner(gl), 1, 1,
+      (surface) => matchBySurface.get(surface)!);
+    expect(gl.drawElementsInstanced).toHaveBeenCalled();
     owner.dispose();
   });
 

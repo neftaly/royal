@@ -29,7 +29,7 @@ export class IdleAstcStorage {
       const bytes = slots * this.size ** 2 / 36 * 16;
       if (bytes > poolBytes) throw new Error("ASTC pool headroom denied");
       if (!admitAllocation()) return false;
-      if (!this.budget.tryClaim(identity, bytes)) throw new Error("ASTC migration budget denied");
+      if (!this.budget.tryClaimTexture(identity, bytes)) throw new Error("ASTC migration budget denied");
       const texture = gl.createTexture();
       if (texture === null) { this.budget.release(identity); throw new Error("ASTC allocation failed"); }
       this.#pending = { texture, identity, columns, rows, copied: 0, waits: 0 };

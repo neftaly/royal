@@ -1,0 +1,95 @@
+{
+  "production-unprofiled": {
+    "firstReadyMs": 59681,
+    "settledWindowMs": 62449.799999952316,
+    "firstImageSampleMs": 10777.299999952316,
+    "longTaskMs": 36272,
+    "gpuBytes": 26604862,
+    "residentImages": 325,
+    "residentPages": 207,
+    "desiredPages": 207,
+    "errors": [],
+    "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+  },
+  "production-stable-scene": {
+    "firstReadyMs": 19895.5,
+    "settledWindowMs": 22458.10000014305,
+    "firstImageSampleMs": 3917.7000000476837,
+    "longTaskMs": 2204,
+    "gpuBytes": 26852670,
+    "residentImages": 325,
+    "residentPages": 207,
+    "desiredPages": 207,
+    "errors": [],
+    "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+  },
+  "production-stable-final": {
+    "firstReadyMs": 15751.099999904633,
+    "settledWindowMs": 18286.900000095367,
+    "firstImageSampleMs": 2890.7000000476837,
+    "longTaskMs": 1305,
+    "gpuBytes": 26790718,
+    "residentImages": 325,
+    "residentPages": 207,
+    "desiredPages": 207,
+    "errors": [],
+    "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+  },
+  "dev-stable-scene": {
+    "firstReadyMs": 28612.299999952316,
+    "settledWindowMs": 31150.299999952316,
+    "firstImageSampleMs": 13731.099999904633,
+    "longTaskMs": 1366,
+    "gpuBytes": 27100478,
+    "residentImages": 325,
+    "residentPages": 207,
+    "desiredPages": 207,
+    "errors": [],
+    "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+  },
+  "finalVisual": {
+    "pixels": 752100,
+    "meanAbsoluteRgb": 0.0553822629969419,
+    "pixelsOver8": 1342
+  },
+  "production-admission-fixed": {
+    "firstReadyMs": 24465,
+    "settledWindowMs": 27047.900000095367,
+    "firstImageSampleMs": 5205.400000095367,
+    "longTaskMs": 3287,
+    "gpuBytes": 26790718,
+    "residentImages": 325,
+    "residentPages": 207,
+    "desiredPages": 207,
+    "errors": [],
+    "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+  },
+  "production-verified": {
+    "firstReadyMs": 23635.39999985695,
+    "settledWindowMs": 26187.299999952316,
+    "firstImageSampleMs": 5020.699999809265,
+    "longTaskMs": 2463,
+    "gpuBytes": 26914622,
+    "residentImages": 325,
+    "residentPages": 207,
+    "desiredPages": 207,
+    "errors": [],
+    "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+  },
+  "dev-admission-fixed": {
+    "firstReadyMs": 36214,
+    "settledWindowMs": 38737.700000047684,
+    "firstImageSampleMs": 13471.5,
+    "longTaskMs": 5486,
+    "gpuBytes": 26914622,
+    "residentImages": 325,
+    "residentPages": 207,
+    "desiredPages": 207,
+    "errors": [],
+    "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+  },
+  "verifiedVisual": {
+    "meanAbsoluteRgb": 0.0007818109293976865,
+    "pixelsOver8": 0
+  }
+}

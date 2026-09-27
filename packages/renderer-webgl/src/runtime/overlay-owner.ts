@@ -83,6 +83,12 @@ export class OverlayOwner {
       (this.#edgeOverlay?.runs.length ?? 0) > 0
     );
   }
+  get targetDenied(): boolean { return this.#edgeOverlayGpu?.targetDenied ?? false; }
+
+  plannedTargetBytes(width: number, height: number): number {
+    return (this.#edgeOverlay?.runs.length ?? 0) === 0 ? 0 : width * height * 9;
+  }
+
   get hasSurfaces(): boolean {
     return (
       (this.#overlayScene?.surfaces.length ?? 0) > 0 ||

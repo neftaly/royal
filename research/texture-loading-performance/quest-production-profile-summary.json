@@ -1,0 +1,312 @@
+{
+  "label": "quest-production-cpu",
+  "readyMs": 39107.800000000745,
+  "completed": true,
+  "errors": [],
+  "counts": {},
+  "longTasks": 185,
+  "longTaskMs": 11858,
+  "sameSourceSizeReductions": 0,
+  "topSelfMs": [
+    [
+      ":0 uniformMatrix4fv",
+      4218.532000000007
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:385 #Ue",
+      3430.162000000013
+    ],
+    [
+      ":0 (program)",
+      2961.0019999999986
+    ],
+    [
+      ":0 (idle)",
+      1888.7750000000028
+    ],
+    [
+      ":0 (garbage collector)",
+      1827.418000000002
+    ],
+    [
+      ":0 uniform4fv",
+      1465.3709999999971
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:2 Wi",
+      870.1029999999998
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:2 i",
+      687.262
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:2 pa",
+      620.7260000000007
+    ],
+    [
+      ":0 Blob",
+      542.2699999999999
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:664 applySurfaceDraw",
+      535.1060000000002
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:664 reconcile",
+      418.6889999999999
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:664 pc",
+      404.9860000000003
+    ],
+    [
+      ":0 slice",
+      361.0979999999998
+    ],
+    [
+      ":0 fetch",
+      360.841
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:2 (anonymous)",
+      334.7710000000001
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:682 (anonymous)",
+      321.134
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:385 drawViews",
+      315.0429999999998
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:385 #Ie",
+      310.71299999999997
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:385 #Je",
+      304.33699999999976
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/runtime-FryMEMM6-CneMd8mk.js:1 q",
+      291.77899999999994
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/mat4-vm5EftoR-8rwEUbQP.js:1 o",
+      291.34299999999996
+    ],
+    [
+      ":0 drawElements",
+      286.82399999999996
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:2 f",
+      285.979
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:2 Zr",
+      280.698
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/source-DsE_bZuJ-B1yxLF9D.js:1 a",
+      245.965
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/surface-visibility-PGyt2Nkn-CLvcBOh8.js:1 o",
+      234.38999999999993
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:385 so",
+      232.327
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:2 In",
+      226.019
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/runtime-FryMEMM6-CneMd8mk.js:90 update",
+      219.54899999999998
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/runtime-FryMEMM6-CneMd8mk.js:90 (anonymous)",
+      206.9509999999999
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:385 setScene",
+      204.55199999999994
+    ],
+    [
+      ":0 createObjectURL",
+      200.11999999999995
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:385 #qe",
+      194.8069999999999
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/canonical-material-DvXpUX-L-DaBzRUb4.js:1 u",
+      187.98899999999998
+    ],
+    [
+      ":0 getProgramParameter",
+      186.56000000000003
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/runtime-FryMEMM6-CneMd8mk.js:1 L",
+      185.97399999999996
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/source-DsE_bZuJ-B1yxLF9D.js:1 s",
+      178.62999999999997
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:682 #Ke",
+      176.839
+    ],
+    [
+      "http://127.0.0.1:5198/play/assets/scene-nodes-DDuAsIrQ.js:682 setScene",
+      175.54999999999998
+    ]
+  ],
+  "snapshot": {
+    "presentation": "ready",
+    "context": {
+      "generation": 1,
+      "interruptions": 0,
+      "phase": "active",
+      "recoveries": 0
+    },
+    "frame": 437,
+    "resources": {
+      "asyncPreparation": {
+        "activeJobs": 0,
+        "jobLimit": 8,
+        "queuedDetailJobs": 0,
+        "queuedForegroundJobs": 0,
+        "queuedJobs": 0
+      },
+      "geometryUploads": {
+        "admittedBytes": 0,
+        "budgetBytes": 4194304,
+        "deferredUploads": 0,
+        "pendingSurfaces": 0
+      },
+      "gltfSharedGeometry": {
+        "pendingPreparationTasks": 0,
+        "preparedTaskBytes": 48160,
+        "preparedTasks": 22,
+        "preparationTaskClaims": 631,
+        "primitiveClaims": 631,
+        "retainedBytes": 48160,
+        "reusedClaims": 609,
+        "reusedPreparationClaims": 609,
+        "taskProducerPreparationDurationMs": 2186.499999994412,
+        "uniqueGeometries": 22
+      },
+      "gltfSourceReads": {
+        "activeReads": 0,
+        "queuedReads": 0,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0,
+        "stagedBytes": 0,
+        "stagedByteThreshold": 33554432
+      },
+      "imageTexturePreparation": {
+        "activePreparations": 0,
+        "browserStageTimings": {
+          "sourceCount": 325,
+          "totals": {
+            "decodeDurationMs": 122753.90000000596,
+            "decodeQueueDurationMs": 13.999999998137355,
+            "transportDurationMs": 79775.69999999925,
+            "transportQueueDurationMs": 9.799999997019768
+          }
+        },
+        "decodedHandoffBytes": 0,
+        "decodedHandoffThresholdBytes": 67108864,
+        "encodedSourceReads": {
+          "activeReads": 0,
+          "queuedReads": 0,
+          "sourceReservationLimit": 128,
+          "sourceReservations": 0,
+          "stagedBytes": 0,
+          "stagedByteThreshold": 33554432
+        },
+        "pendingStorageRepresentations": 0,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0
+      },
+      "imageTextureUploads": {
+        "admittedBytes": 0,
+        "budgetBytes": 33554432,
+        "deferredUploads": 0
+      },
+      "imageTextures": {
+        "compressedBytes": 0,
+        "compressedTextures": 0,
+        "fittedTextures": 107,
+        "residentBytes": 8311876,
+        "residentTextures": 325
+      },
+      "persistentGpu": {
+        "budgetBytes": 268435456,
+        "deniedClaims": 0,
+        "retainedBytes": 26605582,
+        "textureBudgetBytes": 260727414,
+        "textureRetainedBytes": 26564076,
+        "textureMigrationReserveBytes": 7666560
+      },
+      "virtualTextures": {
+        "rasterCacheBytes": 33513092,
+        "rasterCacheLimitBytes": 33554432,
+        "rasterCacheReads": 1,
+        "rasterCacheHits": 148,
+        "rasterCachePending": 0,
+        "rasterCachePeakBytes": 33552928,
+        "rasterCacheQueueMs": 7794.400000013411,
+        "rasterCacheDecodeMs": 1307.800000000745,
+        "rasterPageRenderMs": 67.79999998956919,
+        "visibleDetailFraction": 1,
+        "idleAstcPixelHits": 7,
+        "retainedPagePixelBytes": 139392,
+        "idleAstcBytes": 371712,
+        "pageQueueMs": 4029.5999999996275,
+        "pageReadMs": 9177.000000005588,
+        "pageReadyWaitMs": 14957.100000010803,
+        "pageTimedReads": 149,
+        "pageTimedUploads": 149,
+        "atlasGrowthFrames": 57,
+        "admittedUploadBytes": 0,
+        "atlasBytes": 18213888,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 147,
+        "admittedPages": 147,
+        "unresidentPages": 0,
+        "automaticCandidates": 325,
+        "automaticDecodedBytes": 33698948,
+        "automaticIneligible": 1,
+        "automaticResources": 323,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 150,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 147,
+        "uploadedPages": 149,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    "size": {
+      "backingHeight": 648,
+      "backingWidth": 1345,
+      "cssHeight": 648,
+      "cssWidth": 1345,
+      "pixelRatio": 1,
+      "renderScale": 1
+    }
+  }
+}

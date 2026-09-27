@@ -39,3 +39,19 @@ export const allocateVirtualTexturePoolBytes = (
   for (const request of requests) result.set(request.key, Math.floor(result.get(request.key)!));
   return result;
 };
+
+/** Whole slots cannot be fractionally promised to more images than fit. */
+export const allocateVirtualTextureSlots = (
+  requests: readonly VirtualTexturePoolBudgetRequest[], slots: number,
+): Map<string, number> => {
+  const shares = allocateVirtualTexturePoolBytes(requests, slots);
+  let remaining = slots - [...shares.values()].reduce((sum, value) => sum + value, 0);
+  for (const request of [...requests].sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0)) {
+    if (remaining === 0) break;
+    const share = shares.get(request.key)!;
+    if (share >= request.wantedBytes) continue;
+    shares.set(request.key, share + 1);
+    remaining--;
+  }
+  return shares;
+};

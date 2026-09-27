@@ -14,6 +14,27 @@ afterEach(() => {
 });
 
 describe("browser texture decode shell", () => {
+  it("serializes oversized native rasters despite a tiny retained fit, while allowing small decodes to overlap", async () => {
+    const releases: (() => void)[] = [];
+    const bitmap = { width: 1, height: 1, close: vi.fn() } as unknown as ImageBitmap;
+    const create = vi.fn(() => new Promise<ImageBitmap>(resolve => releases.push(() => resolve(bitmap))));
+    vi.stubGlobal("createImageBitmap", create);
+    const decoder = createBrowserTextureDecoder(4);
+    const decode = (width: number, id: string) => decoder.decode({ kind: "embedded-asset", label: id,
+      contentKey: id, bytes: createAvifHeader(width, width), mimeType: "image/avif",
+    }, new AbortController().signal, 4);
+    const large = [decode(6000, "large-a"), decode(6000, "large-b")];
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    releases.shift()!(); await large[0];
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+    const small = [decode(64, "small-a"), decode(64, "small-b")];
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(create).toHaveBeenCalledTimes(2);
+    releases.shift()!(); await large[1];
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(4));
+    releases.splice(0).forEach(release => release()); await Promise.all(small);
+  });
+
   it("transports known external sources ahead of bitmap decode without refetching", async () => {
     const bitmap = { close: vi.fn(), height: 4, width: 4 } as unknown as ImageBitmap;
     const createImageBitmap = vi.fn(async () => bitmap);
@@ -310,6 +331,65 @@ describe("browser texture decode shell", () => {
       width: fitted.width,
     });
     expect(context.drawImage).toHaveBeenCalledWith(image, 0, 0, fitted.width, fitted.height);
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:royal-fallback");
+  });
+
+  it("fits large AVIFs directly from an image without allocating a full-size bitmap", async () => {
+    const fitted = fitOrdinaryTextureStorage(6000, 6000, 340);
+    const context = { clearRect: vi.fn(), drawImage: vi.fn() };
+    const canvas = {
+      getContext: vi.fn(() => context),
+      height: 0,
+      width: 0,
+    };
+    const image: {
+      naturalHeight: number;
+      naturalWidth: number;
+      onerror: (() => void) | null;
+      onload: (() => void) | null;
+      src: string;
+    } = {
+      naturalHeight: 6000,
+      naturalWidth: 6000,
+      onerror: null,
+      onload: null,
+      src: "",
+    };
+    let imageSrc = "";
+    Object.defineProperty(image, "src", {
+      get: () => imageSrc,
+      set: (value: string) => {
+        imageSrc = value;
+        if (value !== "") queueMicrotask(() => image.onload?.());
+      },
+    });
+    const createObjectURL = vi.fn(() => "blob:royal-fallback");
+    const revokeObjectURL = vi.fn();
+    const bitmap = vi.fn();
+    vi.stubGlobal("createImageBitmap", bitmap);
+    vi.stubGlobal("document", {
+      createElement: vi.fn((kind: string) => kind === "img" ? image : canvas),
+    });
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+
+    const result = await decodeTextureWithBrowser({
+      bytes: createAvifHeader(6000, 6000),
+      contentKey: "dom-fallback",
+      kind: "embedded-asset",
+      label: "DOM fallback",
+      mimeType: "image/avif",
+    }, new AbortController().signal, 340);
+
+    expect(result).toMatchObject({
+      height: fitted.height,
+      source: canvas,
+      sourceHeight: 6000,
+      sourceWidth: 6000,
+      width: fitted.width,
+    });
+    expect(context.drawImage).toHaveBeenCalledWith(image, 0, 0, fitted.width, fitted.height);
+    expect(bitmap).not.toHaveBeenCalled();
     expect(createObjectURL).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:royal-fallback");
   });
@@ -620,6 +700,7 @@ describe("browser texture decode shell", () => {
 
     expect(createImageBitmap).toHaveBeenCalledOnce();
     expect(createImageBitmap.mock.calls[0]![1]).not.toHaveProperty("resizeWidth");
+    expect(canvas.getContext).toHaveBeenCalledWith("2d", { alpha: true, willReadFrequently: true });
     expect(context.drawImage).toHaveBeenCalledWith(
       bitmap,
       0,
@@ -733,7 +814,7 @@ describe("browser texture decode shell", () => {
       releases.push(resolve);
     }));
     const fetch = vi.fn(async () => ({
-      blob: async () => new Blob([new Uint8Array([1])]),
+      blob: async () => new Blob([new Uint8Array(createAvifHeader(1, 1))], { type: "image/avif" }),
       ok: true,
       status: 200,
     }));

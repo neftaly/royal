@@ -1,3 +1,6 @@
+/** Ordinary safety coverage; authoritative VT coarse pages retain 128px detail. */
+export const VIRTUAL_TEXTURE_FALLBACK_EDGE = 64;
+
 /** Exact RGBA8/sRGB8-alpha allocation size, optionally including a mip chain. */
 export const ordinaryTextureStorageBytes = (
   width: number,

@@ -1,0 +1,144 @@
+{
+  "url": "http://localhost:3003/play/#{%22doc%22:%22automerge:3vtV6rcsy9fMYzNonX6DWkpTkwtZ%22,%22sync%22:[%22wss://subduction.sync.inkandswitch.com%22]}",
+  "errors": [],
+  "snapshot": {
+    "presentation": "ready",
+    "context": {
+      "generation": 1,
+      "interruptions": 0,
+      "phase": "active",
+      "recoveries": 0
+    },
+    "frame": 533,
+    "resources": {
+      "asyncPreparation": {
+        "activeJobs": 0,
+        "jobLimit": 8,
+        "queuedDetailJobs": 0,
+        "queuedForegroundJobs": 0,
+        "queuedJobs": 0
+      },
+      "geometryUploads": {
+        "admittedBytes": 0,
+        "budgetBytes": 4194304,
+        "deferredUploads": 0,
+        "pendingSurfaces": 0
+      },
+      "gltfSharedGeometry": {
+        "pendingPreparationTasks": 0,
+        "preparedTaskBytes": 41112,
+        "preparedTasks": 19,
+        "preparationTaskClaims": 628,
+        "primitiveClaims": 628,
+        "retainedBytes": 41112,
+        "reusedClaims": 609,
+        "reusedPreparationClaims": 609,
+        "taskProducerPreparationDurationMs": 6421.099999666214,
+        "uniqueGeometries": 19
+      },
+      "gltfSourceReads": {
+        "activeReads": 0,
+        "queuedReads": 0,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0,
+        "stagedBytes": 0,
+        "stagedByteThreshold": 33554432
+      },
+      "imageTexturePreparation": {
+        "activePreparations": 0,
+        "browserStageTimings": {
+          "sourceCount": 325,
+          "totals": {
+            "decodeDurationMs": 304955.1000008583,
+            "decodeQueueDurationMs": 12.200000047683716,
+            "transportDurationMs": 332387.2000012398,
+            "transportQueueDurationMs": 10.3000009059906
+          }
+        },
+        "decodedHandoffBytes": 0,
+        "decodedHandoffThresholdBytes": 67108864,
+        "encodedSourceReads": {
+          "activeReads": 0,
+          "queuedReads": 0,
+          "sourceReservationLimit": 128,
+          "sourceReservations": 0,
+          "stagedBytes": 0,
+          "stagedByteThreshold": 33554432
+        },
+        "pendingStorageRepresentations": 0,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0
+      },
+      "imageTextureUploads": {
+        "admittedBytes": 489356,
+        "budgetBytes": 33554432,
+        "deferredUploads": 0
+      },
+      "imageTextures": {
+        "compressedBytes": 0,
+        "compressedTextures": 0,
+        "fittedTextures": 107,
+        "residentBytes": 8311876,
+        "residentTextures": 325
+      },
+      "persistentGpu": {
+        "budgetBytes": 268435456,
+        "deniedClaims": 0,
+        "retainedBytes": 79826438,
+        "textureBudgetBytes": 245888146,
+        "textureRetainedBytes": 79790912,
+        "textureMigrationReserveBytes": 22511808
+      },
+      "virtualTextures": {
+        "rasterCacheBytes": 33514716,
+        "rasterCacheLimitBytes": 33554432,
+        "rasterCacheReads": 5,
+        "rasterCacheHits": 623,
+        "rasterCachePending": 0,
+        "rasterCachePeakBytes": 33551392,
+        "rasterCacheQueueMs": 31832.900000572205,
+        "rasterCacheDecodeMs": 9369.100000143051,
+        "rasterPageRenderMs": 923.5999956130981,
+        "visibleDetailFraction": 1,
+        "retainedPagePixelBytes": 557568,
+        "pageQueueMs": 40433.39999771118,
+        "pageReadMs": 42168.099997997284,
+        "pageReadyWaitMs": 161022.8000011444,
+        "pageTimedReads": 628,
+        "pageTimedUploads": 628,
+        "atlasGrowthFrames": 141,
+        "admittedUploadBytes": 489356,
+        "atlasBytes": 71368704,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 628,
+        "admittedPages": 628,
+        "unresidentPages": 0,
+        "automaticCandidates": 324,
+        "automaticDecodedBytes": 34072284,
+        "automaticIneligible": 1,
+        "automaticResources": 323,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 628,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 628,
+        "uploadedPages": 628,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    "size": {
+      "backingHeight": 716,
+      "backingWidth": 1024,
+      "cssHeight": 716,
+      "cssWidth": 1024,
+      "pixelRatio": 1,
+      "renderScale": 1
+    }
+  },
+  "elapsedMs": 94282.560322,
+  "completed": true
+}

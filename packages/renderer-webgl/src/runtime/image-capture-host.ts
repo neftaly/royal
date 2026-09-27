@@ -16,6 +16,7 @@ export type RootImageCaptureHost = Readonly<{
   pending(): boolean;
   environmentSnapshot(environment: Pick<PrefilteredEnvironmentLight, "src" | "version">): PrefilteredEnvironmentAssetSnapshot;
   textureSnapshot(texture: TextureSourceRef): TextureAssetSnapshot;
+  textureRequired?(texture: TextureSourceRef): boolean;
   now(): number;
   requestFrame(callback: () => void): void;
   release(): void;

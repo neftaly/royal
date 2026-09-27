@@ -35,7 +35,10 @@ export type BrowserTextureDecoder = Readonly<{
   readAheadSnapshot(): StagedByteReadSnapshot;
 }>;
 
+const NATIVE_DECODE_BYTE_LIMIT = 64 * 1024 * 1024;
+
 type PendingWork = {
+  readonly bytes: number;
   readonly detail: boolean;
   cancel: () => void;
   cancelled: boolean;
@@ -55,16 +58,19 @@ const fullRasterSource = (asset: TextureSourceRef): TextureSourceRef => {
 class BrowserWorkQueue {
   #active = 0;
   #activeDetail = 0;
+  #activeBytes = 0;
+  readonly #byteLimit: number;
   #foregroundBurst = 0;
   readonly #detailLimit: number;
   readonly #limit: number;
   readonly #pending = new RetainedFifo<PendingWork>();
   readonly #pendingDetail = new RetainedFifo<PendingWork>();
 
-  constructor(limit: number, detailLimit = limit) {
+  constructor(limit: number, detailLimit = limit, byteLimit = Infinity) {
     if (!Number.isSafeInteger(limit) || limit < 1) {
       throw new RangeError("Royal browser texture decode concurrency must be a positive integer");
     }
+    this.#byteLimit = byteLimit;
     this.#limit = limit;
     this.#detailLimit = detailLimit;
   }
@@ -73,10 +79,12 @@ class BrowserWorkQueue {
     signal: AbortSignal,
     work: () => Promise<Value>,
     detail = false,
+    bytes = 0,
   ): Promise<Value> {
     if (signal.aborted) return Promise.reject(aborted());
     return new Promise((resolve, reject) => {
       const pending: PendingWork = {
+        bytes: Math.min(bytes, this.#byteLimit),
         detail,
         cancel: () => undefined,
         cancelled: false,
@@ -90,6 +98,7 @@ class BrowserWorkQueue {
         pending.cancelled = true;
         pending.run = undefined;
         reject(aborted());
+        this.#drain();
       };
       pending.cancel = cancel;
       signal.addEventListener("abort", cancel, { once: true });
@@ -108,8 +117,11 @@ class BrowserWorkQueue {
         this.#foregroundBurst,
       );
       if (selection === undefined) return;
+      const queue = selection.lane === "detail" ? this.#pendingDetail : this.#pending;
+      // Preserve bounded-fair lane order while waiting for byte capacity.
+      if (!this.#fits(queue.peek())) return;
       this.#foregroundBurst = selection.foregroundBurst;
-      const pending = (selection.lane === "detail" ? this.#pendingDetail : this.#pending).dequeue();
+      const pending = queue.dequeue();
       if (pending === undefined) return;
       if (pending.cancelled) {
         pending.signal.removeEventListener("abort", pending.cancel);
@@ -125,13 +137,19 @@ class BrowserWorkQueue {
       pending.run = undefined;
       pending.signal.removeEventListener("abort", pending.cancel);
       this.#active += 1;
+      this.#activeBytes += pending.bytes;
       if (pending.detail) this.#activeDetail += 1;
       void run().then(pending.resolve, pending.reject).finally(() => {
         this.#active -= 1;
+        this.#activeBytes -= pending.bytes;
         if (pending.detail) this.#activeDetail -= 1;
         this.#drain();
       });
     }
+  }
+
+  #fits(pending: PendingWork | undefined): boolean {
+    return pending !== undefined && this.#activeBytes + pending.bytes <= this.#byteLimit;
   }
 
   #discardCancelled(queue: RetainedFifo<PendingWork>): void {
@@ -298,7 +316,9 @@ const resizeAvifBitmap = (
   }
   canvas.width = width;
   canvas.height = height;
-  const context = canvas.getContext("2d", { alpha: true });
+  // Keep full-resolution decode intermediates out of a GPU-backed 2D canvas.
+  // A small retained seed can originate from a raster much larger than the VT pool.
+  const context = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
   if (context === null) {
     bitmap.close();
     throw new Error("Royal AVIF texture fitting could not create a 2D canvas");
@@ -488,6 +508,7 @@ const decodeTextureBlob = async (
   signal: AbortSignal,
   maxStorageBytes?: number,
   retainAlpha = false,
+  dimensions?: Readonly<{ height: number; width: number }>,
 ): Promise<DecodedTextureSource> => {
   if (signal.aborted) throw aborted();
   const avif = textureIsAvif(asset, blob);
@@ -511,6 +532,17 @@ const decodeTextureBlob = async (
   if (svg || typeof globalThis.createImageBitmap !== "function") {
     return decodeImageElement();
   }
+  if (avif && maxStorageBytes !== undefined && dimensions !== undefined
+    && dimensions.width * dimensions.height * 4 > 16 * 1024 * 1024) {
+    const fit = fitOrdinaryTextureStorage(dimensions.width, dimensions.height, maxStorageBytes);
+    if (fit.width !== dimensions.width || fit.height !== dimensions.height) {
+      // Avoid a full-size browser-managed ImageBitmap intermediate.
+      // Fit the image directly into a canvas; CPU backing is a browser hint.
+      // Unlike Blob+resize, this also preserves Firefox's AVIF alpha channel.
+      try { return await decodeImageElement(); }
+      catch { if (signal.aborted) throw aborted(); }
+    }
+  }
   const bitmapOptions = {
     colorSpaceConversion: "none",
     imageOrientation: "none",
@@ -518,37 +550,29 @@ const decodeTextureBlob = async (
   } as const;
   let sourceDimensions: Readonly<{ height: number; width: number }> | undefined;
   let directFit: Readonly<{ height: number; width: number }> | undefined;
-  const dimensionPrefixBytes = encodedImageDimensionPrefixByteLength(blob.type);
   if (
     maxStorageBytes !== undefined
     && maxStorageBytes >= 4
-    && dimensionPrefixBytes !== undefined
+    && dimensions !== undefined
   ) {
-    const prefix = new Uint8Array(
-      await blob.slice(0, dimensionPrefixBytes).arrayBuffer(),
-    );
-    if (signal.aborted) throw aborted();
-    const dimensions = readEncodedImageDimensions(prefix);
-    if (dimensions !== undefined) {
-      try {
-        const fitted = fitOrdinaryTextureStorage(
-          dimensions.width,
-          dimensions.height,
-          maxStorageBytes,
-        );
-        sourceDimensions = dimensions;
-        if (
-          fitted.width !== dimensions.width
-          || fitted.height !== dimensions.height
-        ) {
-          // Firefox corrupts AVIF alpha when encoded bytes and resize options
-          // are passed to createImageBitmap together. Native decode followed
-          // by the explicit pixel resample below preserves the channel.
-          if (!avif) directFit = fitted;
-        }
-      } catch {
-        // A malformed size hint cannot replace browser format validation.
+    try {
+      const fitted = fitOrdinaryTextureStorage(
+        dimensions.width,
+        dimensions.height,
+        maxStorageBytes,
+      );
+      sourceDimensions = dimensions;
+      if (
+        fitted.width !== dimensions.width
+        || fitted.height !== dimensions.height
+      ) {
+        // Firefox corrupts AVIF alpha when encoded bytes and resize options
+        // are passed to createImageBitmap together. Native decode followed
+        // by the explicit pixel resample below preserves the channel.
+        if (!avif) directFit = fitted;
       }
+    } catch {
+      // A malformed size hint cannot replace browser format validation.
     }
   }
   let bitmap: ImageBitmap;
@@ -703,7 +727,7 @@ export const createBrowserTextureDecoder = (
   gl?: WebGL2RenderingContext,
 ): BrowserTextureDecoder => {
   const now = (): number => performance.now();
-  const decodes = new BrowserWorkQueue(maxParallelDecodes);
+  const decodes = new BrowserWorkQueue(maxParallelDecodes, maxParallelDecodes, NATIVE_DECODE_BYTE_LIMIT);
   // Keep transport capacity available for newly visible preview coverage.
   const transports = new BrowserWorkQueue(16, 4);
   const transport = async (
@@ -765,18 +789,24 @@ export const createBrowserTextureDecoder = (
       transportDurationMs = 0,
       transportQueueDurationMs = 0,
     } = await read(asset, signal, detailRead);
-    if (expectedSize !== undefined) {
+    let dimensions: Readonly<{ width: number; height: number }> | undefined;
+    if (!ktx2) {
       const prefixBytes = encodedImageDimensionPrefixByteLength(blob.type) ?? 128 * 1024;
-      let dimensions = readEncodedImageDimensions(new Uint8Array(await blob.slice(0, prefixBytes).arrayBuffer()));
-      // JPEG metadata can precede the frame header. PNG/WebP need only their
-      // tiny fixed prefix; don't allocate a 128 KiB validation buffer per image.
+      dimensions = readEncodedImageDimensions(new Uint8Array(await blob.slice(0, prefixBytes).arrayBuffer()));
+      // JPEG metadata can precede the frame header. Other formats use a bounded prefix.
       if (dimensions === undefined && prefixBytes === 16 * 1024) {
         dimensions = readEncodedImageDimensions(new Uint8Array(await blob.slice(0, 128 * 1024).arrayBuffer()));
       }
-      if (ktx2 || dimensions?.width !== expectedSize.width || dimensions.height !== expectedSize.height) {
-        throw new TypeError("Royal raster preview dimensions must match a supported full raster header");
-      }
     }
+    if (expectedSize !== undefined && (ktx2 || dimensions?.width !== expectedSize.width
+      || dimensions.height !== expectedSize.height)) {
+      throw new TypeError("Royal raster preview dimensions must match a supported full raster header");
+    }
+    // A tiny fitted result can still require a full-resolution native decode.
+    // Oversized or uninspectable rasters run alone; small images retain concurrency.
+    const decodeBytes = Math.min(NATIVE_DECODE_BYTE_LIMIT, ktx2 ? blob.size * 2
+      : dimensions === undefined ? NATIVE_DECODE_BYTE_LIMIT
+      : dimensions.width * dimensions.height * 4 + blob.size);
     const decodeQueuedAt = now();
     let decodeStartedAt = decodeQueuedAt;
     const decoded = await decodes.run(signal, () => {
@@ -789,11 +819,13 @@ export const createBrowserTextureDecoder = (
             signal,
             maxStorageBytes,
             retainAlpha,
+            dimensions,
           );
-    }, detailRead);
+    }, detailRead, decodeBytes);
     const decodeCompletedAt = now();
     const timed = {
       ...decoded,
+      ...(decoded.kind === undefined ? { contextBound: true as const } : {}),
       timings: {
         decodeDurationMs: Math.max(0, decodeCompletedAt - decodeStartedAt),
         decodeQueueDurationMs: Math.max(0, decodeStartedAt - decodeQueuedAt),

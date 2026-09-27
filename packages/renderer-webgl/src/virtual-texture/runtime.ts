@@ -1,19 +1,22 @@
+import { ordinaryTextureStorageBytes, VIRTUAL_TEXTURE_FALLBACK_EDGE } from "../texture/storage";
+import { reloadableRasterPagingEligible } from "./automatic-policy";
+import { RasterSourceCache } from "./raster-source-cache";
 import { TextureAnisotropy } from "../texture/anisotropy";
 import { IdleAstcEncoder } from "./astc/encoder";
 import { IdleAstcStorage } from "./astc/storage";
 import { COMPRESSED_SLOT_BASE } from "./residency";
 import { ktx2Etc2StorageBytes } from "../texture/etc2-storage";
-import { allocateVirtualTexturePoolBytes } from "./pool-budget";
+import { allocateVirtualTexturePoolBytes, allocateVirtualTextureSlots } from "./pool-budget";
 import { AUTOMATIC_VT_PAGE_SIZE, AUTOMATIC_VT_BORDER_TEXELS, texturePreviewReady } from "./automatic-policy";
 import type { SurfaceFrameView } from "../frame/surface-frame";
-import { IDENTITY_TEXTURE_COORDINATES } from "../surface/texture-coordinates";
+import { planAutomaticTextureScene } from "./scene-plan";
 import {
   canonicalTextureSampler,
   type CanonicalTextureSampler,
 } from "../texture/sampler";
 import type { CanonicalSurfaceScene } from "../surface/scene-lowering";
 import { nativeTextureAvailable } from "../texture/native-storage";
-import { virtualTexturePageBytes } from "./layout";
+import { createGeneratedVirtualTextureLayout, virtualTexturePageBytes } from "./layout";
 import {
   type DecodedVirtualTexturePage,
   type VirtualTexturePageSource,
@@ -23,6 +26,7 @@ import {
   automaticVirtualTextureHasPreview,
   createAutomaticPreviewPageSource,
   createAutomaticRasterPageSource,
+  renderAutomaticPage,
 } from "./automatic-page-source";
 import {
   collectVirtualTextureDemandSteps,
@@ -88,7 +92,7 @@ const MAX_ATLAS_COPY_BYTES_PER_FRAME = 1024 * 1024;
 const MAX_ATLAS_COPIES_PER_FRAME = 64;
 const MAX_DEMAND_PAGES = 512;
 const MAX_DEMAND_MS_PER_FRAME = 4;
-const MAX_AUTOMATIC_DECODED_BYTES = 64 * 1024 * 1024;
+const MAX_LEASED_SOURCE_BYTES = 64 * 1024 * 1024;
 const UNCHANGED_ATLAS = { copied: 0, pending: false, changed: false };
 const FRAME_RESULTS = [
   { pending: false, webGlStateChanged: false },
@@ -150,6 +154,7 @@ type RuntimeResource = {
   allocationBudgetBlocked?: boolean;
   admittedPageLimit?: number;
   desiredPageCount?: number;
+  rasterMip?: number;
   readonly failedPages: Set<VirtualTexturePageKey>;
   gpu: GpuVirtualTexture | undefined;
   readonly key: string;
@@ -165,11 +170,12 @@ type RuntimeResource = {
   previewSourceFailed?: boolean;
   readonly sampler: CanonicalTextureSampler;
   source?: VirtualTexturePageSource;
-  readonly surfaces: VirtualTextureDemandSurface[];
+  surfaces: readonly VirtualTextureDemandSurface[];
   readonly workspace: VirtualTextureDemandWorkspace;
 };
 
 export type AutomaticVirtualTextureRuntimeOptions = Readonly<{
+  loadRaster?(asset: TextureSourceRef, signal: AbortSignal, maxBytes: number): Promise<DecodedTextureSource>;
   acquireDecoded(asset: TextureSourceRef): DecodedTextureLease | undefined;
   /** Undefined while pending; null after terminal decode failure. */
   decoded(asset: TextureSourceRef): DecodedTextureSource | null | undefined;
@@ -209,12 +215,14 @@ const createGpuVirtualTextureAtlas = (
   key: string,
   plan: VirtualTextureAtlasStoragePlan,
   deferValidation = false,
+  replacedIdentity?: object,
 ): GpuVirtualTextureAtlas => {
   const budgetIdentity = {};
   let atlasTexture: WebGLTexture | null = null;
   try {
     atlasTexture = allocateTexture(gl, "atlas texture");
-    if (!budget.tryClaim(budgetIdentity, plan.allocationBytes)) {
+    if (!(replacedIdentity === undefined ? budget.tryClaimTexture(budgetIdentity, plan.allocationBytes)
+      : budget.tryClaimTextureReplacement(budgetIdentity, plan.allocationBytes, replacedIdentity))) {
       throw new Error("Royal persistent GPU budget denied virtual texture storage");
     }
     gl.activeTexture(gl.TEXTURE0);
@@ -269,7 +277,7 @@ const createGpuVirtualTexture = (
     atlasSampler = allocateSampler(gl, "atlas sampler");
     pageTableTexture = allocateTexture(gl, "page-table texture");
     pageTableSampler = allocateSampler(gl, "page-table sampler");
-    if (!budget.tryClaim(budgetIdentity, layout.tableByteLength)) {
+    if (!budget.tryClaimTexture(budgetIdentity, layout.tableByteLength)) {
       throw new Error("Royal persistent GPU budget denied virtual texture page-table storage");
     }
     budgetClaimed = true;
@@ -401,6 +409,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #pixelCacheHits = 0;
   #idleSourceReads = 0;
   #compressionJob: { resource: RuntimeResource; gpu: GpuVirtualTexture; key: VirtualTexturePageKey; slot: number; abort: AbortController; blocks?: Uint8Array; fence?: WebGLSync; compressedSlot?: number; waits: number } | undefined;
+  readonly #rasterCache: RasterSourceCache | undefined;
   #viewCount = 0;
   #viewRevision = 0;
   #demandCursor = 0;
@@ -428,6 +437,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       this.#resources.get(resourceKey)?.workspace.keys.has(pageKey) === true,
   };
   #scene: CanonicalSurfaceScene | null = null;
+  #scenePlan = planAutomaticTextureScene(null);
+  #activeStorageKeys: ReadonlySet<string> | undefined;
   #sceneNeedsReconcile = false;
   readonly shaderSource = { declarations: VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS };
 
@@ -446,6 +457,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     this.#schedule = schedule;
     this.#scheduleDetail = scheduleDetail;
     this.#automatic = automatic;
+    this.#rasterCache = automatic.loadRaster === undefined ? undefined : new RasterSourceCache(automatic.loadRaster);
     this.#uploadBudget = uploadBudget;
   }
 
@@ -462,22 +474,35 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       : undefined;
   }
 
+  automaticPageSourceAvailable(asset: TextureSourceRef): boolean {
+    const resource = this.#resources.get(automaticVirtualTextureAssetKey(asset));
+    return this.#rasterCache !== undefined && resource?.lease === undefined
+      && resource?.source !== undefined;
+  }
+
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.#budget.setTextureMigrationReserve(0);
+    this.#rasterCache?.dispose();
     this.#stopCompression();
     for (const resource of this.#resources.values()) this.#destroyResource(resource, true);
     this.#resources.clear();
     this.#scheduleResources.length = 0;
     this.#scheduleCursor = 0;
     this.#scene = null;
+    this.#scenePlan = planAutomaticTextureScene(null);
   }
 
   invalidate(): void {
+    this.#rasterCache?.invalidate();
+    this.#budget.setTextureMigrationReserve(0);
     this.#anisotropy.invalidate();
     this.#stopCompression(false);
     this.#maxTextureSize = undefined;
     for (const resource of this.#resources.values()) {
+      for (const controller of resource.loadingPages.values()) controller.abort();
+      resource.loadingPages.clear();
       resource.demandRevision = -1;
       delete resource.demandJob;
       if (resource.gpu !== undefined) {
@@ -500,7 +525,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     let atlasBytes = 0;
     for (const atlas of this.#atlases.values()) atlasBytes += atlas.allocationBytes + (atlas.growth?.replacement.allocationBytes ?? 0);
     for (const resource of this.#resources.values()) atlasBytes += resource.gpu?.astc?.byteLength ?? 0;
-    let automaticDecodedBytes = this.#pagePixels.size * 132 ** 2 * 4;
+    const cache = this.#rasterCache?.snapshot;
+    let automaticDecodedBytes = (cache?.bytes ?? 0) + this.#pagePixels.size * 132 ** 2 * 4;
     for (const resource of this.#resources.values()) automaticDecodedBytes += resource.gpu?.astc?.cpuBytes ?? 0;
     let automaticResources = 0;
     let failedPages = 0;
@@ -538,6 +564,10 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       }
     }
     return {
+      ...(cache === undefined ? {} : { rasterCacheBytes: cache.bytes, rasterCacheLimitBytes: cache.limit,
+        rasterCacheReads: cache.reads, rasterCacheHits: cache.hits, rasterCachePending: cache.queued,
+        rasterCachePeakBytes: cache.peakBytes, rasterCacheQueueMs: cache.queueMs,
+        rasterCacheDecodeMs: cache.decodeMs, rasterPageRenderMs: cache.renderMs }),
       ...(pendingDemandResources === 0 ? {} : { pendingDemandResources }),
       ...(detailWeight === 0 ? {} : { visibleDetailFraction: residentDetailWeight / detailWeight }),
       ...(this.#pixelCacheHits === 0 ? {} : { idleAstcPixelHits: this.#pixelCacheHits }),
@@ -571,22 +601,25 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     };
   }
 
+  setActiveStorageKeys(keys: ReadonlySet<string>): void {
+    this.#activeStorageKeys = keys;
+    this.#sceneNeedsReconcile = true;
+    this.setScene(this.#scene);
+  }
+
   setScene(scene: CanonicalSurfaceScene | null): void {
     if (this.#disposed || (this.#scene === scene && !this.#sceneNeedsReconcile)) return;
     this.#sceneNeedsReconcile = false;
+    if (this.#scene?.textureSurfaceIndices !== scene?.textureSurfaceIndices) {
+      this.#scenePlan = planAutomaticTextureScene(scene);
+      this.#viewRevision += 1;
+    }
     this.#scene = scene;
-    this.#viewRevision += 1;
     const claimed = new Set<string>();
     this.#automaticCandidates = 0;
     this.#automaticIneligible = 0;
     this.#automaticWaiting = 0;
-    const candidates = new Map<string, TextureSourceRef>();
-    for (const surface of scene?.surfaces ?? []) {
-      const asset = surface.material.baseColorAsset;
-      if (asset === undefined) continue;
-      const key = automaticVirtualTextureAssetKey(asset);
-      if (!candidates.has(key)) candidates.set(key, asset);
-    }
+    const { candidates, decodedKeys } = this.#scenePlan;
     this.#automaticCandidates = candidates.size;
     let retainedDecodedBytes = 0;
     const scan = ++this.#decodedScan;
@@ -597,7 +630,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         retainedDecodedBytes += automaticSourceBytes(existing.lease.source);
       }
     }
-    for (const [key, asset] of candidates) {
+    for (const [key, { asset, storageKey }] of candidates) {
+      if (this.#activeStorageKeys?.has(storageKey) === false) continue;
       const existing = this.#resources.get(key);
       if (existing !== undefined) {
         claimed.add(key);
@@ -610,35 +644,54 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         continue;
       }
       const preview = automaticVirtualTextureHasPreview(decoded);
+      const reloadable = this.#rasterCache !== undefined && decoded.kind === undefined;
+      const size = { width: decoded.sourceWidth ?? decoded.width, height: decoded.sourceHeight ?? decoded.height };
       if (
-        !preview && !automaticVirtualTextureEligible(decoded)
+        !preview && !(reloadable ? reloadableRasterPagingEligible(decoded) : automaticVirtualTextureEligible(decoded))
       ) {
         this.#automaticIneligible += 1;
         continue;
       }
-      const decodedBytes = this.#seenDecoded.get(decoded) === scan ? 0 : automaticSourceBytes(decoded);
-      if (retainedDecodedBytes + decodedBytes > MAX_AUTOMATIC_DECODED_BYTES) {
-        this.#automaticIneligible += 1;
-        continue;
-      }
       const sampler = canonicalTextureSampler(asset);
-      const lease = this.#automatic.acquireDecoded(asset);
-      if (lease === undefined) {
-        this.#automaticWaiting += 1;
-        continue;
+      let lease: DecodedTextureLease | undefined;
+      let source: VirtualTexturePageSource;
+      if (reloadable) {
+        const initial = this.#automatic.acquireDecoded(asset);
+        if (initial !== undefined && (initial.source.kind !== undefined
+          || !this.#rasterCache!.seed(asset, initial.source, initial.release))) initial.release();
+        const layout = createGeneratedVirtualTextureLayout({ ...size, colorSpace: asset.colorSpace ?? "srgb",
+          pageSize: AUTOMATIC_VT_PAGE_SIZE, borderTexels: AUTOMATIC_VT_BORDER_TEXELS });
+        source = { layout, read: (page, signal) => {
+          // All detail pages use a source sufficient for the finest requested
+          // mip. Otherwise scheduling coarse before fine changes its filtering
+          // (seed pixels versus a newly decoded source). Keep fast root coverage.
+          const mip = page.mip === layout.mipCount - 1 ? page.mip
+            : Math.min(page.mip, this.#resources.get(key)?.rasterMip ?? page.mip);
+          return this.#rasterCache!.read(asset, signal,
+            raster => renderAutomaticPage(layout, sampler, raster.source as CanvasImageSource,
+              raster.width / layout.width, raster.height / layout.height, page, signal),
+            ordinaryTextureStorageBytes(Math.max(1, Math.ceil(layout.width / 2 ** mip)),
+              Math.max(1, Math.ceil(layout.height / 2 ** mip)), true));
+        } };
+      } else {
+        const decodedBytes = this.#seenDecoded.get(decoded) === scan ? 0 : automaticSourceBytes(decoded);
+        if (retainedDecodedBytes + decodedBytes > MAX_LEASED_SOURCE_BYTES) {
+          this.#automaticIneligible++;
+          continue;
+        }
+        lease = this.#automatic.acquireDecoded(asset);
+        if (lease === undefined) { this.#automaticWaiting++; continue; }
+        if (!automaticVirtualTextureHasPreview(lease.source) && !automaticVirtualTextureEligible(lease.source)) {
+          lease.release(); this.#automaticIneligible++; continue;
+        }
+        if (this.#seenDecoded.get(lease.source) !== scan) {
+          this.#seenDecoded.set(lease.source, scan);
+          retainedDecodedBytes += automaticSourceBytes(lease.source);
+        }
+        source = automaticVirtualTextureHasPreview(lease.source)
+          ? createAutomaticPreviewPageSource(lease.source.preview, sampler, asset.colorSpace ?? "srgb")
+          : createAutomaticRasterPageSource(lease.source, sampler, asset.colorSpace ?? "srgb");
       }
-      if (!automaticVirtualTextureHasPreview(lease.source) && !automaticVirtualTextureEligible(lease.source)) {
-        lease.release();
-        this.#automaticIneligible += 1;
-        continue;
-      }
-      if (this.#seenDecoded.get(lease.source) !== scan) {
-        this.#seenDecoded.set(lease.source, scan);
-        retainedDecodedBytes += automaticSourceBytes(lease.source);
-      }
-      const source = automaticVirtualTextureHasPreview(lease.source)
-        ? createAutomaticPreviewPageSource(lease.source.preview, sampler, asset.colorSpace ?? "srgb")
-        : createAutomaticRasterPageSource(lease.source, sampler, asset.colorSpace ?? "srgb");
       claimed.add(key);
       this.#resources.set(key, {
         abort: new AbortController(),
@@ -647,7 +700,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         failedPages: new Set(),
         gpu: undefined,
         key,
-        lease,
+        ...(lease === undefined ? {} : { lease }),
         loadingPages: new Map(),
         layout: source.layout,
         readyPageKeys: new Set(),
@@ -659,6 +712,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         desiredWorkspace: createVirtualTextureDemandWorkspace(MAX_DEMAND_PAGES),
         demandScratch: createVirtualTextureDemandWorkspace(MAX_DEMAND_PAGES),
       });
+      // Source availability permits compact ordinary storage before any page is resident.
+      if (reloadable) this.#bindingRevision++;
     }
     for (const [key, resource] of this.#resources) {
       if (claimed.has(key)) continue;
@@ -667,20 +722,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       this.#bindingRevision += 1;
       this.#changed();
     }
-    for (const resource of this.#resources.values()) resource.surfaces.length = 0;
-    for (const surface of scene?.surfaces ?? []) {
-      const asset = surface.material.baseColorAsset;
-      const resource = asset === undefined ? undefined : this.#resources.get(automaticVirtualTextureAssetKey(asset));
-      if (resource === undefined) continue;
-      resource.surfaces.push({
-        geometry: surface.geometry,
-        ...(surface.instances === undefined ? {} : { instances: surface.instances }),
-        model: surface.model,
-        textureCoordinates: surface.material.baseColorTextureCoordinates
-          ?? IDENTITY_TEXTURE_COORDINATES,
-        worldBounds: surface.worldBounds,
-      });
-    }
+    // Warm CPU sources remain bounded by the LRU even when their GPU pages leave view.
+    this.#rasterCache?.retain(decodedKeys);
+    for (const resource of this.#resources.values()) resource.surfaces = candidates.get(resource.key)!.surfaces;
     this.#scheduleResources.length = 0;
     for (const resource of this.#resources.values()) {
       if (resource.surfaces.length > 0) this.#scheduleResources.push(resource);
@@ -749,13 +793,27 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       request.wantedBytes ||= 2 ** Math.ceil(Math.log2(Math.max(1, this.#atlasDemand.get(request.key)!))) * request.minimumBytes;
       request.minimumBytes *= Math.max(1, this.#atlasMinimumSlots.get(request.key)!);
     }
+    this.#budget.setTextureMigrationReserve(Math.max(0, ...[...poolRequests.values()].map(request => request.minimumBytes)));
     this.#atlasShares = allocateVirtualTexturePoolBytes([...poolRequests.values()],
-      Math.max(0, Math.floor(this.#budget.budgetBytes * 0.75) - this.#idleStorageBytes()
-        - this.#automaticWaiting * (AUTOMATIC_VT_PAGE_SIZE + AUTOMATIC_VT_BORDER_TEXELS * 2) ** 2 * 4));
+      Math.max(0, this.#budget.textureBudgetBytes - this.#nonAtlasTextureBytes()
+        // Waiting now counts the active working set, not the whole catalogue.
+        // Its ordinary coverage must fit before detail consumes the remainder.
+        - this.#automaticWaiting * ordinaryTextureStorageBytes(VIRTUAL_TEXTURE_FALLBACK_EDGE, VIRTUAL_TEXTURE_FALLBACK_EDGE, true)));
     let copyBytesRemaining = MAX_ATLAS_COPY_BYTES_PER_FRAME;
     let copiesRemaining = MAX_ATLAS_COPIES_PER_FRAME;
     for (const atlas of this.#atlases.values()) {
       const pageBytes = atlas.storedPageSize ** 2 * 4;
+      if (this.#rasterCache !== undefined && this.#atlasAllowance(atlas) < pageBytes) {
+        for (const resource of this.#resources.values()) {
+          if (resource.gpu?.atlas !== atlas) continue;
+          this.#clearReadyPages(resource);
+          this.#releaseGpuResource(resource);
+          resource.demandNeedsFit = true;
+        }
+        this.#bindingRevision++;
+        webGlStateChanged = true;
+        continue;
+      }
       const copyLimit = Math.min(copiesRemaining,
         Math.max(copyBytesRemaining === MAX_ATLAS_COPY_BYTES_PER_FRAME ? 1 : 0,
           Math.floor(copyBytesRemaining / pageBytes)));
@@ -788,9 +846,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           wantedBytes: Math.max(1, Math.min(resource.desiredPageCount! - this.#compressedDemand(resource), preparationSlots)),
         };
       });
-      const shares = allocateVirtualTexturePoolBytes(requests, preparationSlots);
+      const shares = allocateVirtualTextureSlots(requests, preparationSlots);
       for (const resource of resources) {
-        const limit = Math.max(1, shares.get(resource.key) ?? preparationSlots) + this.#compressedDemand(resource);
+        const limit = (shares.get(resource.key) ?? 0) + this.#compressedDemand(resource);
         if (resource.admittedPageLimit === limit) continue;
         resource.admittedPageLimit = limit;
         resource.demandNeedsFit = true;
@@ -992,7 +1050,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         // Visible pages first, then cached pages.
         for (const visible of [true, false]) for (const cached of [true, false]) for (const resource of this.#resources.values()) {
           const gpu = resource.gpu, layout = resource.layout;
-          if (resource.compressionDisabled || resource.compressionBlockedBytes === this.#budget.availableBytes || gpu === undefined || layout === undefined
+          if (resource.compressionDisabled || resource.compressionBlockedBytes === this.#budget.textureAvailableBytes || gpu === undefined || layout === undefined
             || gpu.atlas.storedPageSize !== 132 || resource.source === undefined
             || (resource.asset.colorSpace ?? layout.colorSpace) !== "srgb"
             || (gpu.astc?.blocks.length ?? 0) >= 512) continue;
@@ -1102,7 +1160,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         gpu.binding = { ...gpu.binding, compressedAtlas: gpu.binding.atlas };
         this.#bindingRevision++;
       }
-      if (denied) resource.compressionBlockedBytes = this.#budget.availableBytes;
+      if (denied) resource.compressionBlockedBytes = this.#budget.textureAvailableBytes;
       return true;
     }
   }
@@ -1204,14 +1262,21 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       return true;
     }
     const demandChanged = resource.demandNeedsFit === true;
+    if (resource.admittedPageLimit === 0) {
+      resetVirtualTextureDemand(resource.workspace);
+      this.#clearReadyPages(resource);
+    }
     // Do not reserve an atlas before the asset contributes to a view.
     if (resource.workspace.count === 0) {
+      if ((resource.desiredPageCount ?? 0) === 0) delete resource.admittedPageLimit;
       if (demandChanged) {
         resource.demandNeedsFit = false;
         this.#clearReadyPages(resource);
       }
-      if (resource.failedPages.size > 0 && resource.gpu?.residentSlots.size === 0) {
+      this.#cancelStalePageReads(resource);
+      if (resource.gpu !== undefined) {
         this.#releaseGpuResource(resource);
+        this.#bindingRevision++;
         return true;
       }
       return false;
@@ -1221,7 +1286,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     if (resource.gpu === undefined) {
       const atlas = this.#atlases.get(virtualTextureAtlasKey(resource, layout));
       const pageBytes = virtualTexturePageBytes(layout);
-      resource.allocationBudgetBlocked = this.#budget.availableBytes < layout.tableByteLength + (atlas === undefined ? pageBytes : 0)
+      resource.allocationBudgetBlocked = this.#budget.textureAvailableBytes < layout.tableByteLength + (atlas === undefined ? pageBytes : 0)
         || (atlas === undefined && this.#atlasAllowance(undefined, virtualTextureAtlasKey(resource, layout)) < pageBytes);
       if (resource.allocationBudgetBlocked) return false;
       if (!this.#uploadBudget.tryAdmitAllocation()) {
@@ -1244,8 +1309,15 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       const preparationAtlas = this.#preparationAtlas(gpu.atlas);
       const capacity = preparationAtlas === gpu.atlas ? gpu.maxResidentPages
         : virtualTextureResidentPageCapacity(layout, this.#textureSizeLimit(), preparationAtlas);
-      truncateVirtualTextureDemand(resource.workspace, Math.min(capacity + this.#compressedDemand(resource), resource.admittedPageLimit ?? Infinity));
       const workspace = resource.workspace;
+      // Atlas admission grows over several frames. Choosing source resolution
+      // after truncation makes early coarse pages depend on allocation timing.
+      // Decode for the requested detail; the raster cache still caps each source.
+      resource.rasterMip = layout.mipCount - 1;
+      for (let index = 0; index < workspace.count; index++) {
+        resource.rasterMip = Math.min(resource.rasterMip, workspace.mips[index]!);
+      }
+      truncateVirtualTextureDemand(workspace, Math.min(capacity + this.#compressedDemand(resource), resource.admittedPageLimit ?? Infinity));
       for (let index = 0; index < workspace.count; index++) workspace.order[index] = index;
       {
         const score = (index: number): number => {
@@ -1312,24 +1384,25 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       share === undefined || !Number.isFinite(pageBytes) ? Infinity : Math.floor(share / pageBytes));
   }
 
+  #nonAtlasTextureBytes(): number {
+    let bytes = this.#budget.textureRetainedBytes;
+    for (const atlas of this.#atlases.values()) bytes -= atlas.allocationBytes + (atlas.growth?.replacement.allocationBytes ?? 0);
+    return Math.max(0, bytes);
+  }
+
   #atlasAllowance(except?: GpuVirtualTextureAtlas, key = except?.key): number {
-    let otherBytes = 0;
-    for (const resource of this.#resources.values()) otherBytes += resource.gpu?.astc?.byteLength ?? 0;
+    let otherBytes = this.#nonAtlasTextureBytes();
     for (const atlas of this.#atlases.values()) {
-      if (atlas !== except) {
-        // A shrink can still be cancelled. Its old capacity cannot be lent to
-        // another pool until the replacement has actually committed.
-        otherBytes += Math.max(atlas.allocationBytes, atlas.growth?.replacement.allocationBytes ?? 0);
-      }
+      if (atlas !== except) otherBytes += Math.max(atlas.allocationBytes, atlas.growth?.replacement.allocationBytes ?? 0);
     }
     return Math.min(key === undefined ? Infinity : this.#atlasShares.get(key) ?? Infinity,
-      Math.max(0, Math.floor(this.#budget.budgetBytes * 0.75) - otherBytes));
+      Math.max(0, this.#budget.textureBudgetBytes - otherBytes));
   }
 
   #failedAtlasGrowthFingerprint(atlas: GpuVirtualTextureAtlas, demand: number): string {
     // Failed migrations must not wake each other by reserving and releasing
     // temporary replacements. Retry after committed capacity or demand changes.
-    let available = this.#budget.availableBytes;
+    let available = this.#budget.textureAvailableBytes;
     for (const pool of this.#atlases.values()) available += pool.growth?.replacement.allocationBytes ?? 0;
     return `failed:${demand}:${available}:${this.#atlasShares.get(atlas.key)}:${this.#uploadedPages}`;
   }
@@ -1345,7 +1418,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       replacementBytes = Math.max(replacementBytes, wantedBytes);
     }
     const competingPressure = missingBytes > this.#atlasAllowance()
-      || replacementBytes > this.#budget.availableBytes;
+      || replacementBytes > this.#budget.textureAvailableBytes;
     const preserveCached = this.#atlasHasCompression(atlas) && !competingPressure;
     const liveSlots = preserveCached ? atlas.slots.reduce((sum, entry) => sum + (entry === undefined ? 0 : 1), 0) : 0;
     let workingPages = 0;
@@ -1383,7 +1456,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       changed = true;
       return result(shrinking);
     }
-    const fingerprint = `${demand}:${this.#budget.availableBytes}:${this.#atlasAllowance(atlas)}:${this.#uploadedPages}`;
+    const fingerprint = `${demand}:${this.#budget.textureAvailableBytes}:${this.#atlasAllowance(atlas)}:${this.#uploadedPages}`;
     if (atlas.growth === undefined) {
       if (atlas.blockedGrowth === fingerprint
         || atlas.blockedGrowth === this.#failedAtlasGrowthFingerprint(atlas, demand)) return result(false);
@@ -1415,11 +1488,11 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
             roots++;
           }
           const finalPlan = planVirtualTextureAtlasStorage(resource.layout!, maxTextureSize,
-            this.#budget.availableBytes + atlas.allocationBytes - roots * virtualTexturePageBytes(resource.layout!),
+            this.#budget.textureAvailableBytes + atlas.allocationBytes - roots * virtualTexturePageBytes(resource.layout!),
             targetSlots, this.#atlasAllowance(atlas), "migration");
           if (roots > 0 && finalPlan.slotCount > atlas.slotCount
             && roots * virtualTexturePageBytes(resource.layout!) + finalPlan.allocationBytes
-              <= this.#budget.availableBytes + atlas.allocationBytes) {
+              <= this.#budget.textureAvailableBytes + atlas.allocationBytes) {
             plan = planVirtualTextureAtlasStorage(resource.layout!, maxTextureSize,
               this.#budget.availableBytes, roots, this.#atlasAllowance(atlas), "migration");
             if (plan.slotCount === roots) shrinking = capacityLimited = true;
@@ -1434,15 +1507,17 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         return result(false);
       }
       if (preserveCached && shrinking && plan.slotCount < liveSlots) return result(false);
-      if (shrinking ? plan.slotCount < Math.max(1, capacityLimited ? this.#atlasMinimumSlots.get(atlas.key) ?? 1 : demand) || plan.slotCount >= atlas.slotCount
+      if (shrinking ? plan.slotCount < (this.#rasterCache !== undefined ? 1
+        : Math.max(1, capacityLimited ? this.#atlasMinimumSlots.get(atlas.key) ?? 1 : demand)) || plan.slotCount >= atlas.slotCount
         : plan.slotCount <= atlas.slotCount) {
         atlas.blockedGrowth = fingerprint;
         return result(false);
       }
+      if (shrinking && plan.slotCount < demand) capacityLimited = true;
       if (!this.#uploadBudget.tryAdmitAllocation()) return result(true);
       changed = true;
       try {
-        const replacement = createGpuVirtualTextureAtlas(this.#gl, resource.asset, resource.layout!, this.#budget, atlas.key, plan, true);
+        const replacement = createGpuVirtualTextureAtlas(this.#gl, resource.asset, resource.layout!, this.#budget, atlas.key, plan, true, atlas.budgetIdentity);
         const retainedSlots = shrinking ? atlas.slots.flatMap((entry, slot) =>
           entry === undefined ? [] : [slot]).sort((a, b) => {
           const priority = (slot: number): number => {
@@ -1609,7 +1684,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       const plan = planVirtualTextureAtlasStorage(
         layout,
         maxTextureSize,
-        this.#budget.availableBytes,
+        this.#budget.textureAvailableBytes,
         this.#targetAtlasSlots(atlasKey),
         this.#atlasAllowance(undefined, atlasKey),
       );
@@ -1645,6 +1720,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   }
 
   #releaseGpuResource(resource: RuntimeResource): void {
+    if (this.#compressionJob?.resource === resource) this.#cancelCompression();
     const gpu = resource.gpu!;
     const atlas = gpu.atlas;
     for (const [pageKey, slot] of gpu.residentSlots) {
@@ -1656,6 +1732,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     gpu.astc?.dispose();
     destroyGpuVirtualTexture(this.#gl, gpu, this.#budget);
     resource.gpu = undefined;
+    delete resource.admittedPageLimit;
     atlas.referenceCount -= 1;
     if (atlas.referenceCount === 0) {
       destroyGpuVirtualTextureAtlas(this.#gl, atlas, this.#budget);
@@ -1725,6 +1802,15 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #schedulePageReads(): void {
     const resources = this.#scheduleResources;
     let idleVisits = 0;
+    // Consume seeded coarse pixels as well as cached detail before a source miss
+    // evicts the next image in catalogue order. Detail remains single-job paced.
+    if (this.#rasterCache !== undefined) {
+      for (const resource of resources) {
+        if (this.#activeJobs >= MAX_DECODE_JOBS
+          || this.#activeJobs + this.#readyPages >= MAX_AUTOMATIC_PAGE_JOBS) break;
+        if (this.#rasterCache.has(resource.asset)) this.#startNextPageRead(resource);
+      }
+    }
     while (
       resources.length > 0
       && idleVisits < resources.length
@@ -1766,7 +1852,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       this.#seenDecoded.set(source, scan);
       bytes += automaticSourceBytes(source);
     }
-    return bytes <= MAX_AUTOMATIC_DECODED_BYTES;
+    return bytes <= MAX_LEASED_SOURCE_BYTES;
   }
 
   #preparationAtlas(atlas: GpuVirtualTextureAtlas): GpuVirtualTextureAtlas {

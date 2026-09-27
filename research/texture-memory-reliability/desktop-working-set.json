@@ -1,0 +1,1980 @@
+{
+  "result": [
+    {
+      "label": "cold-324-64",
+      "snapshot": {
+        "elapsedMs": 23592,
+        "count": 324,
+        "budget": 67108864,
+        "renderer": {
+          "presentation": "ready",
+          "context": {
+            "generation": 1,
+            "interruptions": 0,
+            "phase": "active",
+            "recoveries": 0
+          },
+          "frame": 264,
+          "resources": {
+            "asyncPreparation": {
+              "activeJobs": 0,
+              "jobLimit": 8,
+              "queuedDetailJobs": 0,
+              "queuedForegroundJobs": 0,
+              "queuedJobs": 0
+            },
+            "geometryUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 4194304,
+              "deferredUploads": 0,
+              "pendingSurfaces": 0
+            },
+            "gltfSharedGeometry": {
+              "pendingPreparationTasks": 0,
+              "preparedTaskBytes": 0,
+              "preparedTasks": 0,
+              "preparationTaskClaims": 0,
+              "primitiveClaims": 0,
+              "retainedBytes": 0,
+              "reusedClaims": 0,
+              "reusedPreparationClaims": 0,
+              "taskProducerPreparationDurationMs": 0,
+              "uniqueGeometries": 0
+            },
+            "gltfSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "imageTexturePreparation": {
+              "activePreparations": 0,
+              "browserStageTimings": {
+                "sourceCount": 324,
+                "totals": {
+                  "decodeDurationMs": 85534.20000004768,
+                  "decodeQueueDurationMs": 10.90000033378601,
+                  "transportDurationMs": 126361.29999899864,
+                  "transportQueueDurationMs": 15.40000033378601
+                }
+              },
+              "decodedHandoffBytes": 0,
+              "decodedHandoffThresholdBytes": 67108864,
+              "encodedSourceReads": {
+                "activeReads": 0,
+                "queuedReads": 0,
+                "sourceReservationLimit": 128,
+                "sourceReservations": 0,
+                "stagedBytes": 0,
+                "stagedByteThreshold": 33554432
+              },
+              "pendingStorageRepresentations": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0
+            },
+            "imageTextureUploads": {
+              "admittedBytes": 70036,
+              "budgetBytes": 33554432,
+              "deferredUploads": 0
+            },
+            "imageTextures": {
+              "compressedBytes": 0,
+              "compressedTextures": 0,
+              "fittedTextures": 324,
+              "residentBytes": 6774140,
+              "residentTextures": 324
+            },
+            "persistentGpu": {
+              "budgetBytes": 67108864,
+              "deniedClaims": 291,
+              "retainedBytes": 42568738,
+              "textureBudgetBytes": 58720181,
+              "textureRetainedBytes": 42568652,
+              "textureMigrationReserveBytes": 8388597
+            },
+            "virtualTextures": {
+              "rasterCacheBytes": 16824052,
+              "rasterCacheLimitBytes": 33554432,
+              "rasterCacheReads": 2,
+              "rasterCacheHits": 335,
+              "rasterCachePending": 0,
+              "rasterCachePeakBytes": 33553144,
+              "rasterCacheQueueMs": 5293.800001382828,
+              "rasterCacheDecodeMs": 145.09999990463257,
+              "rasterPageRenderMs": 271.9000039100647,
+              "retainedPagePixelBytes": 557568,
+              "pageQueueMs": 13.59999942779541,
+              "pageReadMs": 5739.300002336502,
+              "pageReadyWaitMs": 152463.50000047684,
+              "pageTimedReads": 337,
+              "pageTimedUploads": 337,
+              "atlasGrowthFrames": 61,
+              "admittedUploadBytes": 70036,
+              "atlasBytes": 35684352,
+              "atlasPools": 1,
+              "atlasGrowthFailures": 0,
+              "desiredPages": 324,
+              "admittedPages": 324,
+              "unresidentPages": 0,
+              "automaticCandidates": 324,
+              "automaticDecodedBytes": 17381620,
+              "automaticIneligible": 0,
+              "automaticResources": 324,
+              "automaticWaiting": 0,
+              "deferredUploads": 0,
+              "failedPages": 0,
+              "pageRequests": 337,
+              "pendingPages": 0,
+              "pendingPageBytes": 0,
+              "pendingPageByteLimit": 16777216,
+              "residentPages": 324,
+              "uploadedPages": 337,
+              "uploadBudgetBytes": 33554432
+            }
+          },
+          "size": {
+            "backingHeight": 768,
+            "backingWidth": 768,
+            "cssHeight": 768,
+            "cssWidth": 768,
+            "pixelRatio": 1,
+            "renderScale": 1
+          }
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        }
+      }
+    },
+    {
+      "label": "cold-3240-64",
+      "snapshot": {
+        "elapsedMs": 37918.799999952316,
+        "count": 3240,
+        "budget": 67108864,
+        "renderer": {
+          "presentation": "ready",
+          "context": {
+            "generation": 1,
+            "interruptions": 0,
+            "phase": "active",
+            "recoveries": 0
+          },
+          "frame": 243,
+          "resources": {
+            "asyncPreparation": {
+              "activeJobs": 0,
+              "jobLimit": 8,
+              "queuedDetailJobs": 0,
+              "queuedForegroundJobs": 0,
+              "queuedJobs": 0
+            },
+            "geometryUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 4194304,
+              "deferredUploads": 0,
+              "pendingSurfaces": 0
+            },
+            "gltfSharedGeometry": {
+              "pendingPreparationTasks": 0,
+              "preparedTaskBytes": 0,
+              "preparedTasks": 0,
+              "preparationTaskClaims": 0,
+              "primitiveClaims": 0,
+              "retainedBytes": 0,
+              "reusedClaims": 0,
+              "reusedPreparationClaims": 0,
+              "taskProducerPreparationDurationMs": 0,
+              "uniqueGeometries": 0
+            },
+            "gltfSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "imageTexturePreparation": {
+              "activePreparations": 0,
+              "browserStageTimings": {
+                "sourceCount": 324,
+                "totals": {
+                  "decodeDurationMs": 143549.20000004768,
+                  "decodeQueueDurationMs": 46.599998235702515,
+                  "transportDurationMs": 282688.99999952316,
+                  "transportQueueDurationMs": 3981.699999809265
+                }
+              },
+              "decodedHandoffBytes": 0,
+              "decodedHandoffThresholdBytes": 67108864,
+              "encodedSourceReads": {
+                "activeReads": 0,
+                "queuedReads": 0,
+                "sourceReservationLimit": 128,
+                "sourceReservations": 0,
+                "stagedBytes": 0,
+                "stagedByteThreshold": 33554432
+              },
+              "pendingStorageRepresentations": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0
+            },
+            "imageTextureUploads": {
+              "admittedBytes": 210108,
+              "budgetBytes": 33554432,
+              "deferredUploads": 0
+            },
+            "imageTextures": {
+              "compressedBytes": 0,
+              "compressedTextures": 0,
+              "fittedTextures": 324,
+              "residentBytes": 6777080,
+              "residentTextures": 324
+            },
+            "persistentGpu": {
+              "budgetBytes": 67108864,
+              "deniedClaims": 481,
+              "retainedBytes": 42571678,
+              "textureBudgetBytes": 58720181,
+              "textureRetainedBytes": 42571592,
+              "textureMigrationReserveBytes": 8388597
+            },
+            "virtualTextures": {
+              "rasterCacheBytes": 33522612,
+              "rasterCacheLimitBytes": 33554432,
+              "rasterCacheReads": 5,
+              "rasterCacheHits": 321,
+              "rasterCachePending": 0,
+              "rasterCachePeakBytes": 33552828,
+              "rasterCacheQueueMs": 41501.900002002716,
+              "rasterCacheDecodeMs": 8342.200000286102,
+              "rasterPageRenderMs": 187.99999904632568,
+              "idleAstcPixelHits": 1,
+              "retainedPagePixelBytes": 487872,
+              "pageQueueMs": 7.899998426437378,
+              "pageReadMs": 50071.40000128746,
+              "pageReadyWaitMs": 179014.0999994278,
+              "pageTimedReads": 328,
+              "pageTimedUploads": 325,
+              "atlasGrowthFrames": 71,
+              "admittedUploadBytes": 210108,
+              "atlasBytes": 35684352,
+              "atlasPools": 1,
+              "atlasGrowthFailures": 0,
+              "desiredPages": 324,
+              "admittedPages": 324,
+              "unresidentPages": 0,
+              "automaticCandidates": 3240,
+              "automaticDecodedBytes": 34010484,
+              "automaticIneligible": 0,
+              "automaticResources": 324,
+              "automaticWaiting": 0,
+              "deferredUploads": 0,
+              "failedPages": 0,
+              "pageRequests": 328,
+              "pendingPages": 0,
+              "pendingPageBytes": 0,
+              "pendingPageByteLimit": 16777216,
+              "residentPages": 324,
+              "uploadedPages": 325,
+              "uploadBudgetBytes": 33554432
+            }
+          },
+          "size": {
+            "backingHeight": 768,
+            "backingWidth": 768,
+            "cssHeight": 768,
+            "cssWidth": 768,
+            "pixelRatio": 1,
+            "renderScale": 1
+          }
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        }
+      }
+    },
+    {
+      "label": "distant-64",
+      "snapshot": {
+        "elapsedMs": 55242.200000047684,
+        "count": 3240,
+        "budget": 67108864,
+        "renderer": {
+          "presentation": "ready",
+          "context": {
+            "generation": 1,
+            "interruptions": 0,
+            "phase": "active",
+            "recoveries": 0
+          },
+          "frame": 517,
+          "resources": {
+            "asyncPreparation": {
+              "activeJobs": 0,
+              "jobLimit": 8,
+              "queuedDetailJobs": 0,
+              "queuedForegroundJobs": 0,
+              "queuedJobs": 0
+            },
+            "geometryUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 4194304,
+              "deferredUploads": 0,
+              "pendingSurfaces": 0
+            },
+            "gltfSharedGeometry": {
+              "pendingPreparationTasks": 0,
+              "preparedTaskBytes": 0,
+              "preparedTasks": 0,
+              "preparationTaskClaims": 0,
+              "primitiveClaims": 0,
+              "retainedBytes": 0,
+              "reusedClaims": 0,
+              "reusedPreparationClaims": 0,
+              "taskProducerPreparationDurationMs": 0,
+              "uniqueGeometries": 0
+            },
+            "gltfSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "imageTexturePreparation": {
+              "activePreparations": 0,
+              "browserStageTimings": {
+                "sourceCount": 324,
+                "totals": {
+                  "decodeDurationMs": 200598.49999713898,
+                  "decodeQueueDurationMs": 7.100002765655518,
+                  "transportDurationMs": 311247.80000019073,
+                  "transportQueueDurationMs": 26.80000066757202
+                }
+              },
+              "decodedHandoffBytes": 0,
+              "decodedHandoffThresholdBytes": 67108864,
+              "encodedSourceReads": {
+                "activeReads": 0,
+                "queuedReads": 0,
+                "sourceReservationLimit": 128,
+                "sourceReservations": 0,
+                "stagedBytes": 0,
+                "stagedByteThreshold": 33554432
+              },
+              "pendingStorageRepresentations": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0
+            },
+            "imageTextureUploads": {
+              "admittedBytes": 420216,
+              "budgetBytes": 33554432,
+              "deferredUploads": 0
+            },
+            "imageTextures": {
+              "compressedBytes": 0,
+              "compressedTextures": 0,
+              "fittedTextures": 324,
+              "residentBytes": 6771176,
+              "residentTextures": 324
+            },
+            "persistentGpu": {
+              "budgetBytes": 67108864,
+              "deniedClaims": 708,
+              "retainedBytes": 42565774,
+              "textureBudgetBytes": 58720181,
+              "textureRetainedBytes": 42565688,
+              "textureMigrationReserveBytes": 8388597
+            },
+            "virtualTextures": {
+              "rasterCacheBytes": 33442532,
+              "rasterCacheLimitBytes": 33554432,
+              "rasterCacheReads": 5,
+              "rasterCacheHits": 650,
+              "rasterCachePending": 0,
+              "rasterCachePeakBytes": 33552828,
+              "rasterCacheQueueMs": 64659.60000228882,
+              "rasterCacheDecodeMs": 8342.200000286102,
+              "rasterPageRenderMs": 424.19999861717224,
+              "idleAstcPixelHits": 1,
+              "retainedPagePixelBytes": 557568,
+              "pageQueueMs": 37.699997663497925,
+              "pageReadMs": 73477.70000219345,
+              "pageReadyWaitMs": 550927.9999964237,
+              "pageTimedReads": 657,
+              "pageTimedUploads": 652,
+              "atlasGrowthFrames": 149,
+              "admittedUploadBytes": 420216,
+              "atlasBytes": 35684352,
+              "atlasPools": 1,
+              "atlasGrowthFailures": 0,
+              "desiredPages": 324,
+              "admittedPages": 324,
+              "unresidentPages": 0,
+              "automaticCandidates": 3240,
+              "automaticDecodedBytes": 34000100,
+              "automaticIneligible": 0,
+              "automaticResources": 324,
+              "automaticWaiting": 0,
+              "deferredUploads": 0,
+              "failedPages": 0,
+              "pageRequests": 657,
+              "pendingPages": 0,
+              "pendingPageBytes": 0,
+              "pendingPageByteLimit": 16777216,
+              "residentPages": 324,
+              "uploadedPages": 652,
+              "uploadBudgetBytes": 33554432
+            }
+          },
+          "size": {
+            "backingHeight": 768,
+            "backingWidth": 768,
+            "cssHeight": 768,
+            "cssWidth": 768,
+            "pixelRatio": 1,
+            "renderScale": 1
+          }
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        }
+      }
+    },
+    {
+      "label": "return-64",
+      "snapshot": {
+        "elapsedMs": 37492.200000047684,
+        "count": 3240,
+        "budget": 67108864,
+        "renderer": {
+          "presentation": "ready",
+          "context": {
+            "generation": 1,
+            "interruptions": 0,
+            "phase": "active",
+            "recoveries": 0
+          },
+          "frame": 773,
+          "resources": {
+            "asyncPreparation": {
+              "activeJobs": 0,
+              "jobLimit": 8,
+              "queuedDetailJobs": 0,
+              "queuedForegroundJobs": 0,
+              "queuedJobs": 0
+            },
+            "geometryUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 4194304,
+              "deferredUploads": 0,
+              "pendingSurfaces": 0
+            },
+            "gltfSharedGeometry": {
+              "pendingPreparationTasks": 0,
+              "preparedTaskBytes": 0,
+              "preparedTasks": 0,
+              "preparationTaskClaims": 0,
+              "primitiveClaims": 0,
+              "retainedBytes": 0,
+              "reusedClaims": 0,
+              "reusedPreparationClaims": 0,
+              "taskProducerPreparationDurationMs": 0,
+              "uniqueGeometries": 0
+            },
+            "gltfSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "imageTexturePreparation": {
+              "activePreparations": 0,
+              "browserStageTimings": {
+                "sourceCount": 324,
+                "totals": {
+                  "decodeDurationMs": 139893.10000014305,
+                  "decodeQueueDurationMs": 12.399999618530273,
+                  "transportDurationMs": 214670.59999752045,
+                  "transportQueueDurationMs": 9.300000667572021
+                }
+              },
+              "decodedHandoffBytes": 0,
+              "decodedHandoffThresholdBytes": 67108864,
+              "encodedSourceReads": {
+                "activeReads": 0,
+                "queuedReads": 0,
+                "sourceReservationLimit": 128,
+                "sourceReservations": 0,
+                "stagedBytes": 0,
+                "stagedByteThreshold": 33554432
+              },
+              "pendingStorageRepresentations": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0
+            },
+            "imageTextureUploads": {
+              "admittedBytes": 280144,
+              "budgetBytes": 33554432,
+              "deferredUploads": 0
+            },
+            "imageTextures": {
+              "compressedBytes": 0,
+              "compressedTextures": 0,
+              "fittedTextures": 324,
+              "residentBytes": 6776116,
+              "residentTextures": 324
+            },
+            "persistentGpu": {
+              "budgetBytes": 67108864,
+              "deniedClaims": 1046,
+              "retainedBytes": 42570714,
+              "textureBudgetBytes": 58720181,
+              "textureRetainedBytes": 42570628,
+              "textureMigrationReserveBytes": 8388597
+            },
+            "virtualTextures": {
+              "rasterCacheBytes": 33480884,
+              "rasterCacheLimitBytes": 33554432,
+              "rasterCacheReads": 5,
+              "rasterCacheHits": 982,
+              "rasterCachePending": 0,
+              "rasterCachePeakBytes": 33553304,
+              "rasterCacheQueueMs": 81924.90000200272,
+              "rasterCacheDecodeMs": 8342.200000286102,
+              "rasterPageRenderMs": 579.7999973297119,
+              "idleAstcPixelHits": 2,
+              "retainedPagePixelBytes": 487872,
+              "pageQueueMs": 44.59999752044678,
+              "pageReadMs": 90912.70000100136,
+              "pageReadyWaitMs": 770104.3999958038,
+              "pageTimedReads": 989,
+              "pageTimedUploads": 984,
+              "atlasGrowthFrames": 225,
+              "admittedUploadBytes": 280144,
+              "atlasBytes": 35684352,
+              "atlasPools": 1,
+              "atlasGrowthFailures": 0,
+              "desiredPages": 324,
+              "admittedPages": 324,
+              "unresidentPages": 0,
+              "automaticCandidates": 3240,
+              "automaticDecodedBytes": 33968756,
+              "automaticIneligible": 0,
+              "automaticResources": 324,
+              "automaticWaiting": 0,
+              "deferredUploads": 0,
+              "failedPages": 0,
+              "pageRequests": 989,
+              "pendingPages": 0,
+              "pendingPageBytes": 0,
+              "pendingPageByteLimit": 16777216,
+              "residentPages": 324,
+              "uploadedPages": 984,
+              "uploadBudgetBytes": 33554432
+            }
+          },
+          "size": {
+            "backingHeight": 768,
+            "backingWidth": 768,
+            "cssHeight": 768,
+            "cssWidth": 768,
+            "pixelRatio": 1,
+            "renderScale": 1
+          }
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        }
+      }
+    },
+    {
+      "label": "rapid-64",
+      "snapshot": {
+        "elapsedMs": 40709,
+        "count": 3240,
+        "budget": 67108864,
+        "renderer": {
+          "presentation": "ready",
+          "context": {
+            "generation": 1,
+            "interruptions": 0,
+            "phase": "active",
+            "recoveries": 0
+          },
+          "frame": 1035,
+          "resources": {
+            "asyncPreparation": {
+              "activeJobs": 0,
+              "jobLimit": 8,
+              "queuedDetailJobs": 0,
+              "queuedForegroundJobs": 0,
+              "queuedJobs": 0
+            },
+            "geometryUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 4194304,
+              "deferredUploads": 0,
+              "pendingSurfaces": 0
+            },
+            "gltfSharedGeometry": {
+              "pendingPreparationTasks": 0,
+              "preparedTaskBytes": 0,
+              "preparedTasks": 0,
+              "preparationTaskClaims": 0,
+              "primitiveClaims": 0,
+              "retainedBytes": 0,
+              "reusedClaims": 0,
+              "reusedPreparationClaims": 0,
+              "taskProducerPreparationDurationMs": 0,
+              "uniqueGeometries": 0
+            },
+            "gltfSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "imageTexturePreparation": {
+              "activePreparations": 0,
+              "browserStageTimings": {
+                "sourceCount": 324,
+                "totals": {
+                  "decodeDurationMs": 151946.20000076294,
+                  "decodeQueueDurationMs": 10.500000715255737,
+                  "transportDurationMs": 228589.29999613762,
+                  "transportQueueDurationMs": 5.900000810623169
+                }
+              },
+              "decodedHandoffBytes": 0,
+              "decodedHandoffThresholdBytes": 67108864,
+              "encodedSourceReads": {
+                "activeReads": 0,
+                "queuedReads": 0,
+                "sourceReservationLimit": 128,
+                "sourceReservations": 0,
+                "stagedBytes": 0,
+                "stagedByteThreshold": 33554432
+              },
+              "pendingStorageRepresentations": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0
+            },
+            "imageTextureUploads": {
+              "admittedBytes": 350180,
+              "budgetBytes": 33554432,
+              "deferredUploads": 0
+            },
+            "imageTextures": {
+              "compressedBytes": 0,
+              "compressedTextures": 0,
+              "fittedTextures": 324,
+              "residentBytes": 6777104,
+              "residentTextures": 324
+            },
+            "persistentGpu": {
+              "budgetBytes": 67108864,
+              "deniedClaims": 1452,
+              "retainedBytes": 42571702,
+              "textureBudgetBytes": 58720181,
+              "textureRetainedBytes": 42571616,
+              "textureMigrationReserveBytes": 8388597
+            },
+            "virtualTextures": {
+              "rasterCacheBytes": 33492128,
+              "rasterCacheLimitBytes": 33554432,
+              "rasterCacheReads": 5,
+              "rasterCacheHits": 1308,
+              "rasterCachePending": 0,
+              "rasterCachePeakBytes": 33553304,
+              "rasterCacheQueueMs": 102077.30000281334,
+              "rasterCacheDecodeMs": 8342.200000286102,
+              "rasterPageRenderMs": 762.5999963283539,
+              "idleAstcPixelHits": 3,
+              "retainedPagePixelBytes": 487872,
+              "pageQueueMs": 59.49999737739563,
+              "pageReadMs": 111261.19999909401,
+              "pageReadyWaitMs": 990842.1999971867,
+              "pageTimedReads": 1315,
+              "pageTimedUploads": 1309,
+              "atlasGrowthFrames": 298,
+              "admittedUploadBytes": 350180,
+              "atlasBytes": 35684352,
+              "atlasPools": 1,
+              "atlasGrowthFailures": 0,
+              "desiredPages": 324,
+              "admittedPages": 324,
+              "unresidentPages": 0,
+              "automaticCandidates": 3240,
+              "automaticDecodedBytes": 33980000,
+              "automaticIneligible": 0,
+              "automaticResources": 324,
+              "automaticWaiting": 0,
+              "deferredUploads": 0,
+              "failedPages": 0,
+              "pageRequests": 1315,
+              "pendingPages": 0,
+              "pendingPageBytes": 0,
+              "pendingPageByteLimit": 16777216,
+              "residentPages": 324,
+              "uploadedPages": 1309,
+              "uploadBudgetBytes": 33554432
+            }
+          },
+          "size": {
+            "backingHeight": 768,
+            "backingWidth": 768,
+            "cssHeight": 768,
+            "cssWidth": 768,
+            "pixelRatio": 1,
+            "renderScale": 1
+          }
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        }
+      }
+    },
+    {
+      "label": "resize-64",
+      "snapshot": {
+        "elapsedMs": 209.40000009536743,
+        "count": 3240,
+        "budget": 67108864,
+        "renderer": {
+          "presentation": "ready",
+          "context": {
+            "generation": 1,
+            "interruptions": 0,
+            "phase": "active",
+            "recoveries": 0
+          },
+          "frame": 1037,
+          "resources": {
+            "asyncPreparation": {
+              "activeJobs": 0,
+              "jobLimit": 8,
+              "queuedDetailJobs": 0,
+              "queuedForegroundJobs": 0,
+              "queuedJobs": 0
+            },
+            "geometryUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 4194304,
+              "deferredUploads": 0,
+              "pendingSurfaces": 0
+            },
+            "gltfSharedGeometry": {
+              "pendingPreparationTasks": 0,
+              "preparedTaskBytes": 0,
+              "preparedTasks": 0,
+              "preparationTaskClaims": 0,
+              "primitiveClaims": 0,
+              "retainedBytes": 0,
+              "reusedClaims": 0,
+              "reusedPreparationClaims": 0,
+              "taskProducerPreparationDurationMs": 0,
+              "uniqueGeometries": 0
+            },
+            "gltfSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "imageTexturePreparation": {
+              "activePreparations": 0,
+              "browserStageTimings": {
+                "sourceCount": 324,
+                "totals": {
+                  "decodeDurationMs": 151946.20000076294,
+                  "decodeQueueDurationMs": 10.500000715255737,
+                  "transportDurationMs": 228589.29999613762,
+                  "transportQueueDurationMs": 5.900000810623169
+                }
+              },
+              "decodedHandoffBytes": 0,
+              "decodedHandoffThresholdBytes": 67108864,
+              "encodedSourceReads": {
+                "activeReads": 0,
+                "queuedReads": 0,
+                "sourceReservationLimit": 128,
+                "sourceReservations": 0,
+                "stagedBytes": 0,
+                "stagedByteThreshold": 33554432
+              },
+              "pendingStorageRepresentations": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0
+            },
+            "imageTextureUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 33554432,
+              "deferredUploads": 0
+            },
+            "imageTextures": {
+              "compressedBytes": 0,
+              "compressedTextures": 0,
+              "fittedTextures": 324,
+              "residentBytes": 6777104,
+              "residentTextures": 324
+            },
+            "persistentGpu": {
+              "budgetBytes": 67108864,
+              "deniedClaims": 1452,
+              "retainedBytes": 42571702,
+              "textureBudgetBytes": 58720181,
+              "textureRetainedBytes": 42571616,
+              "textureMigrationReserveBytes": 8388597
+            },
+            "virtualTextures": {
+              "rasterCacheBytes": 33492128,
+              "rasterCacheLimitBytes": 33554432,
+              "rasterCacheReads": 5,
+              "rasterCacheHits": 1308,
+              "rasterCachePending": 0,
+              "rasterCachePeakBytes": 33553304,
+              "rasterCacheQueueMs": 102077.30000281334,
+              "rasterCacheDecodeMs": 8342.200000286102,
+              "rasterPageRenderMs": 762.5999963283539,
+              "idleAstcPixelHits": 3,
+              "retainedPagePixelBytes": 487872,
+              "pageQueueMs": 59.49999737739563,
+              "pageReadMs": 111261.19999909401,
+              "pageReadyWaitMs": 990842.1999971867,
+              "pageTimedReads": 1315,
+              "pageTimedUploads": 1309,
+              "atlasGrowthFrames": 298,
+              "admittedUploadBytes": 0,
+              "atlasBytes": 35684352,
+              "atlasPools": 1,
+              "atlasGrowthFailures": 0,
+              "desiredPages": 324,
+              "admittedPages": 324,
+              "unresidentPages": 0,
+              "automaticCandidates": 3240,
+              "automaticDecodedBytes": 33980000,
+              "automaticIneligible": 0,
+              "automaticResources": 324,
+              "automaticWaiting": 0,
+              "deferredUploads": 0,
+              "failedPages": 0,
+              "pageRequests": 1315,
+              "pendingPages": 0,
+              "pendingPageBytes": 0,
+              "pendingPageByteLimit": 16777216,
+              "residentPages": 324,
+              "uploadedPages": 1309,
+              "uploadBudgetBytes": 33554432
+            }
+          },
+          "size": {
+            "backingHeight": 1536,
+            "backingWidth": 1536,
+            "cssHeight": 1536,
+            "cssWidth": 1536,
+            "pixelRatio": 1,
+            "renderScale": 1
+          }
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        }
+      }
+    },
+    {
+      "label": "restored-64",
+      "snapshot": {
+        "elapsedMs": 33652.5,
+        "count": 3240,
+        "budget": 67108864,
+        "renderer": {
+          "presentation": "ready",
+          "context": {
+            "generation": 2,
+            "interruptions": 1,
+            "phase": "active",
+            "recoveries": 1
+          },
+          "frame": 1301,
+          "resources": {
+            "asyncPreparation": {
+              "activeJobs": 0,
+              "jobLimit": 8,
+              "queuedDetailJobs": 0,
+              "queuedForegroundJobs": 0,
+              "queuedJobs": 0
+            },
+            "geometryUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 4194304,
+              "deferredUploads": 0,
+              "pendingSurfaces": 0
+            },
+            "gltfSharedGeometry": {
+              "pendingPreparationTasks": 0,
+              "preparedTaskBytes": 0,
+              "preparedTasks": 0,
+              "preparationTaskClaims": 0,
+              "primitiveClaims": 0,
+              "retainedBytes": 0,
+              "reusedClaims": 0,
+              "reusedPreparationClaims": 0,
+              "taskProducerPreparationDurationMs": 0,
+              "uniqueGeometries": 0
+            },
+            "gltfSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "imageTexturePreparation": {
+              "activePreparations": 0,
+              "browserStageTimings": {
+                "sourceCount": 324,
+                "totals": {
+                  "decodeDurationMs": 127267.19999980927,
+                  "decodeQueueDurationMs": 7.30000114440918,
+                  "transportDurationMs": 199613.69999742508,
+                  "transportQueueDurationMs": 1111.6999998092651
+                }
+              },
+              "decodedHandoffBytes": 0,
+              "decodedHandoffThresholdBytes": 67108864,
+              "encodedSourceReads": {
+                "activeReads": 0,
+                "queuedReads": 0,
+                "sourceReservationLimit": 128,
+                "sourceReservations": 0,
+                "stagedBytes": 0,
+                "stagedByteThreshold": 33554432
+              },
+              "pendingStorageRepresentations": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0
+            },
+            "imageTextureUploads": {
+              "admittedBytes": 70036,
+              "budgetBytes": 33554432,
+              "deferredUploads": 0
+            },
+            "imageTextures": {
+              "compressedBytes": 0,
+              "compressedTextures": 0,
+              "fittedTextures": 324,
+              "residentBytes": 6777104,
+              "residentTextures": 324
+            },
+            "persistentGpu": {
+              "budgetBytes": 67108864,
+              "deniedClaims": 1452,
+              "retainedBytes": 42571702,
+              "textureBudgetBytes": 58720181,
+              "textureRetainedBytes": 42571616,
+              "textureMigrationReserveBytes": 8388597
+            },
+            "virtualTextures": {
+              "rasterCacheBytes": 16687880,
+              "rasterCacheLimitBytes": 33554432,
+              "rasterCacheReads": 225,
+              "rasterCacheHits": 1412,
+              "rasterCachePending": 0,
+              "rasterCachePeakBytes": 33553304,
+              "rasterCacheQueueMs": 198259.50000405312,
+              "rasterCacheDecodeMs": 38488.500000953674,
+              "rasterPageRenderMs": 992.4999961853027,
+              "idleAstcPixelHits": 3,
+              "retainedPagePixelBytes": 557568,
+              "pageQueueMs": 68.79999709129333,
+              "pageReadMs": 237875.89999961853,
+              "pageReadyWaitMs": 1005288.800000906,
+              "pageTimedReads": 1639,
+              "pageTimedUploads": 1633,
+              "atlasGrowthFrames": 298,
+              "admittedUploadBytes": 70036,
+              "atlasBytes": 35684352,
+              "atlasPools": 1,
+              "atlasGrowthFailures": 0,
+              "desiredPages": 324,
+              "admittedPages": 324,
+              "unresidentPages": 0,
+              "automaticCandidates": 3240,
+              "automaticDecodedBytes": 17245448,
+              "automaticIneligible": 0,
+              "automaticResources": 324,
+              "automaticWaiting": 0,
+              "deferredUploads": 0,
+              "failedPages": 0,
+              "pageRequests": 1639,
+              "pendingPages": 0,
+              "pendingPageBytes": 0,
+              "pendingPageByteLimit": 16777216,
+              "residentPages": 324,
+              "uploadedPages": 1633,
+              "uploadBudgetBytes": 33554432
+            }
+          },
+          "size": {
+            "backingHeight": 1536,
+            "backingWidth": 1536,
+            "cssHeight": 1536,
+            "cssWidth": 1536,
+            "pixelRatio": 1,
+            "renderScale": 1
+          }
+        },
+        "lifecycle": {
+          "generation": 2,
+          "interruptions": 1,
+          "phase": "active",
+          "recoveries": 1
+        }
+      }
+    },
+    {
+      "label": "cold-3240-32",
+      "snapshot": {
+        "elapsedMs": 25307.700000047684,
+        "count": 3240,
+        "budget": 33554432,
+        "renderer": {
+          "presentation": "ready",
+          "context": {
+            "generation": 1,
+            "interruptions": 0,
+            "phase": "active",
+            "recoveries": 0
+          },
+          "frame": 253,
+          "resources": {
+            "asyncPreparation": {
+              "activeJobs": 0,
+              "jobLimit": 8,
+              "queuedDetailJobs": 0,
+              "queuedForegroundJobs": 0,
+              "queuedJobs": 0
+            },
+            "geometryUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 4194304,
+              "deferredUploads": 0,
+              "pendingSurfaces": 0
+            },
+            "gltfSharedGeometry": {
+              "pendingPreparationTasks": 0,
+              "preparedTaskBytes": 0,
+              "preparedTasks": 0,
+              "preparationTaskClaims": 0,
+              "primitiveClaims": 0,
+              "retainedBytes": 0,
+              "reusedClaims": 0,
+              "reusedPreparationClaims": 0,
+              "taskProducerPreparationDurationMs": 0,
+              "uniqueGeometries": 0
+            },
+            "gltfSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "imageTexturePreparation": {
+              "activePreparations": 0,
+              "browserStageTimings": {
+                "sourceCount": 324,
+                "totals": {
+                  "decodeDurationMs": 89292.19999814034,
+                  "decodeQueueDurationMs": 4.800000429153442,
+                  "transportDurationMs": 168047.89999890327,
+                  "transportQueueDurationMs": 2394.9999992847443
+                }
+              },
+              "decodedHandoffBytes": 0,
+              "decodedHandoffThresholdBytes": 67108864,
+              "encodedSourceReads": {
+                "activeReads": 0,
+                "queuedReads": 0,
+                "sourceReservationLimit": 128,
+                "sourceReservations": 0,
+                "stagedBytes": 0,
+                "stagedByteThreshold": 33554432
+              },
+              "pendingStorageRepresentations": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0
+            },
+            "imageTextureUploads": {
+              "admittedBytes": 560288,
+              "budgetBytes": 33554432,
+              "deferredUploads": 0
+            },
+            "imageTextures": {
+              "compressedBytes": 0,
+              "compressedTextures": 0,
+              "fittedTextures": 324,
+              "residentBytes": 3620016,
+              "residentTextures": 324
+            },
+            "persistentGpu": {
+              "budgetBytes": 33554432,
+              "deniedClaims": 163,
+              "retainedBytes": 21549318,
+              "textureBudgetBytes": 29360053,
+              "textureRetainedBytes": 21549232,
+              "textureMigrationReserveBytes": 4194293
+            },
+            "virtualTextures": {
+              "rasterCacheBytes": 25013168,
+              "rasterCacheLimitBytes": 33554432,
+              "rasterCacheReads": 4,
+              "rasterCacheHits": 286,
+              "rasterCachePending": 0,
+              "rasterCachePeakBytes": 25013168,
+              "rasterCacheQueueMs": 21852.200000047684,
+              "rasterCacheDecodeMs": 4129.100000143051,
+              "rasterPageRenderMs": 106.9999988079071,
+              "idleAstcPixelHits": 1,
+              "retainedPagePixelBytes": 487872,
+              "pageQueueMs": 4.999999523162842,
+              "pageReadMs": 26100.39999771118,
+              "pageReadyWaitMs": 53242.50000047684,
+              "pageTimedReads": 290,
+              "pageTimedUploads": 289,
+              "atlasGrowthFrames": 41,
+              "admittedUploadBytes": 560288,
+              "atlasBytes": 17842176,
+              "atlasPools": 1,
+              "atlasGrowthFailures": 0,
+              "desiredPages": 324,
+              "admittedPages": 256,
+              "unresidentPages": 0,
+              "automaticCandidates": 3240,
+              "automaticDecodedBytes": 25501040,
+              "automaticIneligible": 0,
+              "automaticResources": 324,
+              "automaticWaiting": 0,
+              "deferredUploads": 0,
+              "failedPages": 0,
+              "pageRequests": 290,
+              "pendingPages": 0,
+              "pendingPageBytes": 0,
+              "pendingPageByteLimit": 16777216,
+              "residentPages": 256,
+              "uploadedPages": 289,
+              "uploadBudgetBytes": 33554432
+            }
+          },
+          "size": {
+            "backingHeight": 768,
+            "backingWidth": 768,
+            "cssHeight": 768,
+            "cssWidth": 768,
+            "pixelRatio": 1,
+            "renderScale": 1
+          }
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        }
+      }
+    },
+    {
+      "label": "distant-32",
+      "snapshot": {
+        "elapsedMs": 29517.60000014305,
+        "count": 3240,
+        "budget": 33554432,
+        "renderer": {
+          "presentation": "ready",
+          "context": {
+            "generation": 1,
+            "interruptions": 0,
+            "phase": "active",
+            "recoveries": 0
+          },
+          "frame": 505,
+          "resources": {
+            "asyncPreparation": {
+              "activeJobs": 0,
+              "jobLimit": 8,
+              "queuedDetailJobs": 0,
+              "queuedForegroundJobs": 0,
+              "queuedJobs": 0
+            },
+            "geometryUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 4194304,
+              "deferredUploads": 0,
+              "pendingSurfaces": 0
+            },
+            "gltfSharedGeometry": {
+              "pendingPreparationTasks": 0,
+              "preparedTaskBytes": 0,
+              "preparedTasks": 0,
+              "preparationTaskClaims": 0,
+              "primitiveClaims": 0,
+              "retainedBytes": 0,
+              "reusedClaims": 0,
+              "reusedPreparationClaims": 0,
+              "taskProducerPreparationDurationMs": 0,
+              "uniqueGeometries": 0
+            },
+            "gltfSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "imageTexturePreparation": {
+              "activePreparations": 0,
+              "browserStageTimings": {
+                "sourceCount": 324,
+                "totals": {
+                  "decodeDurationMs": 102415.20000052452,
+                  "decodeQueueDurationMs": 7.3999998569488525,
+                  "transportDurationMs": 148748.0999996662,
+                  "transportQueueDurationMs": 5.999999284744263
+                }
+              },
+              "decodedHandoffBytes": 0,
+              "decodedHandoffThresholdBytes": 67108864,
+              "encodedSourceReads": {
+                "activeReads": 0,
+                "queuedReads": 0,
+                "sourceReservationLimit": 128,
+                "sourceReservations": 0,
+                "stagedBytes": 0,
+                "stagedByteThreshold": 33554432
+              },
+              "pendingStorageRepresentations": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0
+            },
+            "imageTextureUploads": {
+              "admittedBytes": 280144,
+              "budgetBytes": 33554432,
+              "deferredUploads": 0
+            },
+            "imageTextures": {
+              "compressedBytes": 0,
+              "compressedTextures": 0,
+              "fittedTextures": 324,
+              "residentBytes": 3623616,
+              "residentTextures": 324
+            },
+            "persistentGpu": {
+              "budgetBytes": 33554432,
+              "deniedClaims": 349,
+              "retainedBytes": 21552918,
+              "textureBudgetBytes": 29360053,
+              "textureRetainedBytes": 21552832,
+              "textureMigrationReserveBytes": 4194293
+            },
+            "virtualTextures": {
+              "rasterCacheBytes": 33488636,
+              "rasterCacheLimitBytes": 33554432,
+              "rasterCacheReads": 4,
+              "rasterCacheHits": 576,
+              "rasterCachePending": 0,
+              "rasterCachePeakBytes": 33549652,
+              "rasterCacheQueueMs": 36482.39999771118,
+              "rasterCacheDecodeMs": 4129.100000143051,
+              "rasterPageRenderMs": 240.9999988079071,
+              "idleAstcPixelHits": 2,
+              "retainedPagePixelBytes": 487872,
+              "pageQueueMs": 9.899999618530273,
+              "pageReadMs": 40878.29999542236,
+              "pageReadyWaitMs": 195703.800000906,
+              "pageTimedReads": 580,
+              "pageTimedUploads": 577,
+              "atlasGrowthFrames": 77,
+              "admittedUploadBytes": 280144,
+              "atlasBytes": 17842176,
+              "atlasPools": 1,
+              "atlasGrowthFailures": 0,
+              "desiredPages": 324,
+              "admittedPages": 256,
+              "unresidentPages": 0,
+              "automaticCandidates": 3240,
+              "automaticDecodedBytes": 33976508,
+              "automaticIneligible": 0,
+              "automaticResources": 324,
+              "automaticWaiting": 0,
+              "deferredUploads": 0,
+              "failedPages": 0,
+              "pageRequests": 580,
+              "pendingPages": 0,
+              "pendingPageBytes": 0,
+              "pendingPageByteLimit": 16777216,
+              "residentPages": 256,
+              "uploadedPages": 577,
+              "uploadBudgetBytes": 33554432
+            }
+          },
+          "size": {
+            "backingHeight": 768,
+            "backingWidth": 768,
+            "cssHeight": 768,
+            "cssWidth": 768,
+            "pixelRatio": 1,
+            "renderScale": 1
+          }
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        }
+      }
+    },
+    {
+      "label": "return-32",
+      "snapshot": {
+        "elapsedMs": 35012.60000014305,
+        "count": 3240,
+        "budget": 33554432,
+        "renderer": {
+          "presentation": "ready",
+          "context": {
+            "generation": 1,
+            "interruptions": 0,
+            "phase": "active",
+            "recoveries": 0
+          },
+          "frame": 809,
+          "resources": {
+            "asyncPreparation": {
+              "activeJobs": 0,
+              "jobLimit": 8,
+              "queuedDetailJobs": 0,
+              "queuedForegroundJobs": 0,
+              "queuedJobs": 0
+            },
+            "geometryUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 4194304,
+              "deferredUploads": 0,
+              "pendingSurfaces": 0
+            },
+            "gltfSharedGeometry": {
+              "pendingPreparationTasks": 0,
+              "preparedTaskBytes": 0,
+              "preparedTasks": 0,
+              "preparationTaskClaims": 0,
+              "primitiveClaims": 0,
+              "retainedBytes": 0,
+              "reusedClaims": 0,
+              "reusedPreparationClaims": 0,
+              "taskProducerPreparationDurationMs": 0,
+              "uniqueGeometries": 0
+            },
+            "gltfSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "imageTexturePreparation": {
+              "activePreparations": 4,
+              "browserStageTimings": {
+                "sourceCount": 324,
+                "totals": {
+                  "decodeDurationMs": 98394.59999871254,
+                  "decodeQueueDurationMs": 8.000001907348633,
+                  "transportDurationMs": 189709.5999994278,
+                  "transportQueueDurationMs": 6.200001001358032
+                }
+              },
+              "decodedHandoffBytes": 0,
+              "decodedHandoffThresholdBytes": 67108864,
+              "encodedSourceReads": {
+                "activeReads": 7,
+                "queuedReads": 0,
+                "sourceReservationLimit": 128,
+                "sourceReservations": 36,
+                "stagedBytes": 7300,
+                "stagedByteThreshold": 33554432
+              },
+              "pendingStorageRepresentations": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 4
+            },
+            "imageTextureUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 33554432,
+              "deferredUploads": 0
+            },
+            "imageTextures": {
+              "compressedBytes": 0,
+              "compressedTextures": 0,
+              "fittedTextures": 324,
+              "residentBytes": 4071336,
+              "residentTextures": 324
+            },
+            "persistentGpu": {
+              "budgetBytes": 33554432,
+              "deniedClaims": 372,
+              "retainedBytes": 22000638,
+              "textureBudgetBytes": 29360053,
+              "textureRetainedBytes": 22000552,
+              "textureMigrationReserveBytes": 4194293
+            },
+            "virtualTextures": {
+              "rasterCacheBytes": 16818200,
+              "rasterCacheLimitBytes": 33554432,
+              "rasterCacheReads": 46,
+              "rasterCacheHits": 800,
+              "rasterCachePending": 0,
+              "rasterCachePeakBytes": 33553036,
+              "rasterCacheQueueMs": 78616.89999747276,
+              "rasterCacheDecodeMs": 15676.699999809265,
+              "rasterPageRenderMs": 388.6999967098236,
+              "idleAstcPixelHits": 3,
+              "retainedPagePixelBytes": 487872,
+              "pageQueueMs": 14.899998903274536,
+              "pageReadMs": 94787.09999489784,
+              "pageReadyWaitMs": 343615.40000247955,
+              "pageTimedReads": 846,
+              "pageTimedUploads": 842,
+              "atlasGrowthFrames": 83,
+              "admittedUploadBytes": 0,
+              "atlasBytes": 17842176,
+              "atlasPools": 1,
+              "atlasGrowthFailures": 0,
+              "desiredPages": 324,
+              "admittedPages": 256,
+              "unresidentPages": 0,
+              "automaticCandidates": 3240,
+              "automaticDecodedBytes": 17306072,
+              "automaticIneligible": 0,
+              "automaticResources": 324,
+              "automaticWaiting": 0,
+              "deferredUploads": 0,
+              "failedPages": 0,
+              "pageRequests": 846,
+              "pendingPages": 0,
+              "pendingPageBytes": 0,
+              "pendingPageByteLimit": 16777216,
+              "residentPages": 256,
+              "uploadedPages": 842,
+              "uploadBudgetBytes": 33554432
+            }
+          },
+          "size": {
+            "backingHeight": 768,
+            "backingWidth": 768,
+            "cssHeight": 768,
+            "cssWidth": 768,
+            "pixelRatio": 1,
+            "renderScale": 1
+          }
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        }
+      }
+    },
+    {
+      "label": "rapid-32",
+      "snapshot": {
+        "elapsedMs": 38469.90000009537,
+        "count": 3240,
+        "budget": 33554432,
+        "renderer": {
+          "presentation": "ready",
+          "context": {
+            "generation": 1,
+            "interruptions": 0,
+            "phase": "active",
+            "recoveries": 0
+          },
+          "frame": 1122,
+          "resources": {
+            "asyncPreparation": {
+              "activeJobs": 0,
+              "jobLimit": 8,
+              "queuedDetailJobs": 0,
+              "queuedForegroundJobs": 0,
+              "queuedJobs": 0
+            },
+            "geometryUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 4194304,
+              "deferredUploads": 0,
+              "pendingSurfaces": 0
+            },
+            "gltfSharedGeometry": {
+              "pendingPreparationTasks": 0,
+              "preparedTaskBytes": 0,
+              "preparedTasks": 0,
+              "preparationTaskClaims": 0,
+              "primitiveClaims": 0,
+              "retainedBytes": 0,
+              "reusedClaims": 0,
+              "reusedPreparationClaims": 0,
+              "taskProducerPreparationDurationMs": 0,
+              "uniqueGeometries": 0
+            },
+            "gltfSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "imageTexturePreparation": {
+              "activePreparations": 0,
+              "browserStageTimings": {
+                "sourceCount": 324,
+                "totals": {
+                  "decodeDurationMs": 137495.79999899864,
+                  "decodeQueueDurationMs": 15.100000619888306,
+                  "transportDurationMs": 261553.40000391006,
+                  "transportQueueDurationMs": 7.09999942779541
+                }
+              },
+              "decodedHandoffBytes": 0,
+              "decodedHandoffThresholdBytes": 67108864,
+              "encodedSourceReads": {
+                "activeReads": 0,
+                "queuedReads": 0,
+                "sourceReservationLimit": 128,
+                "sourceReservations": 0,
+                "stagedBytes": 0,
+                "stagedByteThreshold": 33554432
+              },
+              "pendingStorageRepresentations": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0
+            },
+            "imageTextureUploads": {
+              "admittedBytes": 490252,
+              "budgetBytes": 33554432,
+              "deferredUploads": 0
+            },
+            "imageTextures": {
+              "compressedBytes": 0,
+              "compressedTextures": 0,
+              "fittedTextures": 324,
+              "residentBytes": 3623616,
+              "residentTextures": 324
+            },
+            "persistentGpu": {
+              "budgetBytes": 33554432,
+              "deniedClaims": 527,
+              "retainedBytes": 21552918,
+              "textureBudgetBytes": 29360053,
+              "textureRetainedBytes": 21552832,
+              "textureMigrationReserveBytes": 4194293
+            },
+            "virtualTextures": {
+              "rasterCacheBytes": 33537324,
+              "rasterCacheLimitBytes": 33554432,
+              "rasterCacheReads": 46,
+              "rasterCacheHits": 1095,
+              "rasterCachePending": 0,
+              "rasterCachePeakBytes": 33553036,
+              "rasterCacheQueueMs": 94386.69999551773,
+              "rasterCacheDecodeMs": 15676.699999809265,
+              "rasterPageRenderMs": 528.5999960899353,
+              "idleAstcPixelHits": 3,
+              "retainedPagePixelBytes": 557568,
+              "pageQueueMs": 21.099998950958252,
+              "pageReadMs": 110707.99999284744,
+              "pageReadyWaitMs": 478190.2000043392,
+              "pageTimedReads": 1141,
+              "pageTimedUploads": 1135,
+              "atlasGrowthFrames": 125,
+              "admittedUploadBytes": 490252,
+              "atlasBytes": 17842176,
+              "atlasPools": 1,
+              "atlasGrowthFailures": 0,
+              "desiredPages": 324,
+              "admittedPages": 256,
+              "unresidentPages": 0,
+              "automaticCandidates": 3240,
+              "automaticDecodedBytes": 34094892,
+              "automaticIneligible": 0,
+              "automaticResources": 324,
+              "automaticWaiting": 0,
+              "deferredUploads": 0,
+              "failedPages": 0,
+              "pageRequests": 1141,
+              "pendingPages": 0,
+              "pendingPageBytes": 0,
+              "pendingPageByteLimit": 16777216,
+              "residentPages": 256,
+              "uploadedPages": 1135,
+              "uploadBudgetBytes": 33554432
+            }
+          },
+          "size": {
+            "backingHeight": 768,
+            "backingWidth": 768,
+            "cssHeight": 768,
+            "cssWidth": 768,
+            "pixelRatio": 1,
+            "renderScale": 1
+          }
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        }
+      }
+    },
+    {
+      "label": "resize-32",
+      "snapshot": {
+        "elapsedMs": 127.89999985694885,
+        "count": 3240,
+        "budget": 33554432,
+        "renderer": {
+          "presentation": "ready",
+          "context": {
+            "generation": 1,
+            "interruptions": 0,
+            "phase": "active",
+            "recoveries": 0
+          },
+          "frame": 1124,
+          "resources": {
+            "asyncPreparation": {
+              "activeJobs": 0,
+              "jobLimit": 8,
+              "queuedDetailJobs": 0,
+              "queuedForegroundJobs": 0,
+              "queuedJobs": 0
+            },
+            "geometryUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 4194304,
+              "deferredUploads": 0,
+              "pendingSurfaces": 0
+            },
+            "gltfSharedGeometry": {
+              "pendingPreparationTasks": 0,
+              "preparedTaskBytes": 0,
+              "preparedTasks": 0,
+              "preparationTaskClaims": 0,
+              "primitiveClaims": 0,
+              "retainedBytes": 0,
+              "reusedClaims": 0,
+              "reusedPreparationClaims": 0,
+              "taskProducerPreparationDurationMs": 0,
+              "uniqueGeometries": 0
+            },
+            "gltfSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "imageTexturePreparation": {
+              "activePreparations": 0,
+              "browserStageTimings": {
+                "sourceCount": 324,
+                "totals": {
+                  "decodeDurationMs": 137495.79999899864,
+                  "decodeQueueDurationMs": 15.100000619888306,
+                  "transportDurationMs": 261553.40000391006,
+                  "transportQueueDurationMs": 7.09999942779541
+                }
+              },
+              "decodedHandoffBytes": 0,
+              "decodedHandoffThresholdBytes": 67108864,
+              "encodedSourceReads": {
+                "activeReads": 0,
+                "queuedReads": 0,
+                "sourceReservationLimit": 128,
+                "sourceReservations": 0,
+                "stagedBytes": 0,
+                "stagedByteThreshold": 33554432
+              },
+              "pendingStorageRepresentations": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0
+            },
+            "imageTextureUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 33554432,
+              "deferredUploads": 0
+            },
+            "imageTextures": {
+              "compressedBytes": 0,
+              "compressedTextures": 0,
+              "fittedTextures": 324,
+              "residentBytes": 3623616,
+              "residentTextures": 324
+            },
+            "persistentGpu": {
+              "budgetBytes": 33554432,
+              "deniedClaims": 527,
+              "retainedBytes": 21552918,
+              "textureBudgetBytes": 29360053,
+              "textureRetainedBytes": 21552832,
+              "textureMigrationReserveBytes": 4194293
+            },
+            "virtualTextures": {
+              "rasterCacheBytes": 33537324,
+              "rasterCacheLimitBytes": 33554432,
+              "rasterCacheReads": 46,
+              "rasterCacheHits": 1095,
+              "rasterCachePending": 0,
+              "rasterCachePeakBytes": 33553036,
+              "rasterCacheQueueMs": 94386.69999551773,
+              "rasterCacheDecodeMs": 15676.699999809265,
+              "rasterPageRenderMs": 528.5999960899353,
+              "idleAstcPixelHits": 4,
+              "retainedPagePixelBytes": 487872,
+              "pageQueueMs": 21.099998950958252,
+              "pageReadMs": 110707.99999284744,
+              "pageReadyWaitMs": 478190.2000043392,
+              "pageTimedReads": 1141,
+              "pageTimedUploads": 1135,
+              "atlasGrowthFrames": 125,
+              "admittedUploadBytes": 0,
+              "atlasBytes": 17842176,
+              "atlasPools": 1,
+              "atlasGrowthFailures": 0,
+              "desiredPages": 324,
+              "admittedPages": 256,
+              "unresidentPages": 0,
+              "automaticCandidates": 3240,
+              "automaticDecodedBytes": 34025196,
+              "automaticIneligible": 0,
+              "automaticResources": 324,
+              "automaticWaiting": 0,
+              "deferredUploads": 0,
+              "failedPages": 0,
+              "pageRequests": 1141,
+              "pendingPages": 0,
+              "pendingPageBytes": 0,
+              "pendingPageByteLimit": 16777216,
+              "residentPages": 256,
+              "uploadedPages": 1135,
+              "uploadBudgetBytes": 33554432
+            }
+          },
+          "size": {
+            "backingHeight": 1536,
+            "backingWidth": 1536,
+            "cssHeight": 1536,
+            "cssWidth": 1536,
+            "pixelRatio": 1,
+            "renderScale": 1
+          }
+        },
+        "lifecycle": {
+          "generation": 1,
+          "interruptions": 0,
+          "phase": "active",
+          "recoveries": 0
+        }
+      }
+    },
+    {
+      "label": "restored-32",
+      "snapshot": {
+        "elapsedMs": 7149.200000047684,
+        "count": 3240,
+        "budget": 33554432,
+        "renderer": {
+          "presentation": "ready",
+          "context": {
+            "generation": 2,
+            "interruptions": 1,
+            "phase": "active",
+            "recoveries": 1
+          },
+          "frame": 1211,
+          "resources": {
+            "asyncPreparation": {
+              "activeJobs": 0,
+              "jobLimit": 8,
+              "queuedDetailJobs": 0,
+              "queuedForegroundJobs": 0,
+              "queuedJobs": 0
+            },
+            "geometryUploads": {
+              "admittedBytes": 0,
+              "budgetBytes": 4194304,
+              "deferredUploads": 0,
+              "pendingSurfaces": 0
+            },
+            "gltfSharedGeometry": {
+              "pendingPreparationTasks": 0,
+              "preparedTaskBytes": 0,
+              "preparedTasks": 0,
+              "preparationTaskClaims": 0,
+              "primitiveClaims": 0,
+              "retainedBytes": 0,
+              "reusedClaims": 0,
+              "reusedPreparationClaims": 0,
+              "taskProducerPreparationDurationMs": 0,
+              "uniqueGeometries": 0
+            },
+            "gltfSourceReads": {
+              "activeReads": 0,
+              "queuedReads": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0,
+              "stagedBytes": 0,
+              "stagedByteThreshold": 33554432
+            },
+            "imageTexturePreparation": {
+              "activePreparations": 0,
+              "browserStageTimings": {
+                "sourceCount": 324,
+                "totals": {
+                  "decodeDurationMs": 137495.79999899864,
+                  "decodeQueueDurationMs": 15.100000619888306,
+                  "transportDurationMs": 261553.40000391006,
+                  "transportQueueDurationMs": 7.09999942779541
+                }
+              },
+              "decodedHandoffBytes": 0,
+              "decodedHandoffThresholdBytes": 67108864,
+              "encodedSourceReads": {
+                "activeReads": 0,
+                "queuedReads": 0,
+                "sourceReservationLimit": 128,
+                "sourceReservations": 0,
+                "stagedBytes": 0,
+                "stagedByteThreshold": 33554432
+              },
+              "pendingStorageRepresentations": 0,
+              "sourceReservationLimit": 64,
+              "sourceReservations": 0
+            },
+            "imageTextureUploads": {
+              "admittedBytes": 70036,
+              "budgetBytes": 33554432,
+              "deferredUploads": 0
+            },
+            "imageTextures": {
+              "compressedBytes": 0,
+              "compressedTextures": 0,
+              "fittedTextures": 324,
+              "residentBytes": 3623616,
+              "residentTextures": 324
+            },
+            "persistentGpu": {
+              "budgetBytes": 33554432,
+              "deniedClaims": 527,
+              "retainedBytes": 25685042,
+              "textureBudgetBytes": 29360053,
+              "textureRetainedBytes": 25684956,
+              "textureMigrationReserveBytes": 4194293
+            },
+            "virtualTextures": {
+              "rasterCacheBytes": 33537324,
+              "rasterCacheLimitBytes": 33554432,
+              "rasterCacheReads": 46,
+              "rasterCacheHits": 1410,
+              "rasterCachePending": 0,
+              "rasterCachePeakBytes": 33553036,
+              "rasterCacheQueueMs": 109822.99999308586,
+              "rasterCacheDecodeMs": 15676.699999809265,
+              "rasterPageRenderMs": 652.3999993801117,
+              "idleAstcPixelHits": 4,
+              "retainedPagePixelBytes": 557568,
+              "pageQueueMs": 27.89999771118164,
+              "pageReadMs": 126279.19999551773,
+              "pageReadyWaitMs": 501506.5000011921,
+              "pageTimedReads": 1456,
+              "pageTimedUploads": 1450,
+              "atlasGrowthFrames": 125,
+              "admittedUploadBytes": 70036,
+              "atlasBytes": 21954240,
+              "atlasPools": 1,
+              "atlasGrowthFailures": 0,
+              "desiredPages": 324,
+              "admittedPages": 315,
+              "unresidentPages": 0,
+              "automaticCandidates": 3240,
+              "automaticDecodedBytes": 34094892,
+              "automaticIneligible": 0,
+              "automaticResources": 324,
+              "automaticWaiting": 0,
+              "deferredUploads": 0,
+              "failedPages": 0,
+              "pageRequests": 1456,
+              "pendingPages": 0,
+              "pendingPageBytes": 0,
+              "pendingPageByteLimit": 16777216,
+              "residentPages": 315,
+              "uploadedPages": 1450,
+              "uploadBudgetBytes": 33554432
+            }
+          },
+          "size": {
+            "backingHeight": 1536,
+            "backingWidth": 1536,
+            "cssHeight": 1536,
+            "cssWidth": 1536,
+            "pixelRatio": 1,
+            "renderScale": 1
+          }
+        },
+        "lifecycle": {
+          "generation": 2,
+          "interruptions": 1,
+          "phase": "active",
+          "recoveries": 1
+        }
+      }
+    }
+  ],
+  "errors": []
+}

@@ -27,6 +27,12 @@ A retained glTF identity has these product states:
 - `error`: preparation could not produce a renderable scene.
 
 Images not referenced by current prepared materials are dormant, not pending.
+Reloadable base-color images outside every active view are also deferred. Focused
+texture status is `idle` before their first preparation; `ready` describes decode
+metadata, not guaranteed GPU residency. glTF texture progress reports an optional
+`deferred` count separately from `loading`, and deferred work does not complete
+the all-images timing milestone. Entering a view can resume `streaming` without
+changing the asset identity. React consumers need no paging configuration.
 Selecting a material variant MAY turn dormant images into requested images and
 move `ready` back to `streaming`. State is scoped to exact source, version, and
 selected document scene, not source text alone. An explicit zero-based

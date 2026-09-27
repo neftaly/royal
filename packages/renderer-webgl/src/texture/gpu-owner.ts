@@ -1,3 +1,4 @@
+import { decodedTextureSourceReleased } from "./source";
 import { TextureAnisotropy } from "./anisotropy";
 import { nativeTextureAvailable, nativeWebGlFormat, validateNativeBaseDimensions } from "./native-storage";
 import type { CanonicalTextureBinding } from "../surface/canonical-material";
@@ -10,7 +11,8 @@ import {
   completeKtx2MipLevelCount,
   ktx2Etc2StorageBytes,
 } from "./etc2-storage";
-import { ordinaryTextureStorageBytes } from "./storage";
+import { ordinaryTextureStorageBytes, VIRTUAL_TEXTURE_FALLBACK_EDGE } from "./storage";
+import { fitOrdinaryTextureStorage } from "./storage-fit";
 
 export { ordinaryTextureStorageBytes } from "./storage";
 
@@ -85,6 +87,9 @@ export class TextureGpuOwner {
   readonly #uploadBudget: FrameUploadBudgetOwner;
   #unpackStateKnown = false;
   #fallbackStorageKeys: ReadonlySet<string> = new Set();
+  #fallbackMaxBytes = Infinity;
+  #activeStorageKeys: ReadonlySet<string> | undefined;
+  readonly #onSourceRequired: (key: string) => void;
   readonly #onFallbackChanged: (key: string, compact: boolean) => void;
 
   constructor(
@@ -94,8 +99,10 @@ export class TextureGpuOwner {
     etc2Available = true,
     anisotropy = new TextureAnisotropy(gl),
     onFallbackChanged: (key: string, compact: boolean) => void = () => undefined,
+    onSourceRequired: (key: string) => void = () => undefined,
   ) {
     this.#onFallbackChanged = onFallbackChanged;
+    this.#onSourceRequired = onSourceRequired;
     this.#anisotropy = anisotropy;
     this.#gl = gl;
     this.#budget = budget;
@@ -105,13 +112,24 @@ export class TextureGpuOwner {
 
   setFallbackStorageKeys(keys: ReadonlySet<string>): void {
     this.#fallbackStorageKeys = keys;
+    let count = 0;
+    for (const key of keys) if (this.#activeStorageKeys?.has(key) !== false) count++;
+    this.#fallbackMaxBytes = Math.max(4, Math.floor(this.#budget.textureBudgetBytes / Math.max(1, count) / 8));
+  }
+
+  /** Complete scene ownership survives while offscreen storage can be reclaimed. */
+  setActiveStorageKeys(keys: ReadonlySet<string>): void {
+    this.#activeStorageKeys = keys;
+    this.#releaseUnclaimedStorage(keys);
   }
 
   #storageSize(binding: CanonicalTextureBinding): { width: number; height: number } {
     const { width, height } = binding.decoded;
     const scale = binding.decoded.kind === undefined && this.#fallbackStorageKeys.has(binding.storageKey)
-      ? Math.min(1, 512 / Math.max(width, height)) : 1;
-    return { width: Math.max(1, Math.floor(width * scale)), height: Math.max(1, Math.floor(height * scale)) };
+      ? Math.min(1, VIRTUAL_TEXTURE_FALLBACK_EDGE / Math.max(width, height)) : 1;
+    const size = { width: Math.max(1, Math.floor(width * scale)), height: Math.max(1, Math.floor(height * scale)) };
+    return binding.decoded.kind === undefined && this.#fallbackStorageKeys.has(binding.storageKey)
+      ? fitOrdinaryTextureStorage(size.width, size.height, this.#fallbackMaxBytes) : size;
   }
 
   dispose(): void {
@@ -196,7 +214,7 @@ export class TextureGpuOwner {
     const insertedBindings: [GpuTexture, WebGLSampler][] = [];
     try {
       for (const binding of bindings) {
-        if (binding === undefined) {
+        if (binding === undefined || this.#activeStorageKeys?.has(binding.storageKey) === false) {
           result.push(EMPTY_BINDING);
           continue;
         }
@@ -286,7 +304,11 @@ export class TextureGpuOwner {
     const size = this.#storageSize(binding);
     if (previous === undefined || (previous.width === size.width && previous.height === size.height
       && previous.decodedWidth === binding.decoded.width && previous.decodedHeight === binding.decoded.height)) return previous;
-    const replacement = this.#createTexture(binding);
+    if (decodedTextureSourceReleased(binding.decoded)) {
+      this.#onSourceRequired(binding.storageKey);
+      return previous;
+    }
+    const replacement = this.#createTexture(binding, previous.budgetIdentity);
     if (replacement === undefined) {
       this.#uploadedStorageKeys.delete(binding.storageKey);
       this.#deniedStorageKeys.delete(binding.storageKey);
@@ -302,7 +324,7 @@ export class TextureGpuOwner {
 
   /** Retains one newly published binding without releasing unrelated scene claims. */
   retain(binding: CanonicalTextureBinding | undefined): GpuTextureBinding {
-    if (binding === undefined) return EMPTY_BINDING;
+    if (binding === undefined || this.#activeStorageKeys?.has(binding.storageKey) === false) return EMPTY_BINDING;
     let texture = this.#textureForBinding(binding);
     let sampler = this.#samplers.get(binding.samplerKey);
     const createdTexture = texture === undefined;
@@ -407,10 +429,14 @@ export class TextureGpuOwner {
     }
   }
 
-  #createTexture(binding: CanonicalTextureBinding): GpuTexture | undefined {
+  #createTexture(binding: CanonicalTextureBinding, replacedIdentity?: object): GpuTexture | undefined {
     if (this.#deferredStorageKeys.has(binding.storageKey)) return undefined;
     const gl = this.#gl;
     const decoded = binding.decoded;
+    if (decodedTextureSourceReleased(decoded)) {
+      this.#onSourceRequired(binding.storageKey);
+      return undefined;
+    }
     const compressed = decoded.kind !== undefined;
     const { width, height } = this.#storageSize(binding);
     const compact = width !== decoded.width || height !== decoded.height;
@@ -440,7 +466,8 @@ export class TextureGpuOwner {
       ? ktx2Etc2StorageBytes(decoded)
       : ordinaryTextureStorageBytes(width, height, mipmapped);
     const budgetIdentity = {};
-    if (!this.#budget.tryClaim(budgetIdentity, byteLength)) {
+    if (!(replacedIdentity === undefined ? this.#budget.tryClaimTexture(budgetIdentity, byteLength)
+      : this.#budget.tryClaimTextureReplacement(budgetIdentity, byteLength, replacedIdentity))) {
       this.#deniedStorageKeys.add(binding.storageKey);
       return undefined;
     }
@@ -463,6 +490,7 @@ export class TextureGpuOwner {
       this.#budget.release(budgetIdentity);
       throw new Error("Royal could not allocate an ordinary texture");
     }
+    let stagingCanvas: HTMLCanvasElement | undefined;
     try {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -486,10 +514,10 @@ export class TextureGpuOwner {
       } else {
         let source = decoded.source;
         if (compact) {
-          const canvas = document.createElement("canvas");
+          const canvas = stagingCanvas = document.createElement("canvas");
           canvas.width = width;
           canvas.height = height;
-          const context = canvas.getContext("2d");
+          const context = canvas.getContext("2d", { willReadFrequently: true });
           if (context === null) throw new Error("Royal could not create a texture fallback");
           context.drawImage(source as CanvasImageSource, 0, 0, width, height);
           source = canvas;
@@ -544,6 +572,9 @@ export class TextureGpuOwner {
       gl.deleteTexture(texture);
       this.#budget.release(budgetIdentity);
       throw error;
+    } finally {
+      // WebGL has consumed the pixels synchronously; don't wait for canvas GC.
+      if (stagingCanvas !== undefined) stagingCanvas.width = stagingCanvas.height = 1;
     }
   }
 
@@ -564,7 +595,7 @@ export class TextureGpuOwner {
       );
     }
     const byteLength = ordinaryTextureStorageBytes(resource.width, resource.height, true);
-    if (!this.#budget.tryClaim(resource.budgetIdentity, byteLength)) {
+    if (!this.#budget.tryClaimTexture(resource.budgetIdentity, byteLength)) {
       this.#deniedStorageKeys.add(storageKey);
       return false;
     }
@@ -578,7 +609,7 @@ export class TextureGpuOwner {
       resource.mipmapped = true;
       return true;
     } catch (error) {
-      this.#budget.tryClaim(resource.budgetIdentity, resource.byteLength);
+      this.#budget.tryClaimTexture(resource.budgetIdentity, resource.byteLength);
       throw error;
     }
   }

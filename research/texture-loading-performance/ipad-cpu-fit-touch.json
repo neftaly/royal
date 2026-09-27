@@ -1,0 +1,169 @@
+{
+  "snapshot": {
+    "presentation": "ready",
+    "context": {
+      "generation": 1,
+      "interruptions": 0,
+      "phase": "active",
+      "recoveries": 0
+    },
+    "frame": 282,
+    "resources": {
+      "asyncPreparation": {
+        "activeJobs": 0,
+        "jobLimit": 8,
+        "queuedDetailJobs": 0,
+        "queuedForegroundJobs": 0,
+        "queuedJobs": 0
+      },
+      "geometryUploads": {
+        "admittedBytes": 0,
+        "budgetBytes": 4194304,
+        "deferredUploads": 0,
+        "pendingSurfaces": 0
+      },
+      "gltfSharedGeometry": {
+        "pendingPreparationTasks": 0,
+        "preparedTaskBytes": 48160,
+        "preparedTasks": 22,
+        "preparationTaskClaims": 631,
+        "primitiveClaims": 631,
+        "retainedBytes": 48160,
+        "reusedClaims": 609,
+        "reusedPreparationClaims": 609,
+        "taskProducerPreparationDurationMs": 6490.000000000001,
+        "uniqueGeometries": 22
+      },
+      "gltfSourceReads": {
+        "activeReads": 0,
+        "queuedReads": 0,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0,
+        "stagedBytes": 0,
+        "stagedByteThreshold": 33554432
+      },
+      "imageTexturePreparation": {
+        "activePreparations": 0,
+        "browserStageTimings": {
+          "sourceCount": 215,
+          "totals": {
+            "decodeDurationMs": 42866,
+            "decodeQueueDurationMs": 9.999999999998181,
+            "transportDurationMs": 93568,
+            "transportQueueDurationMs": 82
+          }
+        },
+        "decodedHandoffBytes": 0,
+        "decodedHandoffThresholdBytes": 67108864,
+        "encodedSourceReads": {
+          "activeReads": 0,
+          "queuedReads": 0,
+          "sourceReservationLimit": 128,
+          "sourceReservations": 0,
+          "stagedBytes": 0,
+          "stagedByteThreshold": 33554432
+        },
+        "pendingStorageRepresentations": 0,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0
+      },
+      "imageTextureUploads": {
+        "admittedBytes": 71060,
+        "budgetBytes": 33554432,
+        "deferredUploads": 0
+      },
+      "imageTextures": {
+        "compressedBytes": 0,
+        "compressedTextures": 0,
+        "fittedTextures": 107,
+        "residentBytes": 6110212,
+        "residentTextures": 215
+      },
+      "persistentGpu": {
+        "budgetBytes": 268435456,
+        "deniedClaims": 0,
+        "retainedBytes": 41873282,
+        "textureBudgetBytes": 264142518,
+        "textureRetainedBytes": 41831776,
+        "textureMigrationReserveBytes": 4251456
+      },
+      "virtualTextures": {
+        "rasterCacheBytes": 17935436,
+        "rasterCacheLimitBytes": 33554432,
+        "rasterCacheReads": 29,
+        "rasterCacheHits": 329,
+        "rasterCachePending": 0,
+        "rasterCachePeakBytes": 33553176,
+        "rasterCacheQueueMs": 2872.9999999999563,
+        "rasterCacheDecodeMs": 2832,
+        "rasterPageRenderMs": 67.00000000002001,
+        "visibleDetailFraction": 1,
+        "idleAstcPixelHits": 1,
+        "retainedPagePixelBytes": 487872,
+        "pageQueueMs": 9763,
+        "pageReadMs": 5794.999999999973,
+        "pageReadyWaitMs": 240450,
+        "pageTimedReads": 358,
+        "pageTimedUploads": 358,
+        "atlasGrowthFrames": 13,
+        "admittedUploadBytes": 71060,
+        "atlasBytes": 35684352,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 358,
+        "admittedPages": 358,
+        "unresidentPages": 0,
+        "automaticCandidates": 325,
+        "automaticDecodedBytes": 18423308,
+        "automaticIneligible": 1,
+        "automaticResources": 213,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 358,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 358,
+        "uploadedPages": 358,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    "size": {
+      "backingHeight": 1804,
+      "backingWidth": 1536,
+      "cssHeight": 902,
+      "cssWidth": 768,
+      "pixelRatio": 2,
+      "renderScale": 1
+    }
+  },
+  "time": 41532,
+  "errors": [],
+  "events": [],
+  "text": "\u21b6\n\u21b7\nRoll\nFlip\nShuffle\nUndo\nRedo\nShare\nEdit\nDot Gate",
+  "secure": true,
+  "overlay": false,
+  "models": {
+    "total": 211,
+    "loaded": 211,
+    "interactive": 211,
+    "visual": 211
+  },
+  "completed": false,
+  "elapsedMs": 41532,
+  "interaction": {
+    "point": {
+      "x": 12,
+      "y": 12,
+      "id": "13@19a1a45adf2afced80a6ce6cfd9b5812"
+    },
+    "selected": []
+  },
+  "failure": "Physical Safari touch did not select the picked piece",
+  "firstImageMs": 6729,
+  "allInteractionModelsReadyMs": 17166,
+  "sampleCount": 70,
+  "rawEvidence": "/tmp/royal-ipad-device-evidence/ipad-cpu-fit-touch.json",
+  "renderCompleted": true
+}

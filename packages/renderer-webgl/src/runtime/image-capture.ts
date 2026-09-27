@@ -180,6 +180,7 @@ const captureRootImage = (host: RootImageCaptureHost, options: RendererImageCapt
       if (asset.status !== "ready") return false;
     }
     for (const texture of scene.textureAssets) {
+      if (host.textureRequired?.(texture) === false) continue;
       const asset = host.textureSnapshot(texture);
       if (asset.status === "error") throw new Error(asset.error);
       if (asset.status !== "ready") return false;

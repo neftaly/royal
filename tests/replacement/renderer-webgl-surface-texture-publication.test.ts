@@ -51,6 +51,34 @@ const createSurfaceGpuOwner = (
 );
 
 describe("retained surface texture publication", () => {
+  it("uses compact storage on the first incremental upload once a paging source is available", () => {
+    vi.stubGlobal("document", { createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage: vi.fn() }) }) });
+    const gl = fakeGl(), owner = createSurfaceGpuOwner(gl), state = new WebGlStateOwner(gl);
+    const texture = imageTexture("/late-paging-source.png");
+    const pending = prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}), nodes: [
+      mesh({ geometry: planeGeometry(1), material: unlitMaterial({ texture }) }),
+    ] }));
+    let available = false;
+    const runtime = { bindingRevision: 0, shaderSource: { declarations: VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS },
+      automaticBinding: () => undefined, automaticPageSourceAvailable: () => available,
+      setScene: vi.fn(), dispose: vi.fn(), update: () => ({ pending: false, webGlStateChanged: false }),
+    } as unknown as VirtualTextureRuntime;
+    const draw = () => { owner.beginFrame(); owner.drawViews(TEST_VIEWS, null, state, [0, 0, 0, 1]); };
+    try {
+      owner.setScene(pending); owner.setVirtualTextureRuntime(runtime); draw();
+      vi.mocked(gl.texStorage2D).mockClear();
+      const ready = refreshCanonicalSurfaceTextures(pending, [decodedTextureKey(texture)],
+        () => ({ width: 256, height: 256, source: {} as ImageBitmap }));
+      available = true;
+      owner.publishTextureBatch(ready, [decodedTextureKey(texture)]);
+      draw();
+      expect(gl.texStorage2D).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(gl.texStorage2D).mock.calls[0]?.slice(3)).toEqual([64, 64]);
+      draw();
+      expect(gl.texStorage2D).toHaveBeenCalledTimes(1);
+    } finally { owner.dispose(); vi.unstubAllGlobals(); }
+  });
+
   it.each([false, true])("draws a ready preview despite an unfinished future shader (scene replaced: %s)", (replaceScene) => {
     const gl = fakeGl();
     const programs: WebGLProgram[] = [];

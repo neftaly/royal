@@ -1,0 +1,13 @@
+{
+  "batchPages": 4,
+  "batches": 128,
+  "maxMs": 1.4000000953674316,
+  "medianMs": 0.9000000953674316,
+  "pageTableMedianMs": 1,
+  "pageTableMotions": 128,
+  "pageTableP95Ms": 1.5999999046325684,
+  "pageTableLogicalPages": 21845,
+  "pageTableLookups": 2796160,
+  "p95Ms": 1.1999998092651367,
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+}

@@ -4,6 +4,7 @@ import { identityMat4, viewMat4 } from "../../packages/renderer-webgl/src/math/m
 import { sortSurfacesBackToFront } from "../../packages/renderer-webgl/src/surface/surface-depth-order";
 import {
   planSurfaceDepthPartition,
+  rebindSurfaceDepthPartition,
   sortSurfaceDepthPartitionInto,
 } from "../../packages/renderer-webgl/src/surface/surface-depth-partition";
 import type { WorldBounds } from "../../packages/renderer-webgl/src/surface/surface-visibility";
@@ -32,6 +33,20 @@ const rayEntry = (bounds: WorldBounds, origin: readonly number[], direction: rea
 };
 
 describe("separated transparent surface ordering", () => {
+  it("preserves geometric order while replacing texture bindings and rejects changed membership or bounds", () => {
+    const original = [item(0, [-1, -1, -4], [1, 1, -3]), item(1, [-1, -1, -2], [1, 1, -1])];
+    const partition = planSurfaceDepthPartition(original);
+    const replacements = original.map(surface => ({ ...surface, depthOrder: 0 }));
+    const rebound = rebindSurfaceDepthPartition(partition, [...replacements].reverse(), surface => surface.id)!;
+    const output: Surface[] = [];
+    sortSurfaceDepthPartitionInto(output, rebound, identityMat4(), [0, 0, 0], true);
+    expect(output).toEqual(replacements);
+    expect(output[0]).toBe(replacements[0]);
+    expect(output[1]).toBe(replacements[1]);
+    expect(rebindSurfaceDepthPartition(partition, [replacements[0]!], surface => surface.id)).toBeUndefined();
+    expect(rebindSurfaceDepthPartition(partition, [replacements[0]!, { ...replacements[1]!, id: 2 }], surface => surface.id)).toBeUndefined();
+    expect(rebindSurfaceDepthPartition(partition, [replacements[0]!, item(1, [-1, -1, -9], [1, 1, -8])], surface => surface.id)).toBeUndefined();
+  });
   it.each([0, 0.0001])("keeps the reported boxes above their mat with a %s metre gap", (gap) => {
     const mat = item(0, [-0.4205, 0, -0.297], [0.4205, 0.002, 0.297]);
     const cards = [-0.234, -0.100].map((z, index) => item(

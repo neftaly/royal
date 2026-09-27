@@ -17,6 +17,8 @@ export type TextureDecodeStageTimings = Readonly<{
 }>;
 
 export type DecodedImageTextureSource = Readonly<{
+  /** @internal Browser-backed pixels can be invalidated by a GPU-process restart. */
+  contextBound?: true;
   alpha?: DecodedTextureAlpha;
   close?: () => void;
   preview?: never;
@@ -182,15 +184,85 @@ const decodedTextureLeafKey = (asset: TextureLeafSourceRef): unknown => {
   return asset.astc === undefined ? leaf : ["astc-alternative", leaf, decodedTextureLeafKey(asset.astc)];
 };
 
+type IdentityLeaf = {
+  kind: TextureLeafSourceRef["kind"];
+  src: string | undefined;
+  contentKey: TextureContentKey | undefined;
+  version: TextureVersion | undefined;
+  mimeType: string | undefined;
+  sourceEncoding: TextureSourceEncoding | undefined;
+  colorSpace: TextureLeafSourceRef["colorSpace"];
+  bytes: Uint8Array | undefined;
+  byteLength: number | undefined;
+  astc: IdentityLeaf | undefined;
+};
+
+const identityLeaf = (asset: TextureLeafSourceRef): IdentityLeaf => ({
+  kind: asset.kind,
+  src: asset.kind === "asset" ? asset.src : undefined,
+  contentKey: asset.contentKey,
+  version: asset.kind === "asset" ? asset.version : undefined,
+  mimeType: asset.mimeType,
+  sourceEncoding: asset.sourceEncoding,
+  colorSpace: asset.colorSpace,
+  bytes: asset.kind === "embedded-asset" ? asset.bytes : undefined,
+  byteLength: asset.kind === "embedded-asset" ? asset.bytes.byteLength : undefined,
+  astc: asset.astc === undefined ? undefined : identityLeaf(asset.astc),
+});
+
+const sameIdentityLeaf = (previous: IdentityLeaf, asset: TextureLeafSourceRef): boolean =>
+  previous.kind === asset.kind
+  && previous.src === (asset.kind === "asset" ? asset.src : undefined)
+  && previous.contentKey === asset.contentKey
+  && previous.version === (asset.kind === "asset" ? asset.version : undefined)
+  && previous.mimeType === asset.mimeType
+  && previous.sourceEncoding === asset.sourceEncoding
+  && previous.colorSpace === asset.colorSpace
+  && previous.bytes === (asset.kind === "embedded-asset" ? asset.bytes : undefined)
+  && previous.byteLength === (asset.kind === "embedded-asset" ? asset.bytes.byteLength : undefined)
+  && (previous.astc === undefined ? asset.astc === undefined
+    : asset.astc !== undefined && sameIdentityLeaf(previous.astc, asset.astc));
+
+// Weak keys retain no source beyond its owner. Comparing identity fields preserves
+// validation and key changes even for JavaScript callers that mutate a recipe.
+const identityCache = new WeakMap<TextureSourceRef, {
+  leaf: IdentityLeaf;
+  preview: boolean;
+  width: number | undefined;
+  height: number | undefined;
+  decoded: string;
+  storage?: string;
+}>();
+
 /** Identity of logical decoded pixels, including explicit raster preview dimensions. */
 export const decodedTextureKey = (asset: TextureSourceRef): string => {
+  const cached = identityCache.get(asset);
+  if (cached !== undefined && sameIdentityLeaf(cached.leaf, asset)
+    && cached.preview === (asset.rasterPreview !== undefined)
+    && cached.width === asset.rasterPreview?.width
+    && cached.height === asset.rasterPreview?.height) return cached.decoded;
   validateAsset(asset);
   const leaf = decodedTextureLeafKey(asset);
   const recipe = asset.rasterPreview === undefined ? leaf
     : ["raster-preview", asset.rasterPreview.width, asset.rasterPreview.height, leaf];
-  return JSON.stringify(recipe);
+  const decoded = JSON.stringify(recipe);
+  identityCache.set(asset, { leaf: identityLeaf(asset), decoded,
+    preview: asset.rasterPreview !== undefined,
+    width: asset.rasterPreview?.width, height: asset.rasterPreview?.height });
+  return decoded;
 };
 
 /** GPU storage identity; one decoded image may be interpreted in both color spaces. */
-export const textureStorageKey = (asset: TextureSourceRef): string =>
-  JSON.stringify([decodedTextureKey(asset), asset.colorSpace ?? "srgb"]);
+export const textureStorageKey = (asset: TextureSourceRef): string => {
+  const decoded = decodedTextureKey(asset);
+  return identityCache.get(asset)!.storage ??= JSON.stringify([decoded, asset.colorSpace ?? "srgb"]);
+};
+
+// Weak ownership metadata lets existing GPU copies outlive their CPU upload source.
+const releasedSources = new WeakSet<DecodedTextureSource>();
+export const decodedTextureSourceReleased = (source: DecodedTextureSource): boolean => releasedSources.has(source);
+export const releaseDecodedTextureSource = (source: DecodedTextureSource | undefined): void => {
+  if (source?.close === undefined || releasedSources.has(source)) return;
+  releasedSources.add(source);
+  source.close();
+};

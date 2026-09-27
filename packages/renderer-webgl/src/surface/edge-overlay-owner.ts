@@ -734,7 +734,7 @@ export class EdgeOverlayOwner {
     viewport: { height: 1, width: 1, x: 0, y: 0 },
   };
   readonly #budget: PersistentGpuBudgetOwner;
-  readonly #claim = {};
+  #claim = {};
   readonly #discardDepthAttachment: number[];
   readonly #frustumPlanes = new Float32Array(24);
   readonly #gl: WebGL2RenderingContext;
@@ -798,6 +798,9 @@ export class EdgeOverlayOwner {
   readonly #horizontalScissor: MutablePixelRegion = { height: 1, width: 1, x: 0, y: 0 };
   readonly #resolveScissor: MutablePixelRegion = { height: 1, width: 1, x: 0, y: 0 };
   #targets: EdgeTargets | null = null;
+  #targetDenied = false;
+
+  get targetDenied(): boolean { return this.#targetDenied; }
 
   constructor(
     gl: WebGL2RenderingContext,
@@ -817,6 +820,7 @@ export class EdgeOverlayOwner {
       this.#plans = [];
     }
     this.#scene = scene;
+    this.#targetDenied = false;
     if (scene === null || scene.runs.length === 0) this.#deleteBatchResources();
   }
 
@@ -1623,11 +1627,13 @@ export class EdgeOverlayOwner {
   }
 
   #ensureTargets(width: number, height: number, state: WebGlStateOwner): boolean {
+    this.#targetDenied = false;
     if (this.#targets?.width === width && this.#targets.height === height) return true;
-    this.#deleteTargets();
+    const claim = {};
     const bytes = width * height * 9;
-    if (!Number.isSafeInteger(bytes) || !this.#budget.tryClaim(this.#claim, bytes)) {
-      throw new Error("Royal persistent GPU budget denied the edge overlay targets");
+    if (!Number.isSafeInteger(bytes) || !this.#budget.tryClaim(claim, bytes)) {
+      this.#targetDenied = true;
+      return false;
     }
     const gl = this.#gl;
     const mask = gl.createTexture();
@@ -1647,7 +1653,7 @@ export class EdgeOverlayOwner {
       if (scratch !== null) gl.deleteTexture(scratch);
       if (maskFramebuffer !== null) gl.deleteFramebuffer(maskFramebuffer);
       if (scratchFramebuffer !== null) gl.deleteFramebuffer(scratchFramebuffer);
-      this.#budget.release(this.#claim);
+      this.#budget.release(claim);
       throw new Error("Royal could not allocate the edge overlay targets");
     }
     try {
@@ -1683,6 +1689,8 @@ export class EdgeOverlayOwner {
         0,
       );
       framebufferComplete(gl, "edge expansion");
+      this.#deleteTargets();
+      this.#claim = claim;
       this.#targets = {
         depth,
         height,
@@ -1700,7 +1708,7 @@ export class EdgeOverlayOwner {
       gl.deleteTexture(scratch);
       gl.deleteFramebuffer(maskFramebuffer);
       gl.deleteFramebuffer(scratchFramebuffer);
-      this.#budget.release(this.#claim);
+      this.#budget.release(claim);
       throw error;
     } finally {
       state.invalidate();

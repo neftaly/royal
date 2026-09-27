@@ -26,9 +26,42 @@ import {
 } from "../../packages/renderer-webgl/src/runtime/virtual-texture-activation";
 import { fakeGl } from "./support/canvas-root-harness";
 import { createGeneratedVirtualTextureLayout } from "../../packages/renderer-webgl/src/virtual-texture/layout";
+import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/texture/storage-fit";
 
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it.each([256 * 1024 * 1024, 400_000])("uses the finest requested raster even with partial atlas admission (%i bytes)", async (budgetBytes) => {
+  const asset = imageTexture("/tracks.avif");
+  const seed = { width: 359, height: 183, sourceWidth: 3124, sourceHeight: 1600, source: {} as ImageBitmap };
+  const rendered = vi.spyOn(automaticSources, "renderAutomaticPage").mockImplementation(() => ({
+    kind: "image", source: {} as ImageBitmap, close: vi.fn(),
+  }));
+  const loadRaster = vi.fn(async (_asset, _signal, maxBytes: number) => ({ ...seed,
+    ...fitOrdinaryTextureStorage(3124, 1600, maxBytes),
+  }));
+  const prepared = prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}), nodes: [
+    mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) }),
+  ] }), undefined, undefined, () => seed);
+  const runtime = createBrowserVirtualTextureRuntime(fakeGl(), new PersistentGpuBudgetOwner(budgetBytes), (_signal, work) => work(), {
+    acquireDecoded: () => ({ source: seed, release: vi.fn() }), decoded: () => seed, loadRaster, onChanged: vi.fn(),
+  });
+  try {
+    runtime.setScene(prepared);
+    const view = { view: identityMat4(), viewProjection: identityMat4(), viewport: { x: 0, y: 0, width: 220, height: 110 } };
+    for (let frame = 0; frame < 100; frame++) {
+      const update = runtime.update([view]);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      if (!update.pending && rendered.mock.calls.length > 0) break;
+    }
+    const detail = rendered.mock.calls.filter(call => call[5].mip < call[0].mipCount - 1);
+    expect(rendered.mock.calls.length, JSON.stringify(runtime.runtimeSnapshot())).toBeGreaterThan(1);
+    expect(new Set(detail.map(call => call[5].mip)).size).toBeGreaterThan(budgetBytes > 400_000 ? 1 : 0);
+    expect(detail.map(call => Math.round(call[3] * 3124))).toEqual(detail.map(() => 391));
+    expect(loadRaster).toHaveBeenCalledTimes(1);
+    expect(runtime.runtimeSnapshot().failedPages).toBe(0);
+  } finally { runtime.dispose(); }
+});
 
 describe("VT runtime activation core", () => {
 
@@ -346,4 +379,22 @@ describe("browser virtual texture runtime", () => {
     runtime.dispose();
     expect(release).toHaveBeenCalledOnce();
   });
+});
+
+
+it("registers artwork beyond the decoded cache limit from coarse source metadata", () => {
+  const assets = Array.from({ length: 20 }, (_, i) => imageTexture(`https://example.test/catalog-${i}.png`));
+  const decoded = { width: 128, height: 128, sourceWidth: 4096, sourceHeight: 4096, source: {} as ImageBitmap };
+  const prepared = prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}), nodes: assets.map(texture =>
+    mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture }) })) }), undefined, undefined, () => decoded);
+  expect(virtualTextureRuntimeRequired(prepared, () => decoded)).toBe(true);
+  const acquireDecoded = vi.fn(), loadRaster = vi.fn(async () => decoded);
+  const runtime = createBrowserVirtualTextureRuntime(fakeGl(), new PersistentGpuBudgetOwner(), (_signal, work) => work(),
+    { acquireDecoded, decoded: () => decoded, loadRaster, onChanged: vi.fn() });
+  runtime.setScene(prepared);
+  expect(runtime.runtimeSnapshot()).toMatchObject({ automaticCandidates: 20, automaticResources: 20,
+    automaticIneligible: 0, automaticDecodedBytes: 0, rasterCacheBytes: 0 });
+  expect(acquireDecoded).toHaveBeenCalledTimes(20);
+  expect(loadRaster).not.toHaveBeenCalled();
+  runtime.dispose();
 });

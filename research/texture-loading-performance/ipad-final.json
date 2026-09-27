@@ -1,0 +1,211 @@
+{
+  "snapshot": {
+    "presentation": "ready",
+    "context": {
+      "generation": 2,
+      "interruptions": 1,
+      "phase": "active",
+      "recoveries": 1
+    },
+    "frame": 434,
+    "resources": {
+      "asyncPreparation": {
+        "activeJobs": 0,
+        "jobLimit": 8,
+        "queuedDetailJobs": 0,
+        "queuedForegroundJobs": 0,
+        "queuedJobs": 0
+      },
+      "geometryUploads": {
+        "admittedBytes": 0,
+        "budgetBytes": 4194304,
+        "deferredUploads": 0,
+        "pendingSurfaces": 0
+      },
+      "gltfSharedGeometry": {
+        "pendingPreparationTasks": 0,
+        "preparedTaskBytes": 48160,
+        "preparedTasks": 22,
+        "preparationTaskClaims": 631,
+        "primitiveClaims": 631,
+        "retainedBytes": 48160,
+        "reusedClaims": 609,
+        "reusedPreparationClaims": 609,
+        "taskProducerPreparationDurationMs": 5992.000000000003,
+        "uniqueGeometries": 22
+      },
+      "gltfSourceReads": {
+        "activeReads": 0,
+        "queuedReads": 0,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0,
+        "stagedBytes": 0,
+        "stagedByteThreshold": 33554432
+      },
+      "imageTexturePreparation": {
+        "activePreparations": 0,
+        "browserStageTimings": {
+          "sourceCount": 215,
+          "totals": {
+            "decodeDurationMs": 21293.999999999967,
+            "decodeQueueDurationMs": 4,
+            "transportDurationMs": 61220,
+            "transportQueueDurationMs": 375
+          }
+        },
+        "decodedHandoffBytes": 0,
+        "decodedHandoffThresholdBytes": 67108864,
+        "encodedSourceReads": {
+          "activeReads": 0,
+          "queuedReads": 0,
+          "sourceReservationLimit": 128,
+          "sourceReservations": 0,
+          "stagedBytes": 0,
+          "stagedByteThreshold": 33554432
+        },
+        "pendingStorageRepresentations": 0,
+        "sourceReservationLimit": 64,
+        "sourceReservations": 0
+      },
+      "imageTextureUploads": {
+        "admittedBytes": 0,
+        "budgetBytes": 33554432,
+        "deferredUploads": 0
+      },
+      "imageTextures": {
+        "compressedBytes": 0,
+        "compressedTextures": 0,
+        "fittedTextures": 107,
+        "residentBytes": 6110212,
+        "residentTextures": 215
+      },
+      "persistentGpu": {
+        "budgetBytes": 268435456,
+        "deniedClaims": 0,
+        "retainedBytes": 41873282,
+        "textureBudgetBytes": 264142518,
+        "textureRetainedBytes": 41831776,
+        "textureMigrationReserveBytes": 4251456
+      },
+      "virtualTextures": {
+        "rasterCacheBytes": 16902812,
+        "rasterCacheLimitBytes": 33554432,
+        "rasterCacheReads": 27,
+        "rasterCacheHits": 380,
+        "rasterCachePending": 0,
+        "rasterCachePeakBytes": 33554308,
+        "rasterCacheQueueMs": 10826.999999999947,
+        "rasterCacheDecodeMs": 5538.9999999999945,
+        "rasterPageRenderMs": 56.99999999997817,
+        "visibleDetailFraction": 1,
+        "idleAstcPixelHits": 1,
+        "retainedPagePixelBytes": 487872,
+        "pageQueueMs": 5779.999999999971,
+        "pageReadMs": 16460.999999999935,
+        "pageReadyWaitMs": 324006,
+        "pageTimedReads": 407,
+        "pageTimedUploads": 402,
+        "atlasGrowthFrames": 50,
+        "admittedUploadBytes": 0,
+        "atlasBytes": 35684352,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 358,
+        "admittedPages": 358,
+        "unresidentPages": 0,
+        "automaticCandidates": 325,
+        "automaticDecodedBytes": 17390684,
+        "automaticIneligible": 1,
+        "automaticResources": 213,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 407,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 358,
+        "uploadedPages": 402,
+        "uploadBudgetBytes": 33554432
+      }
+    },
+    "size": {
+      "backingHeight": 1804,
+      "backingWidth": 1536,
+      "cssHeight": 902,
+      "cssWidth": 768,
+      "pixelRatio": 2,
+      "renderScale": 1
+    }
+  },
+  "time": 57378,
+  "errors": [],
+  "events": [
+    {
+      "type": "webglcontextlost",
+      "time": 27852,
+      "status": ""
+    },
+    {
+      "type": "webglcontextrestored",
+      "time": 27929.000000000004,
+      "status": ""
+    }
+  ],
+  "text": "\u21b6\n\u21b7\nRoll\nFlip\nShuffle\nUndo\nRedo\nShare\nEdit\nTrusting Rhodium",
+  "secure": true,
+  "overlay": false,
+  "models": {
+    "total": 211,
+    "loaded": 211,
+    "interactive": 211,
+    "visual": 211
+  },
+  "renderCompleted": true,
+  "elapsedMs": 57378,
+  "interaction": {
+    "point": {
+      "x": 80,
+      "y": 80,
+      "id": "13@2584bc3a95c13485ad1dba5c7b0b9f90"
+    },
+    "selected": [
+      "13@2584bc3a95c13485ad1dba5c7b0b9f90"
+    ],
+    "events": [
+      {
+        "type": "pointerdown",
+        "trusted": true,
+        "x": 80,
+        "y": 80,
+        "target": "CANVAS"
+      },
+      {
+        "type": "touchstart",
+        "trusted": true,
+        "x": null,
+        "y": null,
+        "target": "CANVAS"
+      },
+      {
+        "type": "pointerup",
+        "trusted": true,
+        "x": 80,
+        "y": 80,
+        "target": "CANVAS"
+      },
+      {
+        "type": "touchend",
+        "trusted": true,
+        "x": null,
+        "y": null,
+        "target": "CANVAS"
+      }
+    ]
+  },
+  "completed": true,
+  "firstImageMs": 6890.000000000001,
+  "allInteractionModelsReadyMs": 19132,
+  "sampleCount": 86,
+  "rawEvidence": "/tmp/royal-ipad-device-evidence/ipad-final.json"
+}

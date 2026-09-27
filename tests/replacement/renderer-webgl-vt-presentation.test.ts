@@ -1,4 +1,5 @@
 import * as pageSources from "../../packages/renderer-webgl/src/virtual-texture/automatic-page-source";
+import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/texture/storage-fit";
 import { createGeneratedVirtualTextureLayout } from "../../packages/renderer-webgl/src/virtual-texture/layout";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { directionalLight, mesh, perspectiveCamera, planeGeometry, scene, standardMaterial, unlitMaterial, imageTexture } from "@royal/renderer-core";
@@ -7,7 +8,8 @@ import * as demand from "../../packages/renderer-webgl/src/virtual-texture/deman
 import { waitFor } from "./support/wait-for";
 
 beforeEach(() => {
-  vi.stubGlobal("document", { createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage: vi.fn() }) }) });
+  vi.spyOn(pageSources, "renderAutomaticPage").mockImplementation(() => ({ kind: "image", source: { width: 132, height: 132 } as ImageBitmap, close: vi.fn() }));
+  vi.stubGlobal("document", { createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage: vi.fn(), clearRect: vi.fn() }) }) });
 });
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -107,4 +109,58 @@ it.each(["unlit", "standard"])("refreshes %s atlas dimensions after resizing wit
     });
     expectCurrentDimensions();
   } finally { root.dispose(); clock?.mockRestore(); }
+});
+
+it("activates paging and shares the coarse initial decode with the bounded CPU cache", async () => {
+  const close = vi.fn();
+  const decodeTexture = vi.fn(async (_asset, _signal, maxBytes?: number) => ({
+    ...fitOrdinaryTextureStorage(2048, 2048, maxBytes ?? 16 * 1024 * 1024),
+    sourceWidth: 2048, sourceHeight: 2048, source: {} as ImageBitmap, close,
+  }));
+  const { root, flushScheduledFrames } = canvasRootHarness({ decodeTexture });
+  try {
+    root.setSize({ cssWidth: 256, cssHeight: 256, pixelRatio: 1 });
+    root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: [
+      mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: imageTexture("https://example.test/coarse.png") }) }),
+    ] }));
+    await waitFor(() => {
+      flushScheduledFrames();
+      expect(root.getSnapshot().resources.virtualTextures.residentPages).toBeGreaterThan(0);
+      expect(root.getSnapshot().resources.imageTextures.residentBytes).toBeLessThan(90000);
+      expect(root.getSnapshot().resources.imageTexturePreparation.decodedHandoffBytes).toBe(0);
+    });
+    expect(root.getSnapshot().resources.virtualTextures.automaticResources).toBe(1);
+    await waitFor(() => {
+      flushScheduledFrames();
+      expect(root.getSnapshot().presentation).toBe("ready");
+    });
+    expect(root.getSnapshot().resources.virtualTextures.rasterCacheReads).toBe(0);
+    expect(root.getSnapshot().presentation).not.toBe("failed");
+  } finally { root.dispose(); }
+});
+
+it.each([32, 64])("bounds paging a large artwork catalog under a %s MiB GPU budget", async budgetMiB => {
+  const { root, flushScheduledFrames } = canvasRootHarness({
+    decodeTexture: async (_asset, _signal, maxBytes) => maxBytes !== undefined && maxBytes < 1024 * 1024
+      ? { width: 128, height: 128, sourceWidth: 4096, sourceHeight: 4096, source: {} as ImageBitmap, close: vi.fn() }
+      : { width: 1024, height: 1024, sourceWidth: 4096, sourceHeight: 4096, source: {} as ImageBitmap, close: vi.fn() },
+  }, {}, { persistentGpuByteBudget: budgetMiB * 1024 * 1024 });
+  try {
+    root.setSize({ cssWidth: 256, cssHeight: 256, pixelRatio: 1 });
+    root.setScene(scene({ camera: perspectiveCamera({ position: [0, 0, 3] }), nodes: Array.from({ length: 20 }, (_, i) =>
+      mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: imageTexture(`https://example.test/pressure-${i}.png`) }) })),
+    }));
+    await waitFor(() => {
+      flushScheduledFrames();
+      const snapshot = root.getSnapshot();
+      expect(snapshot.resources.virtualTextures.automaticResources).toBe(20);
+      expect(snapshot.resources.virtualTextures.residentPages).toBeGreaterThanOrEqual(20);
+      expect(snapshot.resources.virtualTextures.pendingPages).toBe(0);
+      expect(snapshot.resources.virtualTextures.unresidentPages).toBe(0);
+      expect(snapshot.resources.virtualTextures.rasterCacheBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
+      expect(snapshot.resources.persistentGpu.retainedBytes).toBeLessThanOrEqual(budgetMiB * 1024 * 1024);
+      expect(snapshot.resources.imageTextures.residentBytes).toBeLessThan(2 * 1024 * 1024);
+      expect(snapshot.lastFrameFailure).toBeUndefined();
+    });
+  } finally { root.dispose(); }
 });

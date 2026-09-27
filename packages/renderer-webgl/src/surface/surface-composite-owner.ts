@@ -177,7 +177,7 @@ const createProgram = (gl: WebGL2RenderingContext): WebGLProgram => {
 export class SurfaceCompositeOwner {
   #bindingRevision = 0;
   readonly #budget: PersistentGpuBudgetOwner;
-  readonly #claim = {};
+  #claim = {};
   readonly #clearIntent: MutableClearFrameIntent = {
     clearColor: [0, 0, 0, 0],
     clearDepth: 1,
@@ -309,10 +309,9 @@ export class SurfaceCompositeOwner {
       && (this.#resources.depthTexture !== null) === this.#depthSamplingRequired
       && retainedFormatIsValid
     ) return true;
-    const sizeKey = `${width}x${height}:${desiredLevels}:${this.#depthSamplingRequired ? 1 : 0}:${requireHdr ? 1 : 0}:${requireFloatBlend ? 1 : 0}`;
+    const sizeKey = `${this.#budget.availableBytes}:${width}x${height}:${desiredLevels}:${this.#depthSamplingRequired ? 1 : 0}:${requireHdr ? 1 : 0}:${requireFloatBlend ? 1 : 0}`;
     if (this.#deniedSize === sizeKey) return false;
     try {
-      this.#deleteResources();
       const allocatedPreferred = preferredColorBytesPerPixel === 8
         && this.#allocate(width, height, 8);
       if (!allocatedPreferred && (requireHdr || !this.#allocate(width, height, 4))) {
@@ -320,9 +319,6 @@ export class SurfaceCompositeOwner {
         return false;
       }
       this.#ensurePresentationResources();
-    } catch (error) {
-      this.#deleteResources();
-      throw error;
     } finally {
       state.invalidate();
     }
@@ -352,17 +348,13 @@ export class SurfaceCompositeOwner {
       && this.#resources.sceneColor === null
       && this.#resources.depthTexture !== null
     ) return true;
-    const sizeKey = `occlusion:${width}x${height}`;
+    const sizeKey = `occlusion:${this.#budget.availableBytes}:${width}x${height}`;
     if (this.#deniedSize === sizeKey) return false;
     try {
-      this.#deleteResources();
       if (!this.#allocate(width, height, 4)) {
         this.#deniedSize = sizeKey;
         return false;
       }
-    } catch (error) {
-      this.#deleteResources();
-      throw error;
     } finally {
       state.invalidate();
     }
@@ -522,6 +514,7 @@ export class SurfaceCompositeOwner {
 
   #allocate(width: number, height: number, colorBytesPerPixel: 4 | 8): boolean {
     const gl = this.#gl;
+    const claim = {};
     const bytes = compositeTargetByteLength(
       width,
       height,
@@ -533,7 +526,7 @@ export class SurfaceCompositeOwner {
           : 0,
       },
     );
-    if (!this.#budget.tryClaim(this.#claim, bytes)) return false;
+    if (!this.#budget.tryClaim(claim, bytes)) return false;
     const color = gl.createTexture();
     const sceneColor = this.#sceneColorRequired ? gl.createTexture() : null;
     const depthTexture = this.#depthSamplingRequired ? gl.createTexture() : null;
@@ -550,76 +543,88 @@ export class SurfaceCompositeOwner {
       if (depthRenderbuffer !== null) gl.deleteRenderbuffer(depthRenderbuffer);
       if (sceneColor !== null) gl.deleteTexture(sceneColor);
       if (color !== null) gl.deleteTexture(color);
-      this.#budget.release(this.#claim);
+      this.#budget.release(claim);
       throw new Error("Royal could not allocate composite target resources");
     }
-    const internalFormat = colorBytesPerPixel === 8 ? gl.RGBA16F : gl.RGBA8;
-    const levels = sceneColor === null
-      ? 0
-      : transmissionSceneColorMipLevels(width, height, this.#sceneColorMaxRoughness);
-    gl.bindTexture(gl.TEXTURE_2D, color);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, internalFormat, width, height);
-    if (sceneColor !== null) {
-      gl.bindTexture(gl.TEXTURE_2D, sceneColor);
-      gl.texStorage2D(gl.TEXTURE_2D, levels, internalFormat, width, height);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, levels - 1);
-    }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, color, 0);
-    if (depthTexture !== null) {
-      gl.bindTexture(gl.TEXTURE_2D, depthTexture);
-      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, width, height);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.framebufferTexture2D(
-        gl.FRAMEBUFFER,
-        gl.DEPTH_ATTACHMENT,
-        gl.TEXTURE_2D,
-        depthTexture,
-        0,
-      );
-    } else {
-      gl.bindRenderbuffer(gl.RENDERBUFFER, depthRenderbuffer);
-      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, width, height);
-      gl.framebufferRenderbuffer(
-        gl.FRAMEBUFFER,
-        gl.DEPTH_ATTACHMENT,
-        gl.RENDERBUFFER,
+    try {
+      const internalFormat = colorBytesPerPixel === 8 ? gl.RGBA16F : gl.RGBA8;
+      const levels = sceneColor === null
+        ? 0
+        : transmissionSceneColorMipLevels(width, height, this.#sceneColorMaxRoughness);
+      gl.bindTexture(gl.TEXTURE_2D, color);
+      gl.texStorage2D(gl.TEXTURE_2D, 1, internalFormat, width, height);
+      if (sceneColor !== null) {
+        gl.bindTexture(gl.TEXTURE_2D, sceneColor);
+        gl.texStorage2D(gl.TEXTURE_2D, levels, internalFormat, width, height);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, levels - 1);
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, color, 0);
+      if (depthTexture !== null) {
+        gl.bindTexture(gl.TEXTURE_2D, depthTexture);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, width, height);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.framebufferTexture2D(
+          gl.FRAMEBUFFER,
+          gl.DEPTH_ATTACHMENT,
+          gl.TEXTURE_2D,
+          depthTexture,
+          0,
+        );
+      } else {
+        gl.bindRenderbuffer(gl.RENDERBUFFER, depthRenderbuffer);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, width, height);
+        gl.framebufferRenderbuffer(
+          gl.FRAMEBUFFER,
+          gl.DEPTH_ATTACHMENT,
+          gl.RENDERBUFFER,
+          depthRenderbuffer,
+        );
+      }
+      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+        gl.deleteFramebuffer(framebuffer);
+        if (depthTexture !== null) gl.deleteTexture(depthTexture);
+        if (depthRenderbuffer !== null) gl.deleteRenderbuffer(depthRenderbuffer);
+        gl.deleteTexture(sceneColor);
+        gl.deleteTexture(color);
+        this.#budget.release(claim);
+        return false;
+      }
+      this.#deleteResources();
+      this.#claim = claim;
+      this.#resources = {
+        color,
+        colorBytesPerPixel,
         depthRenderbuffer,
-      );
-    }
-    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+        depthTexture,
+        framebuffer,
+        height,
+        sceneColor,
+        sceneColorLevels: levels,
+        width,
+      };
+      this.#depthBinding = { sampler: null, target: "2d", texture: depthTexture };
+      if (this.#sceneSampler !== null && sceneColor !== null) {
+        this.#sceneColorBinding = {
+          sampler: this.#sceneSampler,
+          target: "2d",
+          texture: sceneColor,
+        };
+      }
+      this.#bindingRevision += 1;
+      return true;
+    } catch (error) {
       gl.deleteFramebuffer(framebuffer);
       if (depthTexture !== null) gl.deleteTexture(depthTexture);
       if (depthRenderbuffer !== null) gl.deleteRenderbuffer(depthRenderbuffer);
-      gl.deleteTexture(sceneColor);
+      if (sceneColor !== null) gl.deleteTexture(sceneColor);
       gl.deleteTexture(color);
-      this.#budget.release(this.#claim);
-      return false;
+      this.#budget.release(claim);
+      throw error;
     }
-    this.#resources = {
-      color,
-      colorBytesPerPixel,
-      depthRenderbuffer,
-      depthTexture,
-      framebuffer,
-      height,
-      sceneColor,
-      sceneColorLevels: levels,
-      width,
-    };
-    this.#depthBinding = { sampler: null, target: "2d", texture: depthTexture };
-    if (this.#sceneSampler !== null && sceneColor !== null) {
-      this.#sceneColorBinding = {
-        sampler: this.#sceneSampler,
-        target: "2d",
-        texture: sceneColor,
-      };
-    }
-    this.#bindingRevision += 1;
-    return true;
   }
 
   #deleteResources(): void {

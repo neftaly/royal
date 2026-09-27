@@ -1,4 +1,4 @@
-import { automaticVirtualTextureEligible, automaticVirtualTextureHasPreview } from "./automatic-policy";
+import { reloadableRasterPagingEligible, automaticVirtualTextureHasPreview } from "./automatic-policy";
 import type { SurfaceFrameView } from "../frame/surface-frame";
 import { decodedTextureKey, type DecodedTextureSource, type TextureSourceRef } from "../texture/source";
 import {
@@ -8,11 +8,28 @@ import {
 import type { CanonicalSurfaceScene } from "../surface/scene-lowering";
 import type { TextureUnitBinding } from "../webgl/draw-state-transition";
 
-export const automaticVirtualTextureAssetKey = (asset: TextureSourceRef): string => JSON.stringify([
-  decodedTextureKey(asset),
-  asset.colorSpace ?? "srgb",
-  canonicalTextureSamplerKey(canonicalTextureSampler(asset)),
-]);
+const automaticIdentityCache = new WeakMap<TextureSourceRef, {
+  decoded: string;
+  colorSpace: string;
+  sampler: ReturnType<typeof canonicalTextureSampler>;
+  key: string;
+}>();
+
+export const automaticVirtualTextureAssetKey = (asset: TextureSourceRef): string => {
+  const decoded = decodedTextureKey(asset);
+  const colorSpace = asset.colorSpace ?? "srgb";
+  const previous = automaticIdentityCache.get(asset);
+  const sampler = asset.sampler;
+  if (previous !== undefined && previous.decoded === decoded && previous.colorSpace === colorSpace
+    && previous.sampler.magFilter === (sampler?.magFilter ?? "linear")
+    && previous.sampler.minFilter === (sampler?.minFilter ?? "linear-mipmap-linear")
+    && previous.sampler.wrapS === (sampler?.wrapS ?? "clamp-to-edge")
+    && previous.sampler.wrapT === (sampler?.wrapT ?? "clamp-to-edge")) return previous.key;
+  const canonical = canonicalTextureSampler(asset);
+  const key = JSON.stringify([decoded, colorSpace, canonicalTextureSamplerKey(canonical)]);
+  automaticIdentityCache.set(asset, { decoded, colorSpace, sampler: canonical, key });
+  return key;
+};
 
 export type VirtualTextureSceneDemand = Readonly<{
   surfaces: readonly Readonly<{
@@ -28,7 +45,7 @@ export const virtualTextureRuntimeRequired = (
     const asset = surface.material.baseColorAsset;
     const source = asset === undefined ? undefined : decoded(asset);
     return source !== undefined
-      && (automaticVirtualTextureHasPreview(source) || automaticVirtualTextureEligible(source));
+      && (automaticVirtualTextureHasPreview(source) || reloadableRasterPagingEligible(source));
   });
 
 export type VirtualTextureShaderSource = Readonly<{
@@ -51,6 +68,15 @@ export type VirtualTextureFrameUpdate = Readonly<{
 }>;
 
 export type VirtualTextureRuntimeSnapshot = Readonly<{
+  rasterCacheBytes?: number;
+  rasterCacheLimitBytes?: number;
+  rasterCacheReads?: number;
+  rasterCacheHits?: number;
+  rasterCachePending?: number;
+  rasterCachePeakBytes?: number;
+  rasterCacheQueueMs?: number;
+  rasterCacheDecodeMs?: number;
+  rasterPageRenderMs?: number;
   /** Resources whose exact demand is still being scanned for the current view. */
   pendingDemandResources?: number;
   /** Cumulative page-stage elapsed time; parallel jobs overlap. Growth counts pool-frames. */
@@ -149,12 +175,15 @@ export interface VirtualTextureRuntime {
   readonly bindingRevision: number;
   readonly shaderSource: VirtualTextureShaderSource;
   automaticBinding(asset: TextureSourceRef): VirtualTextureGpuBinding | undefined;
+  /** Reloadable page sources permit compact ordinary fallbacks before residency. */
+  automaticPageSourceAvailable?(asset: TextureSourceRef): boolean;
   dispose(): void;
   invalidate(): void;
   invalidateSceneGeometry(): void;
   releaseRasterSource(asset: TextureSourceRef): void;
   runtimeSnapshot(): VirtualTextureRuntimeSnapshot;
   setScene(scene: CanonicalSurfaceScene | null): void;
+  setActiveStorageKeys?(keys: ReadonlySet<string>): void;
   /** Embedded surface frames already reset the shared upload authority. */
   update(views: readonly SurfaceFrameView[], beginUploadFrame?: boolean): VirtualTextureFrameUpdate;
 }

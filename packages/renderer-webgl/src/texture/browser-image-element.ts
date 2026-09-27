@@ -49,6 +49,7 @@ export const decodeBrowserImageElement = async (
   }
   const objectUri = URL.createObjectURL(blob);
   const image = document.createElement("img");
+  let stagingCanvas: HTMLCanvasElement | undefined;
   try {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
@@ -105,10 +106,10 @@ export const decodeBrowserImageElement = async (
         width: sourceWidth,
       };
     }
-    const canvas = document.createElement("canvas");
+    const canvas = stagingCanvas = document.createElement("canvas");
     canvas.width = fitted.width;
     canvas.height = fitted.height;
-    const context = canvas.getContext("2d", { alpha: true });
+    const context = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
     if (context === null) throw new Error("Royal could not allocate an image fallback canvas");
     image.width = fitted.width;
     image.height = fitted.height;
@@ -127,6 +128,7 @@ export const decodeBrowserImageElement = async (
       width: fitted.width,
     };
   } catch (error) {
+    if (stagingCanvas !== undefined) stagingCanvas.width = stagingCanvas.height = 1;
     image.src = "";
     URL.revokeObjectURL(objectUri);
     throw error;

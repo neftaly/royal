@@ -40,8 +40,18 @@ export class WebGlStateOwner {
 
   invalidate(): void {
     this.#state.known = false;
-    // Unknown scalar state is ignored by every transition. Texture bindings
-    // use absent entries as their per-unit unknown state.
+    // A clear revalidates shared framebuffer state, but does not restore draw
+    // state. Keep draw-only fields unknown even after that clear commits.
+    this.#state.alphaBlend = null;
+    this.#state.blendFunctionKnown = false;
+    this.#state.cullFaceKnown = false;
+    this.#state.cullBackFaces = null;
+    this.#state.depthEqual = null;
+    this.#state.depthTest = null;
+    this.#state.depthWrite = null;
+    this.#state.frontFace = null;
+    this.#state.program = null;
+    this.#state.vertexArray = null;
     this.#state.textureBindings.length = 0;
   }
 

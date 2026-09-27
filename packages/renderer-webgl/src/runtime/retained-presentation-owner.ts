@@ -71,7 +71,7 @@ const createProgram = (gl: WebGL2RenderingContext): WebGLProgram => {
  */
 export class RetainedPresentationOwner {
   readonly #budget: PersistentGpuBudgetOwner;
-  readonly #claim = {};
+  #claim = {};
   #deniedSize = "";
   readonly #gl: WebGL2RenderingContext;
   readonly #presentationBindings: TextureUnitBinding[] = [{
@@ -178,24 +178,33 @@ export class RetainedPresentationOwner {
 
   #allocate(width: number, height: number): boolean {
     const gl = this.#gl;
+    const claim = {};
     const bytes = width * height * 4;
-    if (!this.#budget.tryClaim(this.#claim, bytes)) return false;
+    if (!this.#budget.tryClaim(claim, bytes)) return false;
     const color = gl.createTexture();
     if (color === null) {
-      this.#budget.release(this.#claim);
+      this.#budget.release(claim);
       throw new Error("Royal could not allocate retained presentation resources");
     }
-    gl.bindTexture(gl.TEXTURE_2D, color);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, this.#alpha ? gl.RGBA8 : gl.RGB8, width, height);
-    this.#resources = { color, height, width };
-    if (this.#sampler !== null) {
-      this.#presentationBindings[0] = {
-        sampler: this.#sampler,
-        target: "2d",
-        texture: color,
-      };
+    try {
+      gl.bindTexture(gl.TEXTURE_2D, color);
+      gl.texStorage2D(gl.TEXTURE_2D, 1, this.#alpha ? gl.RGBA8 : gl.RGB8, width, height);
+      this.#deleteResources();
+      this.#claim = claim;
+      this.#resources = { color, height, width };
+      if (this.#sampler !== null) {
+        this.#presentationBindings[0] = {
+          sampler: this.#sampler,
+          target: "2d",
+          texture: color,
+        };
+      }
+      return true;
+    } catch (error) {
+      gl.deleteTexture(color);
+      this.#budget.release(claim);
+      throw error;
     }
-    return true;
   }
 
   #deleteResources(): void {
@@ -220,10 +229,9 @@ export class RetainedPresentationOwner {
       this.#resources?.width === width
       && this.#resources.height === height
     ) return true;
-    const sizeKey = `${width}x${height}`;
+    const sizeKey = `${this.#budget.availableBytes}:${width}x${height}`;
     if (this.#deniedSize === sizeKey) return false;
     try {
-      this.#deleteResources();
       if (!this.#allocate(width, height)) {
         this.#deniedSize = sizeKey;
         return false;

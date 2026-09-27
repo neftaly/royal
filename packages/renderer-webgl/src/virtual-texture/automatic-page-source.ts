@@ -127,7 +127,7 @@ const drawSegment = (
   context.restore();
 };
 
-const renderAutomaticPage = (
+export const renderAutomaticPage = (
   layout: ReturnType<typeof createGeneratedVirtualTextureLayout>,
   sampler: CanonicalTextureSampler,
   image: CanvasImageSource,
@@ -141,7 +141,8 @@ const renderAutomaticPage = (
   const storedPageSize = layout.pageSize + layout.borderTexels * 2;
   canvas.width = storedPageSize;
   canvas.height = storedPageSize;
-  const context = canvas.getContext("2d", { alpha: true });
+  // Request CPU backing for page generation; older browsers may ignore this hint.
+  const context = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
   if (context === null) throw new Error("Royal automatic VT could not allocate a page canvas");
   context.clearRect(0, 0, storedPageSize, storedPageSize);
   context.imageSmoothingEnabled = true;

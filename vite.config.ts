@@ -136,7 +136,11 @@ const normalizePublishedWorkerSourceMap = (): Plugin => {
         if (/^(?:static-preparation|draco|idle-astc|inspection-reduction)-worker-.*\.js$/u.test(fileName)) {
           const workerPath = path.join(assets, fileName);
           const source = readFileSync(workerPath, 'utf8');
-          const normalized = source.replace(
+          // Vite also scans the embedded workerpool default-worker string.
+          // Its upstream map is not part of these published module workers.
+          const normalized = source.replaceAll(
+            "//# sourceMappingURL=worker.min.js.map", "",
+          ).replace(
             /(?:\r?\n)?\/\/# sourceMappingURL=[^\r\n]+(?:\r?\n)?$/u,
             '\n'
           );
@@ -191,7 +195,7 @@ export default ({ command, mode }: { readonly command: string; readonly mode: st
   ];
   const worker = {
     format: 'es' as const,
-    rolldownOptions: { output: { codeSplitting: false as const } },
+    rolldownOptions: { checks: { pluginTimings: false }, output: { codeSplitting: false as const } },
     plugins: () => {
       let outputDirectory: string | undefined;
       const workerChunks: string[] = [];

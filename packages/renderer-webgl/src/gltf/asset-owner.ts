@@ -33,6 +33,8 @@ import type { EarlyStaticTextureClaims } from "./static-external-texture-demand"
 import type { StaticGeometryTaskPlan } from "./static-geometry-plan";
 
 export type GltfTextureProgress = Readonly<{
+  /** Images outside the current texture working set; these are not loading. */
+  deferred?: number;
   /** Images whose transport or decode ended in failure. */
   failed: number;
   /** Images still awaiting transport or decode. */
@@ -168,10 +170,13 @@ const STAGED_ROOT_SOURCE_BYTE_THRESHOLD = 32 * 1024 * 1024;
 const textureProgress = (
   assets: readonly TextureSourceRef[],
   snapshot: (asset: TextureSourceRef) => TextureAssetSnapshot,
+  active: (asset: TextureSourceRef) => boolean = () => true,
 ): GltfTextureProgress => {
   let failed = 0;
   let ready = 0;
+  let deferred = 0;
   for (const asset of assets) {
+    if (!active(asset)) { deferred++; continue; }
     const state = snapshot(asset);
     const status = state.status;
     if (status === "ready") {
@@ -180,8 +185,9 @@ const textureProgress = (
     else if (status === "error") failed += 1;
   }
   return {
+    ...(deferred === 0 ? {} : { deferred }),
     failed,
-    loading: assets.length - ready - failed,
+    loading: assets.length - ready - failed - deferred,
     ready,
     total: assets.length,
   };
@@ -191,6 +197,7 @@ const sameTextureProgress = (
   left: GltfTextureProgress,
   right: GltfTextureProgress,
 ): boolean => left.failed === right.failed
+  && left.deferred === right.deferred
   && left.loading === right.loading
   && left.ready === right.ready;
 
@@ -381,13 +388,14 @@ export class GltfAssetOwner {
   /** Recomputes focused image progress without changing geometry readiness. */
   refreshTextureProgress(
     snapshot: (asset: TextureSourceRef) => TextureAssetSnapshot,
+    active?: (asset: TextureSourceRef) => boolean,
   ): void {
     if (this.#disposed) return;
     for (const entry of this.#entries.values()) {
       if (entry.prepared === undefined || !("textures" in entry.snapshot)) continue;
-      const textures = textureProgress(entry.prepared.textureAssets, snapshot);
+      const textures = textureProgress(entry.prepared.textureAssets, snapshot, active);
       const status = usableState(textures);
-      const complete = textures.loading === 0;
+      const complete = textures.loading === 0 && (textures.deferred ?? 0) === 0;
       const timings = complete
         && textures.total > 0
         && entry.snapshot.timings.imagesCompleteAfterMs === undefined

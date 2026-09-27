@@ -1,0 +1,278 @@
+{
+  "method": "Cold HTTP cache, full Nova release, 1280x800 DPR1, hardware Chromium through Probability root pnpm dev; single runs, host load varies.",
+  "runs": [
+    {
+      "label": "baseline",
+      "readyMs": 101332.09999990463,
+      "longTaskMs": 77513,
+      "counts": {
+        "bitmap": 335,
+        "texture-storage": 852,
+        "texture-upload": 3084,
+        "texture-delete": 197
+      },
+      "sameSourceOrdinarySizeReductions": 190,
+      "gpu": {
+        "budgetBytes": 268435456,
+        "deniedClaims": 0,
+        "retainedBytes": 80141458,
+        "textureBudgetBytes": 246161670,
+        "textureRetainedBytes": 80100672,
+        "textureMigrationReserveBytes": 22233024
+      },
+      "vt": {
+        "rasterCacheBytes": 33513092,
+        "rasterCacheLimitBytes": 33554432,
+        "rasterCacheReads": 4,
+        "rasterCacheHits": 620,
+        "rasterCachePending": 0,
+        "rasterCachePeakBytes": 33554248,
+        "rasterCacheQueueMs": 43560.399996995926,
+        "rasterCacheDecodeMs": 6843.400000095367,
+        "rasterPageRenderMs": 755.4000000953674,
+        "visibleDetailFraction": 1,
+        "idleAstcPixelHits": 5,
+        "retainedPagePixelBytes": 209088,
+        "idleAstcBytes": 309760,
+        "pageQueueMs": 44463.10000157356,
+        "pageReadMs": 51206.699999809265,
+        "pageReadyWaitMs": 169377.69999790192,
+        "pageTimedReads": 624,
+        "pageTimedUploads": 624,
+        "atlasGrowthFrames": 126,
+        "admittedUploadBytes": 7784,
+        "atlasBytes": 71678464,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 624,
+        "admittedPages": 624,
+        "unresidentPages": 0,
+        "automaticCandidates": 324,
+        "automaticDecodedBytes": 33760900,
+        "automaticIneligible": 1,
+        "automaticResources": 323,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 624,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 624,
+        "uploadedPages": 624,
+        "uploadBudgetBytes": 33554432
+      },
+      "topSelfMs": [
+        [
+          ":0 (program)",
+          11171.899999999956
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/index.js:3496 #Ue",
+          7915.351000000038
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/index.js:1909 Pr",
+          6264.873000000001
+        ],
+        [
+          "http://localhost:3004/play/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=b6968452:192 exports.jsxDEV",
+          6234.789999999986
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/index.js:1914 (anonymous)",
+          5627.625999999999
+        ],
+        [
+          ":0 (idle)",
+          5552.746000000007
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/source-tfxMOAa_.js:45 i",
+          5322.298000000001
+        ],
+        [
+          ":0 (garbage collector)",
+          3150.6059999999993
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/source-tfxMOAa_.js:54 a",
+          3095.3420000000006
+        ],
+        [
+          "http://localhost:3004/play/node_modules/.vite/deps/react-dom_client.js?v=b6968452:2633 logComponentRender",
+          2339.4269999999997
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/index.js:1350 Cr",
+          1869.7379999999966
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/runtime-contract-BdeiAVw-.js:127 g",
+          1669.6310000000005
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/index.js:5893 applySurfaceDraw",
+          1272.546999999996
+        ],
+        [
+          ":45 gl.<computed>",
+          1032.6620000000014
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/index.js:5515 reconcile",
+          983.1580000000005
+        ]
+      ]
+    },
+    {
+      "label": "quality-fixed",
+      "readyMs": 60831.59999990463,
+      "longTaskMs": 34364,
+      "counts": {
+        "bitmap": 336,
+        "texture-storage": 465,
+        "texture-upload": 1073,
+        "raster-resize": 432,
+        "texture-delete": 15,
+        "page-render": 1474
+      },
+      "sameSourceOrdinarySizeReductions": 4,
+      "gpu": {
+        "budgetBytes": 268435456,
+        "deniedClaims": 0,
+        "retainedBytes": 26666814,
+        "textureBudgetBytes": 260728134,
+        "textureRetainedBytes": 26626028,
+        "textureMigrationReserveBytes": 7666560
+      },
+      "vt": {
+        "rasterCacheBytes": 33513092,
+        "rasterCacheLimitBytes": 33554432,
+        "rasterCacheReads": 3,
+        "rasterCacheHits": 206,
+        "rasterCachePending": 0,
+        "rasterCachePeakBytes": 33554056,
+        "rasterCacheQueueMs": 10806.30000090599,
+        "rasterCacheDecodeMs": 3133.2999997138977,
+        "rasterPageRenderMs": 458.300000667572,
+        "visibleDetailFraction": 1,
+        "idleAstcPixelHits": 7,
+        "retainedPagePixelBytes": 69696,
+        "idleAstcBytes": 433664,
+        "pageQueueMs": 11374.000000476837,
+        "pageReadMs": 14407.100001335144,
+        "pageReadyWaitMs": 26453.99999833107,
+        "pageTimedReads": 209,
+        "pageTimedUploads": 209,
+        "atlasGrowthFrames": 44,
+        "admittedUploadBytes": 20,
+        "atlasBytes": 18275840,
+        "atlasPools": 1,
+        "atlasGrowthFailures": 0,
+        "desiredPages": 207,
+        "admittedPages": 207,
+        "unresidentPages": 0,
+        "automaticCandidates": 324,
+        "automaticDecodedBytes": 33629252,
+        "automaticIneligible": 1,
+        "automaticResources": 323,
+        "automaticWaiting": 0,
+        "deferredUploads": 0,
+        "failedPages": 0,
+        "pageRequests": 211,
+        "pendingPages": 0,
+        "pendingPageBytes": 0,
+        "pendingPageByteLimit": 16777216,
+        "residentPages": 207,
+        "uploadedPages": 209,
+        "uploadBudgetBytes": 33554432
+      },
+      "topSelfMs": [
+        [
+          ":0 (program)",
+          8899.228999999992
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/index.js:3500 #Ue",
+          6158.476000000041
+        ],
+        [
+          "http://localhost:3004/play/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=b6968452:192 exports.jsxDEV",
+          4658.36099999999
+        ],
+        [
+          ":0 (idle)",
+          4463.1110000000035
+        ],
+        [
+          "http://localhost:3004/play/node_modules/.vite/deps/react-dom_client.js?v=b6968452:2633 logComponentRender",
+          2032.274
+        ],
+        [
+          ":0 (garbage collector)",
+          1985.179999999997
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/index.js:1350 Dr",
+          1559.341
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/index.js:1914 i",
+          1127.3759999999997
+        ],
+        [
+          "http://localhost:3004/play/node_modules/.vite/deps/react-dom_client.js?v=b6968452:9254 completeRoot",
+          816.4150000000005
+        ],
+        [
+          "http://localhost:3004/play/node_modules/.vite/deps/react-dom_client.js?v=b6968452:2673 logComponentEffect",
+          769.95
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/index.js:5898 applySurfaceDraw",
+          732.6670000000005
+        ],
+        [
+          ":47 gl.<computed>",
+          539.669
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/index.js:1914 (anonymous)",
+          515.91
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/index.js:3410 #Ie",
+          498.1860000000004
+        ],
+        [
+          "http://localhost:3004/play/@fs/home/neftaly/dev/royal/packages/renderer-webgl/dist/index.js:2633 Wi",
+          492.1390000000002
+        ]
+      ]
+    }
+  ],
+  "visual": {
+    "crop": [
+      0,
+      0,
+      1090,
+      690
+    ],
+    "pixels": 752100,
+    "meanAbsoluteRGB": [
+      0.0026007179896290387,
+      0.0026126844834463503,
+      0.002875947347427204
+    ],
+    "pixelsWithAnyChannelDifferenceOver8": 1,
+    "tracksCrop": [
+      360,
+      340,
+      590,
+      460
+    ],
+    "tracksPixelsWithAnyChannelDifferenceOver8": 0,
+    "notes": "Excludes changing player-name/UI region. Pixel differences are from baseline to quality-fixed, after ready. This does not replace interaction/zoom coverage."
+  }
+}

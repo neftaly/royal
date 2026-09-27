@@ -1,9 +1,11 @@
 import type { TextureAnisotropy } from "../texture/anisotropy";
+import { planTextureWorkingSet, visibleTextureWorkingSet, type TextureWorkingSetPlan } from "./texture-working-set";
 import { LargeLightActivation } from "./large-light-activation";
 import { plannedSurfaceProgramFeatures, surfaceMaterialLodDrawable } from "./surface-publication-plan";
 import { BorrowedSurfaceSourceIndex } from "./borrowed-surface-source-index";
 import {
   planSurfaceDepthPartition,
+  rebindSurfaceDepthPartition,
   sortSurfaceDepthPartitionInto,
   type SurfaceDepthPartition,
 } from "./surface-depth-partition";
@@ -196,6 +198,7 @@ const PENDING_BORROWED_GEOMETRY: BorrowedSurfaceGeometryMatch = { status: "pendi
 
 
 type GpuSurface = {
+  readonly sceneIndex: number;
   depthOrder: number;
   depthOrderGroup: number;
   depthPacket: SurfaceDrawPacket | null;
@@ -280,6 +283,8 @@ const surfaceDrawPacket = (
 export type SurfacePresentationLane = "overlay" | "world";
 
 export type SurfaceGpuOwnerOptions = Readonly<{
+  onTextureWorkingSetChanged?: (keys: ReadonlySet<string>) => void;
+  onTextureSourceRequired?: (key: string) => void;
   onTextureFallbackChanged?: (key: string, compact: boolean) => void;
   anisotropy?: TextureAnisotropy;
   etc2Available?: boolean;
@@ -375,6 +380,12 @@ export class SurfaceGpuOwner {
   readonly #textureGpu: TextureGpuOwner;
   readonly #textureSamplerClaim = new Set<string>();
   readonly #textureStorageClaim = new Set<string>();
+  #activeTextureKeys: ReadonlySet<string> | undefined;
+  #textureWorkingSetPlan: TextureWorkingSetPlan | undefined;
+  #textureWorkingSetDirty = true;
+  #textureBudgetBytes = -1;
+  #textureViewMatrices: Mat4[] = [];
+  readonly #onTextureWorkingSetChanged: ((keys: ReadonlySet<string>) => void) | undefined;
   readonly #texturePublicationKeys = new Set<string>();
   readonly #texturePublicationWorkspace = createTexturePublicationWorkspace();
   #terminalPresentationEligible = false;
@@ -394,6 +405,8 @@ export class SurfaceGpuOwner {
     {
       anisotropy,
       onTextureFallbackChanged,
+      onTextureSourceRequired,
+      onTextureWorkingSetChanged,
       etc2Available = true,
       onChanged = () => undefined,
       onFailure = () => undefined,
@@ -401,6 +414,7 @@ export class SurfaceGpuOwner {
       uploadBudget = new FrameUploadBudgetOwner(),
     }: SurfaceGpuOwnerOptions = {},
   ) {
+    this.#onTextureWorkingSetChanged = onTextureWorkingSetChanged;
     this.#geometryGpu = new SurfaceGeometryGpuOwner(gl, budget);
     this.#gl = gl;
     this.#defaultFramebufferSamples = Number(gl.getParameter(gl.SAMPLES));
@@ -422,7 +436,7 @@ export class SurfaceGpuOwner {
     this.#partitionPattern = partitionPattern;
     this.#presentationLane = presentationLane;
     this.#resourceBudget = budget;
-    this.#textureGpu = new TextureGpuOwner(gl, budget, uploadBudget, etc2Available, anisotropy, onTextureFallbackChanged);
+    this.#textureGpu = new TextureGpuOwner(gl, budget, uploadBudget, etc2Available, anisotropy, onTextureFallbackChanged, onTextureSourceRequired);
     this.#uploadBudget = uploadBudget;
   }
 
@@ -458,6 +472,9 @@ export class SurfaceGpuOwner {
     this.#fullReconcileRequired = true;
     this.#clearGpuSurfaces();
     this.#scene = null;
+    this.#textureWorkingSetPlan = undefined;
+    this.#textureViewMatrices = [];
+    this.#activeTextureKeys = undefined;
     this.#borrowedSourceIndex = undefined;
     this.#screenSpacePartitionRequested = false;
     this.#textureSamplerClaim.clear();
@@ -632,6 +649,7 @@ export class SurfaceGpuOwner {
     persistentBudgetBytes: number,
     width: number,
     height: number,
+    overlayBytes = 0,
   ): number {
     const scene = this.#scene;
     if (scene === null) return ordinaryTextureStorageBudget(persistentBudgetBytes, 0);
@@ -673,7 +691,7 @@ export class SurfaceGpuOwner {
         { sceneColor: false },
       );
     }
-    return ordinaryTextureStorageBudget(persistentBudgetBytes, plannedNonTextureBytes);
+    return Math.max(0, persistentBudgetBytes - plannedNonTextureBytes - overlayBytes);
   }
 
   geometryUploadSnapshot(): SurfaceGeometryUploadSnapshot {
@@ -719,6 +737,8 @@ export class SurfaceGpuOwner {
       this.#clearGpuSurfaces();
     } else this.#admittedSurfaceCount = retainedSurfaceCount;
     this.#scene = scene;
+    this.#textureWorkingSetPlan = scene === null ? undefined : planTextureWorkingSet(scene);
+    this.#textureWorkingSetDirty = true;
     this.#largeLights.set(scene ?? { directionalLights: [], punctualLights: [] });
     this.#largeLightBindingDirty = true;
     this.#largeLightRestorePending = false;
@@ -813,6 +833,7 @@ export class SurfaceGpuOwner {
     if (this.#virtualTexture === runtime) return;
     this.#virtualTexture?.dispose();
     this.#virtualTexture = runtime;
+    if (this.#activeTextureKeys !== undefined) runtime?.setActiveStorageKeys?.(this.#activeTextureKeys);
     this.#programMaterialSources = new WeakMap<WebGLProgram, CanonicalSurfaceMaterial>();
     this.#virtualTextureBindingRevision = runtime?.bindingRevision ?? -1;
     this.#programs.setVirtualTextureDeclarations(runtime?.shaderSource.declarations ?? "");
@@ -835,6 +856,7 @@ export class SurfaceGpuOwner {
 
   /** Publishes retained instance matrices without replacing static scene identity. */
   publishInstanceTransforms(): void {
+    this.#textureWorkingSetDirty = true;
     if (this.#scene === null) return;
     this.#invalidateBlendDepthPartitions();
     this.#borrowedSourceIndex?.invalidate();
@@ -857,6 +879,7 @@ export class SurfaceGpuOwner {
     surfaceIndices: readonly number[],
     sceneGlobalsChanged: boolean,
   ): void {
+    if (surfaceIndices.length > 0) this.#textureWorkingSetDirty = true;
     const scene = this.#scene;
     if (scene === null) return;
     if (surfaceIndices.length > 0) this.#borrowedSourceIndex?.invalidate();
@@ -916,6 +939,27 @@ export class SurfaceGpuOwner {
     cssScaleY = 1,
   ): boolean {
     const scene = this.#scene;
+    if (this.#textureBudgetBytes !== this.#resourceBudget.textureBudgetBytes) {
+      this.#textureBudgetBytes = this.#resourceBudget.textureBudgetBytes;
+      this.#dirty = this.#fullReconcileRequired = true;
+    }
+    const textureViewsChanged = views.length !== this.#textureViewMatrices.length
+      || views.some((view, index) => !mat4ValuesEqual(view.viewProjection, this.#textureViewMatrices[index]!));
+    if (this.#textureWorkingSetPlan !== undefined && this.#onTextureWorkingSetChanged !== undefined
+      && (this.#textureWorkingSetDirty || textureViewsChanged)) {
+      const active = visibleTextureWorkingSet(this.#textureWorkingSetPlan, views, this.#compositeFramePlan.frustumPlanes);
+      this.#textureViewMatrices = views.map(view => [...view.viewProjection] as Mat4);
+      this.#textureWorkingSetDirty = false;
+      if (this.#activeTextureKeys === undefined || active.size !== this.#activeTextureKeys.size
+        || [...active].some(key => !this.#activeTextureKeys!.has(key))) {
+        this.#activeTextureKeys = active;
+        this.#textureGpu.setActiveStorageKeys(active);
+        this.#virtualTexture?.setActiveStorageKeys?.(active);
+        this.#onTextureWorkingSetChanged(active);
+        this.#dirty = this.#fullReconcileRequired = true;
+        state.invalidate();
+      }
+    }
     if (this.#largeLightRestorePending && scene !== null) {
       this.#largeLights.set(scene);
       this.#largeLightRestorePending = false;
@@ -1207,10 +1251,14 @@ export class SurfaceGpuOwner {
 
   #reconcilePendingResources(state: WebGlStateOwner): void {
     if (!this.#dirty) return;
-    if (this.#dirty && this.#fullReconcileRequired) {
+    if (this.#fullReconcileRequired || this.#texturePublicationKeys.size > 0) {
+      // A decoded publication can register its paging source before the next
+      // frame observes the runtime binding revision. Choose final fallback
+      // dimensions before uploading, including on the incremental path.
       this.#textureGpu.setFallbackStorageKeys(collectVirtualFallbackStorageKeys(
         (this.#scene?.surfaces ?? []).map(surface => surface.material),
-        asset => this.#virtualTexture?.automaticBinding(asset) !== undefined,
+        asset => this.#virtualTexture?.automaticPageSourceAvailable?.(asset) === true
+          || this.#virtualTexture?.automaticBinding(asset) !== undefined,
       ));
     }
     if (
@@ -1978,6 +2026,7 @@ export class SurfaceGpuOwner {
       ? this.#depthPrepassOwner?.get(geometrySurface.instanceCount > 0) ?? null
       : null;
     return {
+      sceneIndex,
       depthOrder: 0,
       depthOrderGroup: 0,
       depthPacket: depthProgram === null ? null : {
@@ -2278,14 +2327,20 @@ export class SurfaceGpuOwner {
   }
 
   #replaceDrawBuckets(surfaces: readonly GpuSurface[]): void {
-    this.#invalidateBlendDepthPartitions();
     if (this.#presentationLane === "overlay") {
+      this.#invalidateBlendDepthPartitions();
       this.#opaqueSurfaces = [];
       this.#transmissionSurfaces = [];
       this.#blendedSurfaces = [...surfaces];
       return;
     }
     const grouped = groupSurfacesForDrawing(surfaces);
+    if (this.#blendedDepthPartition !== undefined) this.#blendedDepthPartition = rebindSurfaceDepthPartition(
+      this.#blendedDepthPartition, grouped.transparent, surface => surface.sceneIndex,
+    );
+    if (this.#transmissionDepthPartition !== undefined) this.#transmissionDepthPartition = rebindSurfaceDepthPartition(
+      this.#transmissionDepthPartition, grouped.transmission.filter(surface => surface.drawPacket.alphaBlend), surface => surface.sceneIndex,
+    );
     this.#opaqueSurfaces = grouped.opaque;
     this.#blendedSurfaces = grouped.transparent;
     this.#transmissionSurfaces = grouped.transmission;

@@ -81,12 +81,18 @@ keeping raster base pixels within the existing VT CPU-source and inspection
 limits. A fitted source can be decoded again when returned budget restores detail;
 its replacement passes the same inspection gate before publication. Automatic
 pages derive from that retained raster, never from a new vector rendering.
-Once an automatic VT root is resident, ordinary raster storage used exclusively
-by virtual base-color maps is reduced to a 512-pixel-long-edge fallback. Shared
-non-VT material-map uses retain full storage. Approved source pixels stay alive
-until paging and full-storage restoration no longer need them. VT therefore
-saves steady-state GPU storage; the decoded source and transient initial full
-upload still have memory costs.
+Reloadable base-color images prepare a coarse representation first. Their ordinary
+GPU fallback is at most 64 pixels on the longest edge, independently of VT page
+residency. Shared non-base material-map uses retain ordinary storage. Both
+preparation and GPU residency follow the conservative union of current views;
+offscreen asset metadata remains available without reserving a fallback or page
+table. The initial CPU decode fits a 256px-square mip-chain budget, seeding coarse
+VT pages and adjacent detail. The smaller GPU fallback avoids duplicating these
+pixels on the GPU.
+Fallbacks shrink further when necessary to stay within one eighth of the steady
+texture allowance. Shrinking replacements can use physically free migration
+capacity while both GPU copies remain charged. Capture readiness waits for this
+active working set.
 
 When the persistent budget requires a smaller ordinary PNG/JPEG/WebP/AVIF,
 Royal reads a bounded encoded-header prefix through a pure, non-authoritative
@@ -271,6 +277,12 @@ cache collisions cannot reuse another vertex's coordinates. Constant-W
 triangles need one derivative sample, while perspective-varying triangles keep
 the bounded sampling/subdivision path. CPU demand remains linear in surviving
 triangles and does not infer depth occlusion.
+Single-sided draws omit confidently back-facing clipped triangles using the
+same front-face orientation as their GPU draw packet. Captured demand observes
+retained transform handedness; double-sided draws, uncertain projections and
+near-zero projected areas retain demand. Stereo demand remains the union of
+both eyes. Ordinary safety coverage is retained while a newly exposed face
+refines. No percentage-occluded or physical-size cutoff removes visible detail.
 Atlas uploads admitted in one resource/frame batch normally publish through one
 complete page-table revision and one lifecycle notification after every
 successful atlas write. A failed overwrite may publish an immediate repair
@@ -283,16 +295,25 @@ distance. Near-plane clipping is camera geometry, not a VT quality policy.
 
 ## Raster page sources
 
+Reloadable detail pages request a CPU source sufficient for the finest requested
+mip of that image. This value is computed once when demand is fitted, rather
+than rescanning demand for each page. Generating a coarser detail mip first must
+not select a lower-resolution seed that changes its filtering compared with
+fine-first scheduling. The root safety page may still use the bounded initial
+seed before the detail source is ready; cache and per-source caps remain binding.
+
 Automatic virtual texturing MUST be enabled for every root without an opt-in
 option. Eligibility, visible demand, CPU/GPU budgets, and coverage govern
 representation selection; small raster images may remain ordinary textures.
 
-Raster automatic VT may decode one source image and crop/downsample requested
-pages. It MUST account for the retained decoded source against ordinary texture
-CPU ownership as well as report it in VT diagnostics; the same bytes are not
-two independent allocations. The current root retains at most 64 MiB of such
-decoded raster sources for automatic VT; candidates beyond that ceiling remain
-on the ordinary texture path instead of stalling the shared decode queue.
+Raster automatic VT crops/downsamples requested pages from a root-local 32 MiB
+LRU of reloadable sources. One source miss executes at a time, reserving up to
+16 MiB before decoding. Mip-sized requests avoid decoding unnecessary detail.
+Initial coarse pixels seed the cache through evictable leases; cache hits are
+scheduled before misses, including coarse coverage. GPU residency and catalogue
+membership do not require permanent CPU source leases. Very large individual
+images may be fitted to the decode ceiling; this is not arbitrary-resolution
+region decoding. Native preview sources retain their separate bounded lease policy.
 
 Explicit low-resolution ASTC previews for full raster sources use the
 [private raster-preview contract](raster-texture-previews.md). Unmarked ASTC
@@ -330,14 +351,15 @@ not each reserve the default physical working set merely by existing in a scene.
 Compatible logical textures share one root-owned physical atlas pool. Pool
 compatibility is exact stored-page extent and color space; samplers and page tables remain per logical texture. RGBA pools start from visible demand rounded
 toward a power-of-two slot count, bounded by legal rectangular atlas dimensions.
-They grow as demand increases, within the remaining root GPU budget and a
-combined atlas allowance of 75% of that budget. The default root budget remains
-256 MiB. Both the old and replacement atlas count against it during migration;
-when growth is blocked by that overlap, a pool can first compact to resident
-coarse roots, then grow. This requires a resident root for every visible resource
-and proof that the final allocation fits beside the intermediate atlas. Missing
-roots or insufficient space can still prevent growth. Temporary compaction
-reduces detail and may require reloading discarded pages. Automatic sources still waiting for decode reserve one generated RGBA page each in that allowance for later coarse coverage. Terminal decode failures release that reservation.
+They grow within a shared texture envelope after planned geometry, lights and
+presentation targets are reserved. The default persistent ceiling is 256 MiB.
+Migration scratch follows coarse working demand, capped at one eighth of the
+remaining texture allowance; ordinary allocations and optional ASTC storage cannot consume it.
+Both old and replacement atlases remain charged to the hard ceiling. A shrinking
+replacement may use real free scratch even after the texture envelope falls below
+current residency. Under pressure, reloadable raster pools can temporarily rely
+on ordinary fallbacks while compacting. Visible sources still awaiting preparation
+reserve fallback capacity; offscreen catalogue entries do not.
 
 Ordinary fitting accounts for scene storage and the current shared GPU budget. When the allowance increases, fitted sources can be prepared at higher resolution while the previous GPU texture remains usable until replacement storage is admitted. With texture inspection enabled, every newly decoded raster passes the same inspection gate before publication.
 
@@ -405,9 +427,9 @@ resident counts therefore need not be equal even when admission is balanced.
 
 Released storage becomes available to ordinary resources and other pools.
 An initial VT allocation blocked by current budget capacity remains retryable
-when capacity returns, rather than permanently becoming unsupported. If even a
-replacement preserving minimum coverage cannot fit alongside the old atlas,
-capacity remains unchanged. Compressed native pools retain their fixed policy and
+when capacity returns, rather than permanently becoming unsupported. If a replacement cannot fit beside the old atlas, ordinary coverage remains
+available while the pool waits for capacity. Pools with no remaining allowance
+can release reloadable detail entirely. Compressed native pools retain their fixed policy and
 are accounted before dividing RGBA shares; Compressed-pool resizing and automatic
 calibration of the root's default budget remain unimplemented.
 
@@ -433,6 +455,29 @@ GPU atlas, page tables, decoded pages, source images, request jobs, transient
 raster data, and per-frame upload bytes all participate in the root resource
 governor.
 
+Browser-native image decoding may transiently allocate the original CPU raster
+before fitting it. AVIF and image-element fitting request CPU-backed 2D canvases
+to avoid placing these large intermediates in GPU-backed canvas storage. This
+is a browser allocation hint, not a hard bound on native decoder memory; authored
+previews or tiled sources are needed to avoid full-resolution decoding entirely.
+
 ## Observable readiness
 
 Ordinary sources expose `useTextureAssetStatus(srcOrRef)`. Automatic VT progress is available through `root.getSnapshot().resources.virtualTextures` or React `useRendererSnapshot()` for diagnostics. `pendingPages` includes generated pages waiting for GPU publication; it is not a promise that every source page will become resident. Ineligible sources keep ordinary rendering.
+
+### Browser decode pressure and context recovery
+
+Native raster decodes share a 64 MiB estimated in-flight byte allowance as well
+as the decode-count limit. Source dimensions, rather than fitted output size,
+control admission. An oversized or uninspectable raster runs alone; the allowance
+is a concurrency gate, not a hard cap on browser-native memory. Large AVIF rasters
+that require fitting use an image element and fitted canvas without first creating
+a full-resolution ImageBitmap. `willReadFrequently` requests CPU canvas backing,
+but unsupported browsers can ignore it.
+
+Context restoration invalidates browser-backed pixel caches and pending VT page
+reads. Decode results started in an earlier residency generation are discarded
+and retried when their pixels depend on browser graphics resources. Independent
+CPU/compressed sources keep their existing lifetime. The WebGL state shadow also
+invalidates draw-only fields so an intervening clear cannot incorrectly mark
+blend, depth, cull, program, or vertex-array state as restored.

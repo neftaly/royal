@@ -28,6 +28,8 @@ export type VirtualTextureDemandView = Readonly<{
 }>;
 
 export type VirtualTextureDemandSurface = Readonly<{
+  /** Matches the draw packet's front face; omitted for double-sided draws. */
+  frontFace?: 1 | -1 | undefined;
   geometry: CanonicalTriangleGeometry;
   instances?: Readonly<{ count: number; localModels: Float32Array }>;
   model: Mat4;
@@ -597,6 +599,20 @@ const addClippedTriangleDemand = (
 
 type DemandWork = { visited: number };
 
+/** Strictly reject only a confidently back-facing clipped triangle. Near-zero
+ * area and non-finite projections retain demand, including thin visible edges. */
+const backFacing = (vertices: Float64Array, a: number, b: number, c: number, frontFace: 1 | -1 | undefined): boolean => {
+  if (frontFace === undefined) return false;
+  a *= CLIP_VERTEX_COMPONENTS; b *= CLIP_VERTEX_COMPONENTS; c *= CLIP_VERTEX_COMPONENTS;
+  const aw = vertices[a + 3]!, bw = vertices[b + 3]!, cw = vertices[c + 3]!;
+  if (!(aw > 0 && bw > 0 && cw > 0)) return false;
+  const ax = vertices[a]! / aw, ay = vertices[a + 1]! / aw;
+  const left = (vertices[b]! / bw - ax) * (vertices[c + 1]! / cw - ay);
+  const right = (vertices[b + 1]! / bw - ay) * (vertices[c]! / cw - ax);
+  const area = (left - right) * frontFace;
+  return Number.isFinite(area) && area < -1e-12 * Math.max(1, Math.abs(left), Math.abs(right));
+};
+
 const collectModelDemand = function* (
   workspace: VirtualTextureDemandWorkspace,
   textureLayout: VirtualTextureLayout,
@@ -636,6 +652,7 @@ const collectModelDemand = function* (
     }
     if (commonOutsidePlanes !== 0) continue;
     if (anyFlags === 0) {
+      if (backFacing(workspace.clipA, 0, 1, 2, surface.frontFace)) continue;
       addClippedTriangleDemand(
         workspace,
         textureLayout,
@@ -658,6 +675,7 @@ const collectModelDemand = function* (
       target = previous;
     }
     for (let triangle = 1; triangle + 1 < count; triangle += 1) {
+      if (backFacing(source, 0, triangle, triangle + 1, surface.frontFace)) continue;
       addClippedTriangleDemand(
         workspace,
         textureLayout,

@@ -80,3 +80,24 @@ describe("surface composite depth sampling", () => {
     owner.dispose();
   });
 });
+
+it("retains a usable target after denied growth and retries when capacity is released", () => {
+  const gl = Object.assign(fakeGl(), { texParameteri: vi.fn() });
+  const budget = new PersistentGpuBudgetOwner(20000), blocker = {};
+  const state = new WebGlStateOwner(gl);
+  const owner = new SurfaceCompositeOwner(gl, budget, { hasFloatBlendTarget: false, hasFloatColorTarget: false });
+  owner.setSceneColorRequired(false);
+  owner.setDepthSamplingRequired(true);
+  expect(owner.ensure(16, 16, state)).toBe(true);
+  const before = owner.beginDepthSampling().texture;
+  expect(budget.tryClaim(blocker, 14000)).toBe(true);
+  expect(owner.ensure(32, 32, state)).toBe(false);
+  expect(owner.ensure(16, 16, state)).toBe(true);
+  expect(owner.beginDepthSampling().texture).toBe(before);
+  expect(gl.deleteTexture).not.toHaveBeenCalledWith(before);
+  budget.release(blocker);
+  expect(owner.ensure(32, 32, state)).toBe(true);
+  expect(gl.deleteTexture).toHaveBeenCalledWith(before);
+  owner.dispose();
+  expect(budget.snapshot().retainedBytes).toBe(0);
+});

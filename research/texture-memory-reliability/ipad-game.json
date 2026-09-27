@@ -1,0 +1,3 @@
+{
+  "failure": "{\"message\": \"schema_tools.artifact_build_invalid\", \"stack\": \"u$1@http://192.168.0.224:3004/play/node_modules/.vite/deps/internal-owned-json-v4UMcIVW.js:1456:8\\nvalue@http://192.168.0.224:3004/play/@fs/home/neftaly/dev/probability/packages/game-schema/src/artifacts.ts:30:31\\nmodule code@http://192.168.0.224:3004/play/@fs/home/neftaly/dev/probability/packages/game-schema/src/artifacts.ts:5:22\"}"
+}

@@ -1,0 +1,21 @@
+{
+  "point": {
+    "x": 320,
+    "y": 80,
+    "id": "13@b4bf9632707acbeebe1a23999535a67c"
+  },
+  "selected": [
+    "13@b4bf9632707acbeebe1a23999535a67c"
+  ],
+  "events": [
+    {
+      "type": "pointerdown",
+      "trusted": true
+    },
+    {
+      "type": "pointerup",
+      "trusted": true
+    }
+  ],
+  "completed": true
+}

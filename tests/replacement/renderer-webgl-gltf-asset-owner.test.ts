@@ -687,6 +687,13 @@ describe("glTF asset lifecycle owner", () => {
     expect(streaming.rootExtras).not.toBe(rootExtras);
     const publishedRootExtras = streaming.rootExtras;
 
+    owner.refreshTextureProgress(() => ({ status: "idle" }), () => false);
+    const deferred = owner.getSnapshot(node.asset);
+    expect(deferred).toMatchObject({ status: "ready", textures: { deferred: 1, failed: 0, loading: 0, ready: 0, total: 1 } });
+    if (deferred.status === "ready") expect(deferred.timings.imagesCompleteAfterMs).toBeUndefined();
+    owner.refreshTextureProgress(() => ({ status: "loading" }), () => true);
+    expect(owner.getSnapshot(node.asset).status).toBe("streaming");
+
     owner.refreshTextureProgress(() => ({ error: "decode failed", status: "error" }));
     expect(owner.getSnapshot(node.asset)).toMatchObject({
       status: "degraded",

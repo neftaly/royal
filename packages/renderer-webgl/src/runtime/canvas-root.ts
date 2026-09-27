@@ -1,3 +1,4 @@
+import { collectVirtualFallbackStorageKeys } from "../surface/surface-texture-plan";
 import { createTextureInspectionOwner, textureInspectionSource, type TextureInspector } from "../texture/inspection-policy";
 import { TextureAnisotropy } from "../texture/anisotropy";
 import { rendererBeginImageCapture, type RootImageCaptureHost } from "./image-capture-host";
@@ -92,7 +93,7 @@ import {
 } from "../texture/asset-owner";
 import type { DecodedTextureAlpha } from "../texture/alpha-mipmap";
 import {
-  decodedTextureKey,
+  textureStorageKey,
   type DecodedTextureSource,
   type GltfTextureAssetRef,
   type TextureSourceRef,
@@ -181,6 +182,8 @@ export type CanvasRootSnapshot = Readonly<{
   frame: number;
   /** Bounded message from the latest scheduled frame failure, if any. */
   lastFrameFailure?: string;
+  /** Presentation progress is separate from image/model preparation readiness. */
+  presentation: "preparing" | "refining" | "ready" | "degraded" | "failed";
   /** Cold operational diagnostics; use focused asset hooks for product UI. */
   resources: RendererResourceSnapshot;
   /** Current CSS/backing size, or `null` before the host supplies a size. */
@@ -567,6 +570,8 @@ export class CanvasRoot implements RendererRoot {
   #disposed = false;
   #frame = 0;
   #frameIntent: ClearFrameIntent | null = null;
+  #activeTextureKeys: ReadonlySet<string> | undefined;
+  #activeSurfaceTextureAssets: readonly TextureSourceRef[] = [];
   readonly #gl: WebGL2RenderingContext;
   readonly #gltfAssets: GltfAssetOwner;
   readonly #gltfPreparer: ReturnType<typeof lazyBrowserGltfPreparer>;
@@ -739,6 +744,11 @@ export class CanvasRoot implements RendererRoot {
         this.#screenSpacePartitionPattern,
         {
           anisotropy: this.#anisotropy,
+          onTextureSourceRequired: key => this.#textureAssets.requestUploadSource(key),
+          onTextureWorkingSetChanged: keys => {
+            this.#activeTextureKeys = keys;
+            this.#reconcileTextureAssets(this.#surfaceScene);
+          },
           onTextureFallbackChanged: (key, compact) => this.#textureAssets.setStorageFallback(key, compact),
           etc2Available: this.#etc2Available,
           onChanged: () => this.#invalidatePresentation(),
@@ -831,7 +841,7 @@ export class CanvasRoot implements RendererRoot {
         onListenerError: (error) => platform.onListenerError(error),
         onSnapshotChanged: () => this.#refreshGltfTextureProgress(),
         ...(platform.now === undefined ? {} : { now: platform.now }),
-      }, Math.floor(resolvedOptions.persistentGpuByteBudget * 0.75)));
+      }, Math.floor(resolvedOptions.persistentGpuByteBudget * 0.75), 4));
       this.#context = new ContextLifecycleOwner(platform.onListenerError);
       this.#unsubscribeContext = this.#context.subscribe(() => this.#publish());
       construction.defer(() => {
@@ -883,6 +893,7 @@ export class CanvasRoot implements RendererRoot {
   }
 
   #handleContextLost(): void {
+    if (this.#context.getSnapshot().phase === "lost") return;
     this.#clock.block();
     this.#state.invalidate();
     this.#surfaceGpu.invalidate();
@@ -979,6 +990,7 @@ export class CanvasRoot implements RendererRoot {
         || this.#surfaceResourcesPending || this.#textureResourcesPending,
       environmentSnapshot: (environment) => this.#environmentAssets.getSnapshot(environment),
       textureSnapshot: this.#getTextureSnapshot,
+      textureRequired: texture => this.#activeTextureKeys?.has(textureStorageKey(texture)) !== false,
       now: this.#platform.now ?? (() => performance.now()),
       requestFrame: (callback) => this.#platform.requestFrame(callback),
       release: () => { this.#capturePending = false; },
@@ -993,7 +1005,16 @@ export class CanvasRoot implements RendererRoot {
 
   getSnapshot = (): CanvasRootSnapshot => {
     if (this.#snapshot === undefined || this.#snapshotRevision !== this.#revision) {
+      const preparation = this.#textureAssets.snapshot();
+      const virtualTextures = this.#virtualTextureRuntime?.runtimeSnapshot() ?? this.#idleVirtualTextureRuntimeSnapshot;
+      const context = this.#context.getSnapshot();
+      const presentation = this.#lastFrameFailure !== undefined || context.failure !== undefined ? "failed"
+        : context.phase !== "active" ? "preparing"
+        : this.#overlay.targetDenied || (preparation.deniedStorageRepresentations ?? 0) > 0 || virtualTextures.failedPages > 0 ? "degraded"
+        : this.#frame === 0 || preparation.pendingStorageRepresentations > 0 || this.#surfaceResourcesPending ? "preparing"
+        : virtualTextures.pendingPages > 0 || virtualTextures.unresidentPages > 0 || (virtualTextures.pendingDemandResources ?? 0) > 0 ? "refining" : "ready";
       this.#snapshot = {
+        presentation,
         context: this.#context.getSnapshot(),
         frame: this.#frame,
         ...(this.#lastFrameFailure === undefined
@@ -1004,12 +1025,11 @@ export class CanvasRoot implements RendererRoot {
           geometryUploads: this.#geometryUploadSnapshot(),
           gltfSharedGeometry: this.#gltfAssets.sharedGeometrySnapshot(),
           gltfSourceReads: this.#gltfAssets.sourceReadSnapshot(),
-          imageTexturePreparation: this.#textureAssets.snapshot(),
+          imageTexturePreparation: preparation,
           imageTextureUploads: this.#frameUploadBudget.snapshot(),
           imageTextures: this.#surfaceGpu.ordinaryTextureSnapshot(),
           persistentGpu: this.#persistentGpuBudget.snapshot(),
-          virtualTextures: this.#virtualTextureRuntime?.runtimeSnapshot()
-            ?? this.#idleVirtualTextureRuntimeSnapshot,
+          virtualTextures,
         },
         size: this.#size,
       };
@@ -1156,6 +1176,7 @@ export class CanvasRoot implements RendererRoot {
     if (overlay === this.#overlayInput) return;
     this.#overlayInput = overlay;
     this.#installOverlay();
+    this.#reconcileTextureAssets(this.#surfaceScene);
     if (this.#disposed || this.#overlayInput !== overlay) return;
     this.#reconcileGltfAssets();
     this.#clock.retry();
@@ -1271,6 +1292,12 @@ export class CanvasRoot implements RendererRoot {
   }
 
   #captureScheduledFailure(error: unknown): void {
+    // Native allocation can fail before WebGL dispatches its loss event.
+    // Enter the same recovery path instead of latching an application failure.
+    if (!this.#disposed && contextIsLost(this.#gl)) {
+      this.#handleContextLost();
+      return;
+    }
     this.#lastFrameFailure = formatFailure(error);
     this.#publish();
     this.#platform.reportScheduledFailure(error);
@@ -1543,6 +1570,8 @@ export class CanvasRoot implements RendererRoot {
   }
 
   #reconcileTextureAssets(scene: CanonicalSurfaceScene | null): void {
+    this.#activeSurfaceTextureAssets = (scene?.textureAssets ?? []).filter(
+      asset => this.#activeTextureKeys?.has(textureStorageKey(asset)) !== false);
     const retainedKeys = new Set<string>();
     const retain = (asset: GltfAssetRef): void => {
       const key = gltfAssetKey(asset);
@@ -1578,11 +1607,17 @@ export class CanvasRoot implements RendererRoot {
       this.#persistentGpuBudget.budgetBytes,
       size?.backingWidth ?? 1,
       size?.backingHeight ?? 1,
+      this.#overlay.plannedTargetBytes(size?.backingWidth ?? 1, size?.backingHeight ?? 1)
+        + (this.#overlayInput === null ? 0 : (size?.backingWidth ?? 1) * (size?.backingHeight ?? 1) * 4),
     );
+    this.#persistentGpuBudget.setTextureBudget(storageBudgetBytes);
     this.#textureAssets.reconcile(
       assets,
       alphaMaskAssets,
       storageBudgetBytes,
+      collectVirtualFallbackStorageKeys((this.#surfaceScene?.surfaces ?? []).map(surface => surface.material),
+        asset => asset.sourceEncoding === undefined && asset.astc === undefined && asset.rasterPreview === undefined),
+      this.#activeTextureKeys,
     );
   }
 
@@ -1597,7 +1632,7 @@ export class CanvasRoot implements RendererRoot {
     const scene = this.#surfaceScene;
     if (
       scene === null
-      || !scene.textureAssets.some((asset) => decodedTextureKey(asset) === key)
+      || !scene.textureSurfaceIndices.has(key)
     ) return;
     this.#pendingTexturePublicationKeys.add(key);
     this.#clock.invalidate();
@@ -1667,7 +1702,8 @@ export class CanvasRoot implements RendererRoot {
   }
 
   #refreshGltfTextureProgress(): void {
-    this.#gltfAssets.refreshTextureProgress(this.#getTextureSnapshot);
+    this.#gltfAssets.refreshTextureProgress(this.#getTextureSnapshot,
+      asset => this.#activeTextureKeys?.has(textureStorageKey(asset)) !== false);
     if (this.#progressiveResourcesSettled()) this.#progressivePresentation.settled();
   }
 
@@ -1709,6 +1745,7 @@ export class CanvasRoot implements RendererRoot {
         this.#persistentGpuBudget,
         this.#asyncPreparation.runForeground,
         {
+          loadRaster: (asset, signal, maxBytes) => this.#textureAssets.decodeForPaging(asset, signal, maxBytes),
           acquireDecoded: (asset) => this.#textureAssets.acquireDecoded(asset),
           decoded: (asset) => this.#textureAssets.decoded(asset)
             ?? (this.#textureAssets.getSourceSnapshot(asset).status === "error" ? null : undefined),
@@ -1742,7 +1779,14 @@ export class CanvasRoot implements RendererRoot {
     });
   }
 
+  #textureDenialCapacity: number | undefined;
+
   #beginFrame(): void {
+    if (this.#textureDenialCapacity !== undefined
+      && this.#persistentGpuBudget.textureAvailableBytes > this.#textureDenialCapacity) {
+      this.#textureDenialCapacity = undefined;
+      this.#reconcileTextureAssets(this.#surfaceScene);
+    }
     this.#flushPreparedGltfScene(true);
     this.#flushPreparedTextures();
     this.#flushInstanceScene();
@@ -1964,6 +2008,7 @@ export class CanvasRoot implements RendererRoot {
     const denied = this.#surfaceGpu.takeDeniedTextureStorageKeys();
     this.#textureAssets.releaseUploaded(uploaded);
     this.#textureAssets.rejectGpuStorage(denied);
+    if (denied.length !== 0) this.#textureDenialCapacity = this.#persistentGpuBudget.textureAvailableBytes;
     return uploaded.length !== 0;
   }
 
@@ -1975,8 +2020,7 @@ export class CanvasRoot implements RendererRoot {
 
   #progressiveResourcesSettled(): boolean {
     if (this.#surfaceResourcesPending || this.#textureResourcesPending) return false;
-    const assets = this.#surfaceScene?.textureAssets;
-    if (assets === undefined) return true;
+    const assets = this.#activeSurfaceTextureAssets;
     for (let index = 0; index < assets.length; index += 1) {
       const status = this.#getTextureSnapshot(assets[index]!).status;
       if (status !== "ready" && status !== "error") return false;

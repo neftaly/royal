@@ -40,6 +40,27 @@ const view = (projection = identityMat4()) => ({
 });
 
 describe("VT2 clipped projected demand", () => {
+  it("omits only culled backfaces, retaining double-sided, mirrored and stereo-visible detail", () => {
+    const collect = (frontFace: 1 | -1 | undefined, views = [view()]) => {
+      const result = createVirtualTextureDemandWorkspace(512);
+      collectVirtualTextureDemand(result, manifest, [{ ...surface, frontFace }], views, sampler);
+      return result;
+    };
+    const visible = collect(1);
+    expect(visible.count).toBeGreaterThan(0);
+    expect(collect(-1).count).toBe(0);
+    expect(collect(undefined).keys).toEqual(visible.keys);
+    const flipped = identityMat4(); flipped[0] = -1;
+    expect(collect(1, [view(flipped)]).count).toBe(0);
+    expect(collect(-1, [view(flipped)]).keys).toEqual(visible.keys);
+    expect(collect(1, [view(flipped), view()]).keys).toEqual(visible.keys);
+    const clipped = identityMat4(); clipped[12] = 0.75;
+    expect(collect(1, [view(clipped)]).count).toBeGreaterThan(0);
+    expect(collect(-1, [view(clipped)]).count).toBe(0);
+    const thin = identityMat4(); thin[0] = 1e-10;
+    expect(collect(1, [view(thin)]).count).toBeGreaterThan(0);
+  });
+
   it("resumes dense triangle scans without exposing partial demand or losing coverage", () => {
     const dense = { ...surface, geometry: { ...surface.geometry,
       indices: new Uint16Array(Array.from({ length: 200 }, () => [...surface.geometry.indices]).flat()),

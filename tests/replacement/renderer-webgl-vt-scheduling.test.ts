@@ -3,7 +3,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { imageTexture, mesh, perspectiveCamera, planeGeometry, scene, unlitMaterial } from "@royal/renderer-core";
 import { createBrowserVirtualTextureRuntime } from "../../packages/renderer-webgl/src/virtual-texture/runtime";
 import { createGeneratedVirtualTextureLayout, type VirtualTexturePageId } from "../../packages/renderer-webgl/src/virtual-texture/layout";
-import { prepareCanonicalSurfaceScene } from "../../packages/renderer-webgl/src/surface/scene-lowering";
+import { prepareCanonicalSurfaceScene, refreshCanonicalSurfaceTextures } from "../../packages/renderer-webgl/src/surface/scene-lowering";
+import { decodedTextureKey } from "../../packages/renderer-webgl/src/texture/source";
 import { identityMat4, type MutableMat4 } from "../../packages/renderer-webgl/src/math/mat4";
 import * as sources from "../../packages/renderer-webgl/src/virtual-texture/automatic-page-source";
 import { fakeGl } from "./support/canvas-root-harness";
@@ -61,6 +62,30 @@ it("gives every visible texture coarse coverage and detail without camera moveme
       expect(h.runtime.runtimeSnapshot()).toMatchObject({ pendingPages: 0, unresidentPages: 0, failedPages: 0 });
     }, { interval: 1, timeout: 4000 });
     expect(h.runtime.runtimeSnapshot().residentPages).toBeGreaterThan(h.assets.length);
+  } finally { h.runtime.dispose(); }
+});
+
+it("does not restart settled geometric demand when decoded material bindings publish", async () => {
+  const h = harness();
+  const collect = vi.spyOn(demand, "collectVirtualTextureDemandSteps");
+  let prepared = prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}), nodes: [
+    mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: h.assets[0]! }) }),
+  ] }));
+  try {
+    h.runtime.setScene(prepared);
+    await waitFor(() => {
+      h.runtime.update([h.view]);
+      expect(h.runtime.runtimeSnapshot().unresidentPages).toBe(0);
+    });
+    const scans = collect.mock.calls.length;
+    for (let index = 0; index < 20; index++) {
+      prepared = refreshCanonicalSurfaceTextures(prepared, [decodedTextureKey(h.assets[0]!)],
+        () => ({ width: 1024, height: 1024, source: {} as ImageBitmap }));
+      h.runtime.setScene(prepared);
+      h.runtime.update([h.view]);
+    }
+    expect(collect).toHaveBeenCalledTimes(scans);
+    expect(h.runtime.runtimeSnapshot().unresidentPages).toBe(0);
   } finally { h.runtime.dispose(); }
 });
 

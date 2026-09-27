@@ -141,9 +141,8 @@ drain, but it cannot retain asset bytes or begin work later.
 Royal does not advertise a fabricated root-wide decoded-CPU or scratch-byte
 ceiling. Browser image decode allocations and worker scratch peaks are not
 reliably observable or predictable before work starts. Ordinary textures
-instead admit at most 32 active preparations within 64 total active-or-handoff
-source reservations, run at most 16 transports and 32 browser decode calls
-concurrently, and stop new work once completed decoded handoff exceeds 64 MiB.
+instead admit at most four active preparations per root within 64 total
+active-or-handoff source reservations, with at most 16 transport reads, and stop new work once completed decoded handoff exceeds 64 MiB.
 The browser still owns its internal codec thread count; Royal admits known
 independent work rather than claiming one JS thread per image. Encoded
 read-ahead has its own 16-read, 128-source, 32 MiB staged-blob authority so
@@ -307,10 +306,12 @@ Admission denial chooses one of:
 - select a legal lower-cost representation or fallback;
 - settle as a captured resource failure.
 
-Ordinary browser-decoded images share at most 75% of the persistent ceiling.
-Before decode, Royal subtracts the exact cold-plan storage for retained geometry,
-instances, and the current size-dependent composite or volume-occlusion target;
-the smaller allowance governs the texture set. Royal keeps authored dimensions when their
+Ordinary textures, RGBA VT atlases and optional ASTC pages share the texture
+envelope. Before decode, Royal subtracts planned retained geometry, lights,
+instances, composite/volume targets, edge targets and retained presentation.
+Demand-sized atlas migration scratch is capped at one eighth of the remaining
+texture allowance. Both copies remain charged during replacement; shrink operations may
+use free scratch even when the steady-state texture envelope has been reduced. Royal keeps authored dimensions when their
 complete RGBA mip representations fit; otherwise it selects the largest
 aspect-preserving decoded size that fits each active storage share before upload.
 This bounds ordinary glTF sets without an asset-specific branch. Authored

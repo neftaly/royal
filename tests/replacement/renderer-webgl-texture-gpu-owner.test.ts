@@ -1,3 +1,4 @@
+import { releaseDecodedTextureSource } from "../../packages/renderer-webgl/src/texture/source";
 import { describe, expect, it, vi } from "vitest";
 import type { CanonicalTextureBinding } from "../../packages/renderer-webgl/src/surface/canonical-material";
 import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
@@ -481,6 +482,40 @@ describe("ordinary texture GPU owner", () => {
 });
 
 describe("VT ordinary fallbacks", () => {
+  it.each([false, true])("releases CPU staging pixels after upload (failure: %s)", failure => {
+    const gl = fakeGl(), owner = new TextureGpuOwner(gl);
+    const canvas = { width: 0, height: 0, getContext: vi.fn(() => ({ drawImage: vi.fn() })) };
+    vi.stubGlobal("document", { createElement: () => canvas });
+    const input = { ...binding("linear", "linear-mipmap-linear"), decoded: { width: 128, height: 128, source: {} as ImageBitmap } };
+    owner.setFallbackStorageKeys(new Set([input.storageKey]));
+    if (failure) vi.mocked(gl.texSubImage2D).mockImplementationOnce(() => { throw new Error("upload failed"); });
+    try {
+      if (failure) expect(() => owner.reconcileComplete([input])).toThrow("upload failed");
+      else owner.reconcileComplete([input]);
+      expect(canvas.getContext).toHaveBeenCalledWith("2d", { willReadFrequently: true });
+      expect([canvas.width, canvas.height]).toEqual([1, 1]);
+    } finally { owner.dispose(); vi.unstubAllGlobals(); }
+  });
+
+  it("reduces fallback storage after essential resources shrink the texture envelope", () => {
+    vi.stubGlobal("document", { createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage: vi.fn() }) }) });
+    const budget = new PersistentGpuBudgetOwner(1024 * 1024);
+    budget.setTextureBudget(1024 * 1024);
+    const owner = new TextureGpuOwner(fakeGl(), budget);
+    const input = { ...binding("linear", "linear-mipmap-linear"), decoded: { width: 128, height: 128, source: {} as ImageBitmap } };
+    const keys = new Set([input.storageKey]);
+    try {
+      owner.setFallbackStorageKeys(keys);
+      owner.reconcileComplete([input]);
+      expect(owner.snapshot().residentBytes).toBe(ordinaryTextureStorageBytes(64, 64, true));
+      budget.setTextureBudget(2048);
+      owner.setFallbackStorageKeys(keys);
+      owner.beginFrame();
+      owner.reconcileComplete([input]);
+      expect(owner.snapshot().residentBytes).toBeLessThanOrEqual(256);
+      expect(budget.textureRetainedBytes).toBe(owner.snapshot().residentBytes);
+    } finally { owner.dispose(); vi.unstubAllGlobals(); }
+  });
   it("compacts GPU storage once and restores it when ordinary sampling needs detail", () => {
     const gl = fakeGl();
     const changed = vi.fn();
@@ -496,7 +531,7 @@ describe("VT ordinary fallbacks", () => {
       uploads.beginFrame();
       owner.beginFrame();
       owner.reconcileComplete([input]);
-      expect(owner.snapshot().residentBytes).toBe(ordinaryTextureStorageBytes(512, 256, true));
+      expect(owner.snapshot().residentBytes).toBe(ordinaryTextureStorageBytes(64, 32, true));
       expect(owner.snapshot().residentBytes).toBeLessThan(full / 60);
       expect(changed).toHaveBeenLastCalledWith(input.storageKey, true);
       owner.reconcileComplete([input]);
@@ -504,7 +539,7 @@ describe("VT ordinary fallbacks", () => {
       uploads.beginFrame();
       owner.reconcileComplete([{ ...input, decoded: { ...input.decoded, width: 8192, height: 4096 } }]);
       expect(drawImage).toHaveBeenCalledTimes(2);
-      expect(owner.snapshot().residentBytes).toBe(ordinaryTextureStorageBytes(512, 256, true));
+      expect(owner.snapshot().residentBytes).toBe(ordinaryTextureStorageBytes(64, 32, true));
       owner.setFallbackStorageKeys(new Set());
       uploads.beginFrame();
       owner.beginFrame();
@@ -513,4 +548,25 @@ describe("VT ordinary fallbacks", () => {
       expect(changed).toHaveBeenLastCalledWith(input.storageKey, false);
     } finally { owner.dispose(); vi.unstubAllGlobals(); }
   });
+});
+
+
+it("keeps the GPU copy while reacquiring a released source for late compaction", () => {
+  const gl = fakeGl(), needed = vi.fn();
+  const owner = new TextureGpuOwner(gl, undefined, undefined, undefined, undefined, undefined, needed);
+  const source = { width: 256, height: 256, source: {} as ImageBitmap, close: vi.fn() };
+  const input = { ...binding("linear", "linear"), decoded: source };
+  const before = owner.reconcileComplete([input])[0];
+  releaseDecodedTextureSource(source);
+  owner.setFallbackStorageKeys(new Set([input.storageKey]));
+  owner.beginFrame();
+  expect(owner.reconcileComplete([input])[0]).toBe(before);
+  expect(needed).toHaveBeenCalledWith(input.storageKey);
+  expect(gl.deleteTexture).not.toHaveBeenCalled();
+  const replacement = { ...input, decoded: { width: 64, height: 64, source: {} as ImageBitmap } };
+  owner.beginFrame();
+  expect(owner.reconcileComplete([replacement])[0]).not.toBe(before);
+  expect(owner.snapshot().residentBytes).toBe(64 * 64 * 4);
+  expect(gl.deleteTexture).toHaveBeenCalledOnce();
+  owner.dispose();
 });

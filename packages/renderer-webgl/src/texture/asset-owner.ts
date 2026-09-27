@@ -1,3 +1,4 @@
+import { reloadableRasterPagingEligible } from "../virtual-texture/automatic-policy";
 import { ordinaryTextureStorageBytes } from "./storage";
 import { textureStorageShare } from "./storage-share";
 import { fitOrdinaryTextureStorage } from "./storage-fit";
@@ -20,6 +21,7 @@ import {
   type DecodedTextureAlpha,
 } from "./alpha-mipmap";
 import {
+  releaseDecodedTextureSource,
   decodedTextureKey,
   textureStorageKey,
   type DecodedTextureLease,
@@ -72,6 +74,8 @@ export type TextureAssetTimings = TextureDecodeStageTimings & Readonly<{
 }>;
 
 export type TexturePreparationSnapshot = Readonly<{
+  /** GPU representations denied admission; preparation may still report ready. */
+  deniedStorageRepresentations?: number;
   /** Texture source lifecycles currently executing transport or decode work. */
   activePreparations: number;
   /** Retained ready built-in sources and their summed cold-stage durations. */
@@ -111,6 +115,7 @@ export type TextureAssetOwnerPlatform = Readonly<{
 }>;
 
 type AssetEntry = {
+  active: boolean;
   alpha: DecodedTextureAlpha | undefined;
   asset: TextureSourceRef;
   readonly claimedStorageKeys: Set<string>;
@@ -174,24 +179,29 @@ const diagnosticLabel = (asset: TextureSourceRef): string => {
 export class TextureAssetOwner {
   readonly #reservations = { activePreparations: 0, sourceReservations: 0, decodedHandoffBytes: 0 };
   #disposed = false;
+  #residencyGeneration = 0;
   readonly #preparationQueue = new RetainedFifo<AssetEntry>();
   readonly #entries = new Map<string, AssetEntry>();
   readonly #listeners = new KeyedRetainedListeners<string>();
   #maxStorageBytes: number | undefined;
   #currentStorageBudgetBytes: number | undefined;
   #redistributionQueued = false;
+  readonly #pageableKeys = new Set<string>();
+  readonly #deniedStorageKeys = new Set<string>();
   readonly #now: () => number;
   readonly #platform: TextureAssetOwnerPlatform;
   readonly #storageBudgetBytes: number | undefined;
+  readonly #activeLimit: number;
   readonly #storageEntries = new Map<string, AssetEntry>();
 
-  constructor(platform: TextureAssetOwnerPlatform, storageBudgetBytes?: number) {
+  constructor(platform: TextureAssetOwnerPlatform, storageBudgetBytes?: number, activeLimit = ACTIVE_TEXTURE_PREPARATION_LIMIT) {
     if (storageBudgetBytes !== undefined && (
       !Number.isSafeInteger(storageBudgetBytes) || storageBudgetBytes < 0
     )) throw new RangeError("Royal texture storage budget must be a non-negative safe integer");
     this.#platform = platform;
     this.#now = platform.now ?? (() => performance.now());
     this.#storageBudgetBytes = storageBudgetBytes;
+    this.#activeLimit = activeLimit;
   }
 
   dispose(): void {
@@ -199,7 +209,7 @@ export class TextureAssetOwner {
     this.#disposed = true;
     for (const entry of this.#entries.values()) {
       entry.controller?.abort();
-      if (!entry.decodedReleased) entry.decoded?.close?.();
+      if (!entry.decodedReleased) releaseDecodedTextureSource(entry.decoded);
       entry.decodedReleased = true;
     }
     this.#preparationQueue.clear();
@@ -242,10 +252,23 @@ export class TextureAssetOwner {
           this.#queuePreparation(entry);
           return;
         }
+        // An evicted page-cache lease can return pixels before the ordinary
+        // upload finishes. Charge that handoff again instead of orphaning it.
+        if (entry.decodedClaims === 0 && entry.reservation === undefined
+          && !entry.decodedReleased && entry.decoded !== undefined
+          && storageIncomplete(entry.claimedStorageKeys, entry.residentStorageKeys)) {
+          this.#replaceReservation(entry, { phase: "handoff", bytes: decodedTextureHandoffBytes(entry.decoded, entry.alpha) });
+        }
         this.#releaseDecodedIfUnused(entry);
       },
       source: entry.decoded,
     };
+  }
+
+  /** Reload through the same reader and inspection policy, outside ordinary GPU ownership. */
+  decodeForPaging(asset: TextureSourceRef, signal: AbortSignal, maxBytes: number): Promise<DecodedTextureSource> {
+    if (this.#disposed || signal.aborted) return Promise.reject(new DOMException("Texture paging was aborted", "AbortError"));
+    return this.#platform.decode(asset, signal, maxBytes);
   }
 
   alpha(asset: TextureSourceRef): DecodedTextureAlpha | undefined {
@@ -275,6 +298,7 @@ export class TextureAssetOwner {
     };
     const encodedSourceReads = this.#platform.readAheadSnapshot?.();
     for (const entry of this.#entries.values()) {
+      if (!entry.active) continue;
       for (const storageKey of entry.claimedStorageKeys) {
         if (!entry.residentStorageKeys.has(storageKey)) pendingStorageRepresentations += 1;
       }
@@ -287,6 +311,7 @@ export class TextureAssetOwner {
       }
     }
     return {
+      ...(this.#deniedStorageKeys.size === 0 ? {} : { deniedStorageRepresentations: this.#deniedStorageKeys.size }),
       activePreparations: this.#reservations.activePreparations,
       ...(timedSources === 0 ? {} : {
         browserStageTimings: {
@@ -307,6 +332,8 @@ export class TextureAssetOwner {
     assets: readonly TextureSourceRef[],
     alphaMaskAssets: readonly TextureSourceRef[] = [],
     storageBudgetBytes: number | undefined = this.#storageBudgetBytes,
+    pageableStorageKeys: ReadonlySet<string> = new Set(),
+    activeStorageKeys?: ReadonlySet<string>,
   ): void {
     if (this.#disposed) return;
     this.#storageEntries.clear();
@@ -320,15 +347,42 @@ export class TextureAssetOwner {
       if (existing === undefined) claimed.set(key, { asset, storageKeys: new Set([storageKey]) });
       else existing.storageKeys.add(storageKey);
     }
+    const claimedStorage = new Set([...claimed.values()].flatMap(claim => [...claim.storageKeys]));
+    for (const key of this.#deniedStorageKeys) if (!claimedStorage.has(key)
+      || activeStorageKeys?.has(key) === false) this.#deniedStorageKeys.delete(key);
+    this.#pageableKeys.clear();
+    for (const [key, claim] of claimed) {
+      if ([...claim.storageKeys].every(storageKey => pageableStorageKeys.has(storageKey))) this.#pageableKeys.add(key);
+    }
     this.#currentStorageBudgetBytes = storageBudgetBytes;
-    this.#updateStorageShare([...claimed].map(([key, claim]) => ({
+    let snapshotChangedKey: string | undefined;
+    this.#updateStorageShare([...claimed].filter(([, claim]) => activeStorageKeys === undefined
+      || [...claim.storageKeys].some(key => activeStorageKeys.has(key))).map(([key, claim]) => ({
       source: this.#entries.get(key)?.decoded, copies: claim.storageKeys.size,
     })));
     for (const [key, claim] of claimed) {
+      const active = activeStorageKeys === undefined || [...claim.storageKeys].some(key => activeStorageKeys.has(key));
       const entry = this.#entries.get(key);
       if (entry === undefined) {
-        this.#start(claim.asset, key, claim.storageKeys, retainedAlphaKeys.has(key));
+        this.#start(claim.asset, key, claim.storageKeys, retainedAlphaKeys.has(key), active);
         continue;
+      }
+      const wasActive = entry.active;
+      entry.active = active;
+      if (!active) {
+        entry.queued = false;
+        entry.controller?.abort();
+        entry.controller = undefined;
+        if (entry.reservation?.phase === "preparing") this.#releaseSourceReservation(entry);
+        this.#releaseDecodedIfUnused(entry);
+        if (entry.decoded === undefined && entry.snapshot.status !== "error") entry.snapshot = IDLE;
+      } else if (entry.decoded === undefined && entry.snapshot.status !== "error") {
+        entry.snapshot = { status: "loading" };
+        this.#queuePreparation(entry);
+      }
+      if (wasActive !== active) {
+        snapshotChangedKey = key;
+        this.#publish(key);
       }
       entry.asset = claim.asset;
       entry.claimedStorageKeys.clear();
@@ -369,15 +423,23 @@ export class TextureAssetOwner {
       this.#entries.delete(key);
       entry.controller?.abort();
       entry.alpha = undefined;
-      if (!entry.decodedReleased) entry.decoded?.close?.();
+      if (!entry.decodedReleased) releaseDecodedTextureSource(entry.decoded);
       entry.decodedReleased = true;
       entry.queued = false;
       this.#releaseSourceReservation(entry);
       this.#publish(key);
     }
+    if (snapshotChangedKey !== undefined) this.#platform.onSnapshotChanged(snapshotChangedKey);
   }
 
   /** Compact GPU fallbacks still need the approved source for full-storage restoration. */
+  requestUploadSource(storageKey: string): void {
+    const entry = this.#storageEntries.get(storageKey);
+    if (!this.#disposed && entry?.decodedReleased === true && entry.snapshot.status !== "error") {
+      this.#queuePreparation(entry);
+    }
+  }
+
   setStorageFallback(storageKey: string, compact: boolean): void {
     const entry = this.#storageEntries.get(storageKey);
     if (entry === undefined || this.#disposed) return;
@@ -393,6 +455,7 @@ export class TextureAssetOwner {
     for (const storageKey of storageKeys) {
       const entry = this.#storageEntries.get(storageKey);
       if (entry === undefined) continue;
+      this.#deniedStorageKeys.delete(storageKey);
       entry.residentStorageKeys.add(storageKey);
       touched.add(entry);
     }
@@ -434,13 +497,16 @@ export class TextureAssetOwner {
     const rejected = new Set<AssetEntry>();
     for (const storageKey of storageKeys) {
       const entry = this.#storageEntries.get(storageKey);
-      if (entry !== undefined) rejected.add(entry);
+      if (entry !== undefined) {
+        this.#deniedStorageKeys.add(storageKey);
+        rejected.add(entry);
+      }
     }
     for (const entry of rejected) {
       entry.alpha = undefined;
       entry.claimedStorageKeys.clear();
       entry.preparationDeferred = false;
-      if (!entry.decodedReleased && entry.decodedClaims === 0) entry.decoded?.close?.();
+      if (!entry.decodedReleased && entry.decodedClaims === 0) releaseDecodedTextureSource(entry.decoded);
       entry.decodedReleased = entry.decodedClaims === 0;
       if (entry.decodedClaims === 0) this.#releaseSourceReservation(entry);
       this.#platform.onAssetChanged(entry.key);
@@ -450,8 +516,19 @@ export class TextureAssetOwner {
   /** Invalidates GPU copies while preserving unrelated transport and CPU preparation. */
   invalidateResidency(): void {
     if (this.#disposed) return;
+    this.#residencyGeneration += 1;
+    let changedKey: string | undefined;
     for (const entry of this.#entries.values()) {
       entry.residentStorageKeys.clear();
+      if (entry.decoded?.kind === undefined && entry.decoded?.contextBound === true) {
+        this.#platform.releaseDecoded?.(entry.asset);
+        if (entry.decodedClaims === 0 && !entry.decodedReleased) {
+          releaseDecodedTextureSource(entry.decoded);
+          entry.decodedReleased = true;
+          this.#releaseSourceReservation(entry);
+        }
+      }
+      if (!entry.active) continue;
       if (
         (entry.decoded === undefined || entry.decodedReleased)
         && entry.reservation?.phase !== "preparing"
@@ -464,9 +541,10 @@ export class TextureAssetOwner {
       }
       // Materials must discard closed pixel references while re-decode is pending.
       this.#platform.onAssetChanged(entry.key);
-      this.#platform.onSnapshotChanged(entry.key);
+      changedKey = entry.key;
       this.#publish(entry.key);
     }
+    if (changedKey !== undefined) this.#platform.onSnapshotChanged(changedKey);
   }
 
   subscribe(asset: TextureAssetRef, listener: () => void): () => void {
@@ -484,9 +562,11 @@ export class TextureAssetOwner {
     key: string,
     storageKeys: Set<string>,
     retainAlpha: boolean,
+    active = true,
   ): void {
     const startedAt = this.#now();
     const entry: AssetEntry = {
+      active,
       alpha: undefined,
       asset,
       claimedStorageKeys: new Set(storageKeys),
@@ -506,7 +586,7 @@ export class TextureAssetOwner {
       queued: false,
       residentStorageKeys: new Set(),
       retainAlpha,
-      snapshot: { status: "loading" },
+      snapshot: active ? { status: "loading" } : IDLE,
       startedAt,
     };
     this.#entries.set(key, entry);
@@ -539,15 +619,22 @@ export class TextureAssetOwner {
     queueMicrotask(() => {
       this.#redistributionQueued = false;
       if (this.#disposed) return;
-      this.#updateStorageShare([...this.#entries.values()].map(entry => ({
+      this.#updateStorageShare([...this.#entries.values()].filter(entry => entry.active).map(entry => ({
         source: entry.decoded, copies: entry.claimedStorageKeys.size,
       })));
       for (const entry of this.#entries.values()) this.#refreshStorageFit(entry);
     });
   }
 
+  #usesPageCache(entry: AssetEntry): boolean {
+    const source = entry.decoded;
+    return this.#pageableKeys.has(entry.key) && (source === undefined
+      || reloadableRasterPagingEligible(source));
+  }
+
   #refreshStorageFit(entry: AssetEntry): void {
     const source = entry.decoded;
+    if (this.#usesPageCache(entry)) return;
     if (source === undefined || source.sourceWidth === undefined || source.preview !== undefined
       || entry.snapshot.status === "error" || entry.reservation?.phase === "preparing"
       || (this.#maxStorageBytes ?? Infinity) <= (entry.preparationStorageBytes ?? Infinity)) return;
@@ -558,11 +645,18 @@ export class TextureAssetOwner {
       entry.preparationStorageBytes = this.#maxStorageBytes;
       return;
     }
-    if (entry.decodedClaims > 0) this.#platform.releaseDecoded?.(entry.asset);
+    const hadLease = entry.decodedClaims > 0;
+    if (hadLease) this.#platform.releaseDecoded?.(entry.asset);
+    if (hadLease && entry.decodedClaims === 0 && entry.reservation?.phase === "handoff") {
+      releaseDecodedTextureSource(entry.decoded);
+      entry.decodedReleased = true;
+      this.#releaseSourceReservation(entry);
+    }
     this.#queuePreparation(entry);
   }
 
   #queuePreparation(entry: AssetEntry): void {
+    if (!entry.active) return;
     if (entry.reservation !== undefined) return;
     if (entry.decodedClaims > 0 && !(entry.retainAlpha && entry.alpha === undefined)) {
       entry.preparationDeferred = true;
@@ -583,14 +677,14 @@ export class TextureAssetOwner {
       !this.#disposed
       && canReserveTextureSource(
         this.#reservations,
-        ACTIVE_TEXTURE_PREPARATION_LIMIT,
+        this.#activeLimit,
         DECODED_HANDOFF_SOURCE_LIMIT,
         DECODED_HANDOFF_BYTE_THRESHOLD,
       )
     ) {
       const entry = this.#preparationQueue.dequeue();
       if (entry === undefined) return;
-      if (!entry.queued || this.#entries.get(entry.key) !== entry) continue;
+      if (!entry.active || !entry.queued || this.#entries.get(entry.key) !== entry) continue;
       entry.queued = false;
       if (entry.decodedClaims > 0 && !(entry.retainAlpha && entry.alpha === undefined)) {
         entry.preparationDeferred = true;
@@ -628,13 +722,13 @@ export class TextureAssetOwner {
       || entry.reservation?.phase === "preparing"
       || entry.decodedReleased
       || entry.decoded === undefined
-      || storageIncomplete(entry.claimedStorageKeys, entry.residentStorageKeys)
+      || (entry.active && storageIncomplete(entry.claimedStorageKeys, entry.residentStorageKeys))
     ) return;
-    if (entry.fallbackStorageKeys.size > 0) {
+    if (entry.fallbackStorageKeys.size > 0 && !this.#usesPageCache(entry)) {
       this.#releaseSourceReservation(entry);
       return;
     }
-    entry.decoded.close?.();
+    releaseDecodedTextureSource(entry.decoded);
     entry.decodedReleased = true;
     this.#releaseSourceReservation(entry);
     this.#refreshStorageFit(entry);
@@ -647,9 +741,14 @@ export class TextureAssetOwner {
     const key = entry.key;
     const retainAlpha = entry.retainAlpha;
     const alphaOnly = entry.decodedClaims > 0;
+    const residencyGeneration = this.#residencyGeneration;
     entry.preparationRetainsAlpha = retainAlpha;
     entry.preparationAlphaOnly = alphaOnly;
-    if (!alphaOnly) entry.preparationStorageBytes = this.#maxStorageBytes;
+    if (!alphaOnly) entry.preparationStorageBytes = this.#usesPageCache(entry)
+      // Seed coarse coverage and its adjacent detail mip without a second read.
+      // This remains CPU cache storage; GPU safety fallbacks have their own fit.
+      ? Math.min(this.#maxStorageBytes ?? Infinity, ordinaryTextureStorageBytes(256, 256, true))
+      : this.#maxStorageBytes;
     const decoding: Promise<DecodedTextureSource> = retainAlpha
       ? this.#platform.decode(asset, controller.signal, entry.preparationStorageBytes, true)
       : this.#platform.decode(asset, controller.signal, entry.preparationStorageBytes);
@@ -660,7 +759,16 @@ export class TextureAssetOwner {
         || entry.controller !== controller
         || controller.signal.aborted
       ) {
-        decoded.close?.();
+        releaseDecodedTextureSource(decoded);
+        return;
+      }
+      if (decoded.kind === undefined && decoded.contextBound === true
+        && residencyGeneration !== this.#residencyGeneration) {
+        // A native decode begun before restoration can complete with stale pixels.
+        releaseDecodedTextureSource(decoded);
+        entry.controller = undefined;
+        this.#releaseSourceReservation(entry);
+        this.#queuePreparation(entry);
         return;
       }
       if (
@@ -669,27 +777,27 @@ export class TextureAssetOwner {
         || !Number.isSafeInteger(decoded.height)
         || decoded.height < 1
       ) {
-        decoded.close?.();
+        releaseDecodedTextureSource(decoded);
         throw new Error(`${diagnosticLabel(asset)} decoder returned invalid dimensions`);
       }
       if (decoded.sourceWidth !== undefined || decoded.sourceHeight !== undefined) {
         try {
           ordinaryTextureStorageBytes(decoded.sourceWidth ?? decoded.width, decoded.sourceHeight ?? decoded.height, true);
-        } catch (error) { decoded.close?.(); throw error; }
+        } catch (error) { releaseDecodedTextureSource(decoded); throw error; }
       }
       const alpha = decoded.alpha;
       if (alpha !== undefined && (
         alpha.width !== decoded.width
         || alpha.height !== decoded.height
       )) {
-        decoded.close?.();
+        releaseDecodedTextureSource(decoded);
         throw new Error(`${diagnosticLabel(asset)} decoder returned invalid retained alpha`);
       }
       if (alpha !== undefined) {
         try {
           validateTextureAlphaMipChain(alpha);
         } catch (error) {
-          decoded.close?.();
+          releaseDecodedTextureSource(decoded);
           throw error;
         }
       }
@@ -697,7 +805,7 @@ export class TextureAssetOwner {
         // A VT source can be leased for the whole scene lifetime. Publish the
         // auxiliary alpha plane without replacing or closing those live pixels.
         entry.alpha = entry.retainAlpha ? alpha : undefined;
-        decoded.close?.();
+        releaseDecodedTextureSource(decoded);
         entry.controller = undefined;
         this.#releaseSourceReservation(entry);
         this.#platform.onAssetChanged(key);
@@ -718,11 +826,11 @@ export class TextureAssetOwner {
           entry.retainAlpha ? alpha : undefined,
         );
       } catch (error) {
-        decodedSource.close?.();
+        releaseDecodedTextureSource(decodedSource);
         throw error;
       }
       if (entry.decoded !== undefined && (entry.decoded.width !== decodedSource.width || entry.decoded.height !== decodedSource.height)) entry.residentStorageKeys.clear();
-      if (!entry.decodedReleased) entry.decoded?.close?.();
+      if (!entry.decodedReleased) releaseDecodedTextureSource(entry.decoded);
       entry.controller = undefined;
       entry.alpha = entry.retainAlpha ? alpha : undefined;
       entry.decoded = decodedSource;
