@@ -2000,13 +2000,13 @@ export class SurfaceGpuOwner {
       ),
     );
     // Automatic VT has an ordinary preview to keep drawing while optional
-    // detail shaders link.
+    // detail shaders link and its first admitted detail set becomes resident.
     if (virtualTexture !== undefined
       && ordinaryBindings[bindingOffset]!.texture !== null
-      && !this.#programs.virtualReady(
+      && (!this.#programs.virtualReady(
         material.kind, features, geometrySurface.instanceCount > 0,
         material.alphaCutoff !== undefined, canonicalSurfaceIsDoubleSided(material),
-      )) {
+      ) || this.#virtualTexture?.automaticDetailReady?.(material.baseColorAsset!) === false)) {
       virtualTexture = undefined;
       features = plannedSurfaceProgramFeatures(
         scene, geometrySurface.surface,

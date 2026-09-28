@@ -1,3 +1,4 @@
+import { planInitialTextureDecodeBytes } from "../texture/initial-decode-plan";
 import { collectVirtualFallbackStorageKeys } from "../surface/surface-texture-plan";
 import { createTextureInspectionOwner, textureInspectionSource, type TextureInspector } from "../texture/inspection-policy";
 import { TextureAnisotropy } from "../texture/anisotropy";
@@ -571,6 +572,13 @@ export class CanvasRoot implements RendererRoot {
   #frame = 0;
   #frameIntent: ClearFrameIntent | null = null;
   #activeTextureKeys: ReadonlySet<string> | undefined;
+  #initialTextureDecodePlan: {
+    textureSurfaceIndices: CanonicalSurfaceScene["textureSurfaceIndices"];
+    camera: CanonicalSurfaceScene["camera"];
+    width: number;
+    height: number;
+    bytes: ReadonlyMap<string, number>;
+  } | undefined;
   #activeSurfaceTextureAssets: readonly TextureSourceRef[] = [];
   readonly #gl: WebGL2RenderingContext;
   readonly #gltfAssets: GltfAssetOwner;
@@ -868,6 +876,7 @@ export class CanvasRoot implements RendererRoot {
       }));
       this.#cameraSource = construction.own(new CameraSourceOwner({
         onCameraChanged: () => {
+          this.#initialTextureDecodePlan = undefined;
           this.#cameraPresentationChanged = true;
           this.#invalidatePresentation();
         },
@@ -952,6 +961,7 @@ export class CanvasRoot implements RendererRoot {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.#initialTextureDecodePlan = undefined;
     this.#canvas.removeEventListener("webglcontextlost", this.#onContextLost);
     this.#canvas.removeEventListener("webglcontextrestored", this.#onContextRestored);
     this.#progressivePresentation.dispose();
@@ -1460,6 +1470,7 @@ export class CanvasRoot implements RendererRoot {
       binding.lights.length !== 0,
     );
     this.#virtualTextureRuntime?.invalidateSceneGeometry();
+    this.#initialTextureDecodePlan = undefined;
     this.#invalidatePresentation();
   }
 
@@ -1522,6 +1533,7 @@ export class CanvasRoot implements RendererRoot {
     this.#instancePickingDirty = true;
     this.#surfaceGpu.publishInstanceTransforms();
     this.#virtualTextureRuntime?.invalidateSceneGeometry();
+    this.#initialTextureDecodePlan = undefined;
   }
 
   #refreshPreparedScene(
@@ -1614,6 +1626,16 @@ export class CanvasRoot implements RendererRoot {
         + (this.#overlayInput === null ? 0 : (size?.backingWidth ?? 1) * (size?.backingHeight ?? 1) * 4),
     );
     this.#persistentGpuBudget.setTextureBudget(storageBudgetBytes);
+    const scene = this.#surfaceScene;
+    const width = size?.backingWidth ?? 1, height = size?.backingHeight ?? 1;
+    const previous = this.#initialTextureDecodePlan;
+    // Texture publication replaces the scene wrapper but preserves geometry and
+    // this index. Do not re-project the whole catalogue after every decode.
+    if (scene !== null && (previous?.textureSurfaceIndices !== scene.textureSurfaceIndices
+      || previous.camera !== scene.camera || previous.width !== width || previous.height !== height)) {
+      this.#initialTextureDecodePlan = { textureSurfaceIndices: scene.textureSurfaceIndices,
+        camera: scene.camera, width, height, bytes: planInitialTextureDecodeBytes(scene, width, height) };
+    } else if (scene === null) this.#initialTextureDecodePlan = undefined;
     this.#textureAssets.reconcile(
       assets,
       alphaMaskAssets,
@@ -1621,6 +1643,7 @@ export class CanvasRoot implements RendererRoot {
       collectVirtualFallbackStorageKeys((this.#surfaceScene?.surfaces ?? []).map(surface => surface.material),
         asset => asset.sourceEncoding === undefined && asset.astc === undefined && asset.rasterPreview === undefined),
       this.#activeTextureKeys,
+      this.#initialTextureDecodePlan?.bytes,
     );
   }
 

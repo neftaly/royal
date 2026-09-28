@@ -178,6 +178,8 @@ export interface VirtualTextureRuntime {
   readonly bindingRevision: number;
   readonly shaderSource: VirtualTextureShaderSource;
   automaticBinding(asset: TextureSourceRef): VirtualTextureGpuBinding | undefined;
+  /** Initial admitted detail can replace an existing ordinary preview without a coarse flash. */
+  automaticDetailReady?(asset: TextureSourceRef): boolean;
   /** Reloadable page sources permit compact ordinary fallbacks before residency. */
   automaticPageSourceAvailable?(asset: TextureSourceRef): boolean;
   dispose(): void;

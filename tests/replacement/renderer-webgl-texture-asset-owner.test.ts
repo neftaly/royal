@@ -1,4 +1,5 @@
 import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/texture/storage-fit";
+import { ordinaryTextureStorageBytes } from "../../packages/renderer-webgl/src/texture/storage";
 import { imageTexture, textureAsset } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { waitFor } from "./support/wait-for";
@@ -1047,4 +1048,53 @@ it("charges pixels returned by an evicted lease until their ordinary upload comp
   expect(owner.snapshot().decodedHandoffBytes).toBe(0);
   expect(close).toHaveBeenCalledOnce();
   owner.dispose();
+});
+
+it("uses camera seed hints within the existing per-source ceiling", async () => {
+  const asset = imageTexture("/camera-board.png");
+  const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>().mockResolvedValue(decoded());
+  const owner = new TextureAssetOwner({ decode, onAssetChanged: vi.fn(), onListenerError: vi.fn(), onSnapshotChanged: vi.fn() });
+  try {
+    owner.reconcile([asset], [], 64 * 1024 * 1024, new Set([textureStorageKey(asset)]), undefined,
+      new Map([[decodedTextureKey(asset), 128 * 1024 * 1024]]));
+    await waitFor(() => expect(owner.getSnapshot(asset).status).toBe("ready"));
+    expect(decode.mock.calls[0]![2]).toBe(16 * 1024 * 1024);
+  } finally { owner.dispose(); }
+});
+
+it.each(["cancel", "upload", "error"])("bounds extra camera seed bytes and releases them on %s", async outcome => {
+  const assets = Array.from({ length: 6 }, (_, i) => imageTexture(`/large-seed-${i}.png`));
+  const pending: Array<{ resolve: (value: DecodedTextureSource) => void; reject: (error: Error) => void }> = [];
+  const decode = vi.fn<TextureAssetOwnerPlatform["decode"]>(() => new Promise((resolve, reject) => {
+    pending.push({ resolve, reject });
+  }));
+  const owner = new TextureAssetOwner({ decode, onAssetChanged: vi.fn(), onListenerError: vi.fn(), onSnapshotChanged: vi.fn() });
+  const pageable = new Set(assets.map(textureStorageKey));
+  const hints = new Map(assets.map(asset => [decodedTextureKey(asset), 16 * 1024 * 1024]));
+  try {
+    owner.reconcile(assets.slice(0, 4), [], 1024 * 1024 * 1024, pageable, undefined, hints);
+    expect(decode).toHaveBeenCalledTimes(4);
+    const floor = ordinaryTextureStorageBytes(256, 256, true);
+    const extra = decode.mock.calls.reduce((sum, call) => sum + Math.max(0, call[2]! - floor), 0);
+    expect(extra).toBe(32 * 1024 * 1024);
+    expect(decode.mock.calls[3]![2]).toBe(floor);
+    if (outcome === "cancel") {
+      owner.reconcile([]);
+      pending.forEach(job => job.resolve(decoded()));
+    } else if (outcome === "upload") {
+      pending.forEach(job => job.resolve(decoded()));
+      await waitFor(() => expect(owner.getSnapshot(assets[0]!).status).toBe("ready"));
+      owner.reconcile(assets.slice(0, 5), [], 1024 * 1024 * 1024, pageable, undefined, hints);
+      expect(decode.mock.calls.at(-1)![2]).toBe(floor);
+      owner.releaseUploaded(assets.slice(0, 4).map(textureStorageKey));
+    } else {
+      pending.forEach(job => job.reject(new Error("decode failed")));
+      await waitFor(() => expect(owner.getSnapshot(assets[0]!).status).toBe("error"));
+    }
+    owner.reconcile([assets[5]!], [], 1024 * 1024 * 1024, pageable, undefined, hints);
+    expect(decode.mock.calls.at(-1)![2]).toBe(16 * 1024 * 1024);
+  } finally {
+    owner.dispose();
+    pending.forEach(job => job.resolve(decoded()));
+  }
 });

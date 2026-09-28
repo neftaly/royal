@@ -158,6 +158,7 @@ type RuntimeResource = {
   admittedPageLimit?: number;
   desiredPageCount?: number;
   rasterMip?: number;
+  initialDetailReady?: boolean;
   lastUsedFrame?: number;
   readonly failedPages: Set<VirtualTexturePageKey>;
   gpu: GpuVirtualTexture | undefined;
@@ -490,6 +491,10 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       && resource?.source !== undefined;
   }
 
+  automaticDetailReady(asset: TextureSourceRef): boolean {
+    return this.#resources.get(automaticVirtualTextureAssetKey(asset))?.initialDetailReady === true;
+  }
+
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
@@ -514,6 +519,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       for (const controller of resource.loadingPages.values()) controller.abort();
       resource.loadingPages.clear();
       resource.demandRevision = -1;
+      resource.initialDetailReady = false;
       delete resource.demandJob;
       if (resource.gpu !== undefined) {
         resource.gpu.astc?.dispose(false);
@@ -991,6 +997,20 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       if (resource.readyPages.length > 0 && (uploadsRemaining === 0)) pending = true;
     }
     if (this.#publishDirtyPageTables()) webGlStateChanged = true;
+    for (const resource of this.#resources.values()) {
+      if (resource.initialDetailReady || resource.gpu === undefined || resource.workspace.count === 0
+        || resource.gpu.atlas.growth !== undefined || resource.demandNeedsFit) continue;
+      // Wait for expandable capacity, but publish fitted demand when the pool
+      // share itself prevents growth. That case need not set blockedGrowth.
+      if ((resource.desiredPageCount ?? 0) > resource.workspace.count
+        && this.#targetAtlasSlots(resource.gpu.atlas.key) > resource.gpu.atlas.slotCount
+        && resource.gpu.atlas.blockedGrowth === undefined) continue;
+      let ready = true;
+      for (const key of resource.workspace.keys) {
+        if (!resource.gpu.residentSlots.has(key)) { ready = false; break; }
+      }
+      if (ready) { resource.initialDetailReady = true; this.#bindingRevision++; }
+    }
     this.#schedulePageReads();
     if (this.#compressionBusy()) this.#lastForeground = performance.now();
     else if (this.#publishCompression()) webGlStateChanged = true;
@@ -1841,6 +1861,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     gpu.astc?.dispose();
     destroyGpuVirtualTexture(this.#gl, gpu, this.#budget);
     resource.gpu = undefined;
+    resource.initialDetailReady = false;
     delete resource.admittedPageLimit;
     atlas.referenceCount -= 1;
     if (atlas.referenceCount === 0) {
@@ -1912,12 +1933,24 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     const resources = this.#scheduleResources;
     let idleVisits = 0;
     // Consume seeded coarse pixels as well as cached detail before a source miss
-    // evicts the next image in catalogue order. Detail remains single-job paced.
+    // evicts the next image in catalogue order. Warm detail queues in bounded
+    // same-source batches; the shared detail lane still executes serially.
     if (this.#rasterCache !== undefined) {
+      // First coverage takes precedence over batching another texture's detail.
       for (const resource of resources) {
         if (this.#activeJobs >= MAX_DECODE_JOBS
           || this.#activeJobs + this.#readyPages >= MAX_AUTOMATIC_PAGE_JOBS) break;
-        if (this.#rasterCache.has(resource.asset)) this.#startNextPageRead(resource);
+        if (resource.gpu?.residentSlots.size === 0) this.#startNextPageRead(resource);
+      }
+      for (const resource of resources) {
+        if (this.#activeJobs >= MAX_DECODE_JOBS
+          || this.#activeJobs + this.#readyPages >= MAX_AUTOMATIC_PAGE_JOBS) break;
+        if (this.#rasterCache.has(resource.asset)) {
+          let pages = 0;
+          while (pages < 2 && this.#activeJobs < MAX_DECODE_JOBS
+            && this.#activeJobs + this.#readyPages < MAX_AUTOMATIC_PAGE_JOBS
+            && this.#startNextPageRead(resource)) pages++;
+        }
       }
     }
     while (
@@ -2024,7 +2057,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         return false;
       }
       if ((gpu.residentSlots.size > 0 || detailSource !== undefined) && this.#detailJobs > 0
-        && !this.#cpuPages.has(resource, key)) return false;
+        && !this.#cpuPages.has(resource, key) && !this.#rasterCache?.has(resource.asset)) return false;
       if (byteLength > MAX_PENDING_PAGE_BYTES) {
         resource.failedPages.add(key);
         this.#changed();

@@ -1,3 +1,4 @@
+import { PersistentGpuBudgetOwner } from "../../packages/renderer-webgl/src/resource/persistent-gpu-budget";
 import * as demand from "../../packages/renderer-webgl/src/virtual-texture/demand";
 import { afterEach, expect, it, vi } from "vitest";
 import { imageTexture, mesh, perspectiveCamera, planeGeometry, scene, unlitMaterial } from "@royal/renderer-core";
@@ -11,7 +12,7 @@ import { fakeGl } from "./support/canvas-root-harness";
 import { waitFor } from "./support/wait-for";
 
 afterEach(() => vi.restoreAllMocks());
-const harness = (count = 1, gate?: (page: VirtualTexturePageId, signal: AbortSignal) => Promise<void>) => {
+const harness = (count = 1, gate?: (page: VirtualTexturePageId, signal: AbortSignal) => Promise<void>, budget?: PersistentGpuBudgetOwner) => {
   const read = vi.fn(async (page: VirtualTexturePageId, signal: AbortSignal) => {
     await gate?.(page, signal);
     return { kind: "image" as const, source: { width: 132, height: 132 } as ImageBitmap, close: vi.fn() };
@@ -22,7 +23,7 @@ const harness = (count = 1, gate?: (page: VirtualTexturePageId, signal: AbortSig
   const decoded = { width: 1024, height: 1024, source: {} as ImageBitmap };
   const assets = Array.from({ length: count }, (_, i) => imageTexture(`/texture-${i}.png`));
   const gl = fakeGl();
-  const runtime = createBrowserVirtualTextureRuntime(gl, undefined, undefined, {
+  const runtime = createBrowserVirtualTextureRuntime(gl, budget, undefined, {
     decoded: () => decoded, acquireDecoded: () => ({ source: decoded, release: vi.fn() }), onChanged: vi.fn(),
   });
   const setAssets = (textures = assets) => runtime.setScene(prepareCanonicalSurfaceScene(scene({
@@ -277,5 +278,67 @@ it("empty views supersede paused visible work and settle without stale demand", 
     for (let frame = 0; frame < 20; frame++) h.runtime.update([]);
     expect(h.runtime.runtimeSnapshot().pendingDemandResources ?? 0).toBe(0);
     expect(h.runtime.runtimeSnapshot().desiredPages).toBe(0);
+  } finally { h.runtime.dispose(); }
+});
+
+it("keeps the preview publication gate closed until initial detail is resident", async () => {
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const h = harness(1, page => page.mip < 3 ? gate : Promise.resolve());
+  try {
+    await waitFor(() => {
+      h.runtime.update([h.view]);
+      expect(h.runtime.automaticBinding(h.assets[0]!)).toBeDefined();
+    });
+    expect(h.runtime.automaticDetailReady!(h.assets[0]!)).toBe(false);
+    const before = h.runtime.bindingRevision;
+    release!();
+    await waitFor(() => {
+      h.runtime.update([h.view]);
+      expect(h.runtime.automaticDetailReady!(h.assets[0]!)).toBe(true);
+    });
+    expect(h.runtime.bindingRevision).toBeGreaterThan(before);
+    h.runtime.invalidate();
+    expect(h.runtime.automaticDetailReady!(h.assets[0]!)).toBe(false);
+  } finally { release?.(); h.runtime.dispose(); }
+});
+
+it("prepares several warm-source detail pages without waiting for another presentation", async () => {
+  const rendered = vi.spyOn(sources, "renderAutomaticPage").mockImplementation(() => ({
+    kind: "image", source: { width: 132, height: 132 } as ImageBitmap, close: vi.fn(),
+  }));
+  const texture = imageTexture("/warm-batch.png");
+  const decoded = { width: 1024, height: 1024, source: {} as ImageBitmap };
+  const runtime = createBrowserVirtualTextureRuntime(fakeGl(), undefined, undefined, {
+    decoded: () => decoded, acquireDecoded: () => ({ source: decoded, release: vi.fn() }),
+    loadRaster: async () => decoded, onChanged: vi.fn(),
+  });
+  const matrix = identityMat4();
+  const view = { view: matrix, viewProjection: matrix, viewport: { x: 0, y: 0, width: 512, height: 512 } };
+  try {
+    runtime.setScene(prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}), nodes: [
+      mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture }) }),
+    ] })));
+    await waitFor(() => {
+      runtime.update([view]);
+      expect(runtime.automaticBinding(texture)).toBeDefined();
+    });
+    // One root plus at least two detail pages, without another update call.
+    await waitFor(() => expect(rendered.mock.calls.length).toBeGreaterThanOrEqual(3));
+    expect(runtime.runtimeSnapshot().pendingPageBytes).toBeLessThanOrEqual(16 * 1024 * 1024);
+  } finally { runtime.dispose(); }
+});
+
+it("publishes fitted initial detail when the pool cannot admit the full demand", async () => {
+  const h = harness(1, undefined, new PersistentGpuBudgetOwner(1024 * 1024));
+  try {
+    await waitFor(() => {
+      h.runtime.update([h.view]);
+      expect(h.runtime.runtimeSnapshot().pendingPages).toBe(0);
+      expect(h.runtime.runtimeSnapshot().residentPages).toBeGreaterThan(0);
+      expect(h.runtime.automaticDetailReady!(h.assets[0]!)).toBe(true);
+    });
+    const snapshot = h.runtime.runtimeSnapshot();
+    expect(snapshot.desiredPages).toBeGreaterThan(snapshot.residentPages);
   } finally { h.runtime.dispose(); }
 });

@@ -23,6 +23,7 @@ export class RasterSourceCache {
   #decodeMs = 0;
   #renderMs = 0;
   #peakBytes = 0;
+  #renderSliceMs = 0;
 
   constructor(
     load: (asset: TextureSourceRef, signal: AbortSignal, maxBytes: number) => Promise<DecodedTextureSource>,
@@ -74,6 +75,12 @@ export class RasterSourceCache {
     const generation = this.#generation;
     const queuedAt = performance.now();
     const job = this.#tail.then(async () => {
+      // A warm source can supply several pages per presentation. Yield between
+      // pages after a small CPU slice; a single canvas operation is indivisible.
+      if (this.#renderSliceMs >= 2) {
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+        this.#renderSliceMs = 0;
+      }
       this.#queueMs += performance.now() - queuedAt;
       if (this.#disposed || signal.aborted || generation !== this.#generation) throw abortError();
       const key = decodedTextureKey(asset);
@@ -127,7 +134,11 @@ export class RasterSourceCache {
       }
       const renderStartedAt = performance.now();
       try { return render(entry.source); }
-      finally { this.#renderMs += performance.now() - renderStartedAt; }
+      finally {
+        const elapsed = performance.now() - renderStartedAt;
+        this.#renderMs += elapsed;
+        this.#renderSliceMs += elapsed;
+      }
     });
     this.#tail = job.then(() => { this.#queued--; }, () => { this.#queued--; });
     return job;

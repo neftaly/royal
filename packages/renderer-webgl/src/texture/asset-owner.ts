@@ -124,6 +124,7 @@ type AssetEntry = {
   reservation: TextureReservation;
   preparationDeferred: boolean;
   preparationStorageBytes: number | undefined;
+  initialDecodeExtraBytes: number;
   readonly key: string;
   decoded: DecodedTextureSource | undefined;
   decodedClaims: number;
@@ -143,6 +144,7 @@ const IDLE: TextureAssetSnapshot = { status: "idle" };
 const ACTIVE_TEXTURE_PREPARATION_LIMIT = 32;
 const DECODED_HANDOFF_BYTE_THRESHOLD = 64 * 1024 * 1024;
 const DECODED_HANDOFF_SOURCE_LIMIT = 64;
+const INITIAL_DECODE_EXTRA_BYTE_LIMIT = 32 * 1024 * 1024;
 
 /** Exact retained CPU bytes after browser decode has selected a representation. */
 export const decodedTextureHandoffBytes = (
@@ -185,6 +187,8 @@ export class TextureAssetOwner {
   readonly #listeners = new KeyedRetainedListeners<string>();
   #maxStorageBytes: number | undefined;
   #currentStorageBudgetBytes: number | undefined;
+  #initialDecodeBytes: ReadonlyMap<string, number> = new Map();
+  #initialDecodeExtraBytes = 0;
   #redistributionQueued = false;
   readonly #pageableKeys = new Set<string>();
   readonly #deniedStorageKeys = new Set<string>();
@@ -214,6 +218,7 @@ export class TextureAssetOwner {
     }
     this.#preparationQueue.clear();
     this.#entries.clear();
+    this.#initialDecodeBytes = new Map();
     this.#listeners.clear();
     this.#storageEntries.clear();
   }
@@ -334,6 +339,7 @@ export class TextureAssetOwner {
     storageBudgetBytes: number | undefined = this.#storageBudgetBytes,
     pageableStorageKeys: ReadonlySet<string> = new Set(),
     activeStorageKeys?: ReadonlySet<string>,
+    initialDecodeBytes: ReadonlyMap<string, number> = new Map(),
   ): void {
     if (this.#disposed) return;
     this.#storageEntries.clear();
@@ -355,6 +361,7 @@ export class TextureAssetOwner {
       if ([...claim.storageKeys].every(storageKey => pageableStorageKeys.has(storageKey))) this.#pageableKeys.add(key);
     }
     this.#currentStorageBudgetBytes = storageBudgetBytes;
+    this.#initialDecodeBytes = initialDecodeBytes;
     let snapshotChangedKey: string | undefined;
     this.#updateStorageShare([...claimed].filter(([, claim]) => activeStorageKeys === undefined
       || [...claim.storageKeys].some(key => activeStorageKeys.has(key))).map(([key, claim]) => ({
@@ -574,6 +581,7 @@ export class TextureAssetOwner {
       reservation: undefined,
       preparationDeferred: false,
       preparationStorageBytes: undefined,
+      initialDecodeExtraBytes: 0,
       decoded: undefined,
       decodedClaims: 0,
       decodedReleased: false,
@@ -697,6 +705,10 @@ export class TextureAssetOwner {
   }
 
   #replaceReservation(entry: AssetEntry, next: TextureReservation): void {
+    if (next === undefined) {
+      this.#initialDecodeExtraBytes -= entry.initialDecodeExtraBytes;
+      entry.initialDecodeExtraBytes = 0;
+    }
     replaceTextureReservationInto(this.#reservations, entry.reservation, next);
     entry.reservation = next;
   }
@@ -744,11 +756,21 @@ export class TextureAssetOwner {
     const residencyGeneration = this.#residencyGeneration;
     entry.preparationRetainsAlpha = retainAlpha;
     entry.preparationAlphaOnly = alphaOnly;
+    const seedBytes = ordinaryTextureStorageBytes(256, 256, true);
     if (!alphaOnly) entry.preparationStorageBytes = this.#usesPageCache(entry)
-      // Seed coarse coverage and its adjacent detail mip without a second read.
+      // Seed at least coarse coverage and its adjacent mip; camera hints can
+      // supply larger initial detail without a second read.
       // This remains CPU cache storage; GPU safety fallbacks have their own fit.
-      ? Math.min(this.#maxStorageBytes ?? Infinity, ordinaryTextureStorageBytes(256, 256, true))
+      ? Math.min(this.#maxStorageBytes ?? Infinity, 16 * 1024 * 1024,
+        seedBytes + INITIAL_DECODE_EXTRA_BYTE_LIMIT - this.#initialDecodeExtraBytes,
+        Math.max(seedBytes, this.#initialDecodeBytes.get(key) ?? 0))
       : this.#maxStorageBytes;
+    if (!alphaOnly && this.#usesPageCache(entry)) {
+      // Reserve extra seed pixels across both in-flight decodes and handoffs.
+      // The old seed floor remains available when the optional budget is full.
+      entry.initialDecodeExtraBytes = Math.max(0, entry.preparationStorageBytes! - seedBytes);
+      this.#initialDecodeExtraBytes += entry.initialDecodeExtraBytes;
+    }
     const decoding: Promise<DecodedTextureSource> = retainAlpha
       ? this.#platform.decode(asset, controller.signal, entry.preparationStorageBytes, true)
       : this.#platform.decode(asset, controller.signal, entry.preparationStorageBytes);
