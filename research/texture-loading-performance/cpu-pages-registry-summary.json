@@ -1,0 +1,182 @@
+{
+  "method": "Fresh browser profile, disabled HTTP cache, registry Nova, unchanged 1280x800 DPR1, hardware Intel Iris Xe ANGLE/Vulkan. Shared-host single runs; profiler timings are excluded.",
+  "desktop": {
+    "desktop-registry-eager-control": {
+      "completed": true,
+      "firstReadyMs": 7584.699999809265,
+      "interactionReadyMs": 5621.899999856949,
+      "errors": [],
+      "registryRequests": 556,
+      "registryEncodedBytes": 5739531,
+      "renderedFrames": 131,
+      "browser": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+        "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+      }
+    },
+    "desktop-registry-archive": {
+      "completed": true,
+      "firstReadyMs": 7247.700000047684,
+      "interactionReadyMs": 4904,
+      "errors": [],
+      "registryRequests": 218,
+      "registryEncodedBytes": 4740079,
+      "renderedFrames": 122,
+      "browser": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+        "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+      }
+    },
+    "desktop-registry-final": {
+      "completed": true,
+      "firstReadyMs": 7648,
+      "interactionReadyMs": 5443.200000047684,
+      "errors": [],
+      "registryRequests": 218,
+      "registryEncodedBytes": 4740035,
+      "renderedFrames": 138,
+      "browser": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+        "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+      }
+    },
+    "dev-registry-final": {
+      "completed": true,
+      "firstReadyMs": 13875.600000143051,
+      "interactionReadyMs": 11502.900000095367,
+      "errors": [],
+      "registryRequests": 219,
+      "registryEncodedBytes": 4746736,
+      "renderedFrames": 132,
+      "browser": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+        "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+      }
+    }
+  },
+  "ipad": {
+    "upload-baseline": {
+      "completed": true,
+      "firstReadyMs": 38062,
+      "elapsedMs": 38062,
+      "forcedContextLoss": false,
+      "events": [],
+      "errors": [],
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      }
+    },
+    "cpu-page-upload": {
+      "completed": true,
+      "firstReadyMs": 29439,
+      "elapsedMs": 29439,
+      "forcedContextLoss": false,
+      "events": [],
+      "errors": [],
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      }
+    },
+    "cpu-page-repeat": {
+      "completed": true,
+      "firstReadyMs": 30338,
+      "elapsedMs": 30338,
+      "forcedContextLoss": false,
+      "events": [],
+      "errors": [],
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      }
+    },
+    "cpu-page-batch16": {
+      "completed": true,
+      "firstReadyMs": 27592.000000000004,
+      "elapsedMs": 27592.000000000004,
+      "forcedContextLoss": false,
+      "events": [],
+      "errors": [],
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      }
+    },
+    "cpu-page-recovery": {
+      "completed": true,
+      "firstReadyMs": 29355,
+      "elapsedMs": 52459,
+      "forcedContextLoss": true,
+      "events": [
+        {
+          "type": "webglcontextlost",
+          "time": 29974,
+          "status": ""
+        },
+        {
+          "type": "webglcontextrestored",
+          "time": 30115.000000000004,
+          "status": ""
+        }
+      ],
+      "errors": [],
+      "context": {
+        "generation": 2,
+        "interruptions": 1,
+        "phase": "active",
+        "recoveries": 1
+      }
+    },
+    "registry-final": {
+      "completed": true,
+      "firstReadyMs": 25998,
+      "elapsedMs": 44272,
+      "forcedContextLoss": true,
+      "events": [
+        {
+          "type": "webglcontextlost",
+          "time": 26443,
+          "status": ""
+        },
+        {
+          "type": "webglcontextrestored",
+          "time": 26582,
+          "status": ""
+        }
+      ],
+      "errors": [],
+      "context": {
+        "generation": 2,
+        "interruptions": 1,
+        "phase": "active",
+        "recoveries": 1
+      }
+    },
+    "registry-transport": {
+      "completed": true,
+      "elapsedMs": 26465,
+      "registryTransport": {
+        "requests": 214,
+        "transferredBytes": 0,
+        "zipDownloads": [
+          {
+            "url": "https://registry.probabilityusercontent.nz/mod.io/8312-6405856/-/novaprobability-4cnr.zip",
+            "duration": 1273.9999999999995,
+            "encodedBodySize": 0
+          }
+        ]
+      },
+      "errors": [],
+      "events": []
+    }
+  }
+}

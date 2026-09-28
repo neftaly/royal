@@ -95,6 +95,9 @@ export type VirtualTextureRuntimeSnapshot = Readonly<{
   idleAstcSourceReads?: number;
   /** Bounded uncompressed handoff cache, included in automaticDecodedBytes. */
   retainedPagePixelBytes?: number;
+  cpuPageCacheBytes?: number;
+  cpuPageCacheLimitBytes?: number;
+  cpuPageCacheHits?: number;
   /** Optional background failure; usable RGBA pages remain resident. */
   idleAstcFailure?: string;
   /** VT upload bytes admitted during the most recent runtime update. */

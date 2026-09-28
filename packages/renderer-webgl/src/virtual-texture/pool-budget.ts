@@ -55,3 +55,18 @@ export const allocateVirtualTextureSlots = (
   }
   return shares;
 };
+
+/** Visible demand wins; only surplus capacity is promised to reusable pages. */
+export const allocateVirtualTexturePoolWithCache = (
+  requests: readonly (VirtualTexturePoolBudgetRequest & { cachedBytes: number })[],
+  budgetBytes: number,
+): Map<string, number> => {
+  const result = allocateVirtualTexturePoolBytes(requests, budgetBytes);
+  const remaining = Math.max(0, budgetBytes - [...result.values()].reduce((sum, bytes) => sum + bytes, 0));
+  const cache = allocateVirtualTexturePoolBytes(requests.map(request => ({
+    key: request.key, minimumBytes: 0,
+    wantedBytes: Math.max(0, request.cachedBytes - (result.get(request.key) ?? 0)),
+  })), remaining);
+  for (const [key, bytes] of cache) result.set(key, result.get(key)! + bytes);
+  return result;
+};

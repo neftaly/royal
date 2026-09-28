@@ -25,6 +25,11 @@ async def check(service_provider:ServiceProviderDep):
    await asyncio.wait_for(driver.start_session(),20)
    url=os.environ.get('ROYAL_GAME_URL','http://192.168.0.224:3004/play/#{%22doc%22:%22automerge:3vtV6rcsy9fMYzNonX6DWkpTkwtZ%22,%22sync%22:[%22wss://subduction.sync.inkandswitch.com%22]}')
    await asyncio.wait_for(driver.get(url),30)
+   if os.environ.get('ROYAL_PROFILE_UPLOADS') == '1':
+    await driver.execute_script("""
+performance.setResourceTimingBufferSize(5000);window.__royalUploadProfile={};const upload=WebGL2RenderingContext.prototype.texSubImage2D;
+WebGL2RenderingContext.prototype.texSubImage2D=function(...args){const source=args.at(-1),key=Object.prototype.toString.call(source)+':'+(source?.width??args[4])+'x'+(source?.height??args[5]);const started=performance.now();try{return upload.apply(this,args);}finally{const duration=performance.now()-started;const stats=window.__royalUploadProfile[key]??={count:0,totalMs:0,maxMs:0};stats.count++;stats.totalMs+=duration;stats.maxMs=Math.max(stats.maxMs,duration);}};
+""")
    started=asyncio.get_running_loop().time()
    for n in range(600):
     state=await asyncio.wait_for(driver.execute_script(Path(__file__).parent.parent.joinpath('texture-loading-performance/device-sample.js').read_text()),20)
@@ -62,6 +67,26 @@ return null;
       result['renderCompleted']=True;result['elapsedMs']=state['time'];print(json.dumps({'renderCompleted':True,'elapsedMs':state['time'],'context':state['snapshot']['context']}),flush=True)
       import base64
       Path(os.environ.get('ROYAL_DEVICE_SCREENSHOT','/tmp/royal-ipad-ready.png')).write_bytes(base64.b64decode((await driver.execute_script("const r=window.__royalDeviceRoot;r.invalidate();r.flushInvalidated();return r.canvas.toDataURL('image/png').split(',')[1];"))))
+      if os.environ.get('ROYAL_ZOOM_CYCLES') == '1':
+       result['zoom']=[{'label':'initial',**state}]
+       sample_script=Path(__file__).parent.parent.joinpath('texture-loading-performance/device-sample.js').read_text()
+       for label,delta in [('in-1',-1500),('out-1',1500),('in-2',-1500),('out-2',1500)]:
+        start=await driver.execute_script(f"const c=window.__royalDeviceRoot.canvas,b=c.getBoundingClientRect();c.dispatchEvent(new WheelEvent('wheel',{{clientX:b.x+b.width/2,clientY:b.y+b.height/2,deltaY:{delta},bubbles:true,cancelable:true}}));return performance.now();")
+        stable=0;previous=None
+        for attempt in range(120):
+         await asyncio.sleep(.5)
+         zoom_state=await driver.execute_script(sample_script)
+         if zoom_state.get('errors'):raise RuntimeError(json.dumps(zoom_state['errors']))
+         vt=zoom_state['snapshot']['resources']['virtualTextures']
+         signature=[vt.get(k) for k in ['pageRequests','uploadedPages','residentPages','pendingDemandResources','pendingPages']]
+         stable=stable+1 if signature==previous and vt['pendingPages']==0 and zoom_state['snapshot']['presentation']=='ready' else 0
+         previous=signature
+         result['zoom'].append({'label':label,**zoom_state})
+         if stable>=4:
+          result['zoom'].append({'label':label+'-settled','elapsedMs':zoom_state['time']-start,**zoom_state})
+          print(json.dumps({'zoom':label,'elapsedMs':zoom_state['time']-start,'residentPages':vt['residentPages'],'uploadedPages':vt['uploadedPages']}),flush=True)
+          break
+        else:raise RuntimeError('Zoom did not settle: '+label)
       point=await driver.execute_script("""
 const root=window.__royalDeviceRoot,box=root.canvas.getBoundingClientRect();
 for(let y=box.top+80;y<box.bottom-80;y+=24)for(let x=box.left+80;x<box.right-80;x+=24){if(document.elementFromPoint(x,y)!==root.canvas)continue;const hit=root.pick({clientX:x,clientY:y});const id=hit?.target.instanceId??hit?.target.pickingId;if(id&&window.__royalDeviceHandlers?.[id])return {x,y,id};}return null;
@@ -77,6 +102,10 @@ for(let y=box.top+80;y<box.bottom-80;y+=24)for(let x=box.left+80;x<box.right-80;
       selected=await driver.execute_script("return [...window.__royalDeviceStore.presence.getState().selection];")
       result['interaction']={'point':point,'selected':selected,'events':await driver.execute_script('return window.__royalInput;')}
       if point['id'] not in selected:raise RuntimeError('Physical Safari touch did not select the picked piece')
+      if os.environ.get('ROYAL_PROFILE_UPLOADS') == '1':
+       result['uploadProfile']=await driver.execute_script('return window.__royalUploadProfile;')
+       result['registryTransport']=await driver.execute_script("const entries=performance.getEntriesByType('resource').filter(e=>e.name.includes('registry.probabilityusercontent.nz/'));return {requests:entries.length,transferredBytes:entries.reduce((n,e)=>n+e.transferSize,0),zipDownloads:entries.filter(e=>e.name.endsWith('.zip')).map(e=>({url:e.name,duration:e.duration,encodedBodySize:e.encodedBodySize}))};")
+      result['registryProtocols']=await driver.execute_script("return performance.getEntriesByType('resource').filter(e=>e.name.includes('registry.probabilityusercontent.nz/')).map(e=>({url:e.name,protocol:e.nextHopProtocol,duration:e.duration,transferSize:e.transferSize,encodedBodySize:e.encodedBodySize}));")
       result['completed']=True
       break
     await asyncio.sleep(.5)

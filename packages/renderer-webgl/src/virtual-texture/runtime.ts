@@ -1,3 +1,4 @@
+import { CpuVirtualTexturePageCache } from "./cpu-page-cache";
 import { ordinaryTextureStorageBytes, VIRTUAL_TEXTURE_FALLBACK_EDGE } from "../texture/storage";
 import { reloadableRasterPagingEligible } from "./automatic-policy";
 import { RasterSourceCache } from "./raster-source-cache";
@@ -6,7 +7,7 @@ import { IdleAstcEncoder } from "./astc/encoder";
 import { IdleAstcStorage } from "./astc/storage";
 import { COMPRESSED_SLOT_BASE } from "./residency";
 import { ktx2Etc2StorageBytes } from "../texture/etc2-storage";
-import { allocateVirtualTexturePoolBytes, allocateVirtualTextureSlots } from "./pool-budget";
+import { allocateVirtualTexturePoolWithCache, allocateVirtualTextureSlots } from "./pool-budget";
 import { AUTOMATIC_VT_PAGE_SIZE, AUTOMATIC_VT_BORDER_TEXELS, texturePreviewReady } from "./automatic-policy";
 import type { SurfaceFrameView } from "../frame/surface-frame";
 import { planAutomaticTextureScene } from "./scene-plan";
@@ -82,8 +83,10 @@ const automaticSourceBytes = (source: DecodedTextureSource): number => (source.k
 const MAX_DECODE_JOBS = 4;
 const MAX_PENDING_PAGE_BYTES = 16 * 1024 * 1024;
 const MAX_UPLOADS_PER_FRAME = 4;
-const MAX_AUTOMATIC_PAGE_JOBS = 8;
-const MAX_AUTOMATIC_UPLOADS_PER_FRAME = 8;
+// CPU pages are small (about 68 KiB at the default size). Queue enough to
+// fill cheap uploads while retaining the byte cap and four active decode jobs.
+const MAX_AUTOMATIC_PAGE_JOBS = 16;
+const MAX_AUTOMATIC_UPLOADS_PER_FRAME = 16;
 const MAX_AUTOMATIC_UPLOAD_MS = 2;
 // Already-resident GPU copies need no decoding. Bound their bytes separately so
 // atlas growth does not spend one presentation per four small pages before
@@ -155,6 +158,7 @@ type RuntimeResource = {
   admittedPageLimit?: number;
   desiredPageCount?: number;
   rasterMip?: number;
+  lastUsedFrame?: number;
   readonly failedPages: Set<VirtualTexturePageKey>;
   gpu: GpuVirtualTexture | undefined;
   readonly key: string;
@@ -406,6 +410,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   #compressionFailure: string | undefined;
   #compressionGeneration = 0;
   readonly #pagePixels = new Map<string, { resource: RuntimeResource; pageKey: VirtualTexturePageKey; decoded: DecodedVirtualTexturePage }>();
+  readonly #cpuPages = new CpuVirtualTexturePageCache();
   #pixelCacheHits = 0;
   #idleSourceReads = 0;
   #compressionJob: { resource: RuntimeResource; gpu: GpuVirtualTexture; key: VirtualTexturePageKey; slot: number; abort: AbortController; blocks?: Uint8Array; fence?: WebGLSync; compressedSlot?: number; waits: number } | undefined;
@@ -419,6 +424,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   readonly #atlases = new Map<string, GpuVirtualTextureAtlas>();
   readonly #atlasDemand = new Map<string, number>();
   readonly #atlasDemandBytes = new Map<string, number>();
+  readonly #atlasCachedPages = new Map<string, number>();
   #atlasShares = new Map<string, number>();
   readonly #atlasMinimumSlots = new Map<string, number>();
   #atlasGrowthFailures = 0;
@@ -435,6 +441,10 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   readonly #protectedPoolPages = {
     has: (resourceKey: string, pageKey: VirtualTexturePageKey): boolean =>
       this.#resources.get(resourceKey)?.workspace.keys.has(pageKey) === true,
+    priority: (resourceKey: string, pageKey: VirtualTexturePageKey): number => {
+      const layout = this.#resources.get(resourceKey)?.layout;
+      return layout !== undefined && pageKey === virtualTexturePageKeyParts(layout.mipCount - 1, 0, 0) ? 1 : 0;
+    },
   };
   #scene: CanonicalSurfaceScene | null = null;
   #scenePlan = planAutomaticTextureScene(null);
@@ -526,7 +536,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     for (const atlas of this.#atlases.values()) atlasBytes += atlas.allocationBytes + (atlas.growth?.replacement.allocationBytes ?? 0);
     for (const resource of this.#resources.values()) atlasBytes += resource.gpu?.astc?.byteLength ?? 0;
     const cache = this.#rasterCache?.snapshot;
-    let automaticDecodedBytes = (cache?.bytes ?? 0) + this.#pagePixels.size * 132 ** 2 * 4;
+    let automaticDecodedBytes = (cache?.bytes ?? 0) + this.#cpuPages.bytes + this.#pagePixels.size * 132 ** 2 * 4;
     for (const resource of this.#resources.values()) automaticDecodedBytes += resource.gpu?.astc?.cpuBytes ?? 0;
     let automaticResources = 0;
     let failedPages = 0;
@@ -576,6 +586,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       ...(this.#idleStorageBytes() === 0 ? {} : { idleAstcBytes: this.#idleStorageBytes() }),
       ...(this.#compressionFailure === undefined ? {} : { idleAstcFailure: this.#compressionFailure }),
       ...(this.#pageRequests === 0 ? {} : { pageQueueMs: this.#pageTiming.queueMs, pageReadMs: this.#pageTiming.readMs, pageReadyWaitMs: this.#pageTiming.readyWaitMs, pageTimedReads: this.#pageTiming.reads, pageTimedUploads: this.#pageTiming.uploads, atlasGrowthFrames: this.#pageTiming.growthFrames }),
+      cpuPageCacheBytes: this.#cpuPages.bytes,
+      cpuPageCacheLimitBytes: this.#cpuPages.limitBytes,
+      cpuPageCacheHits: this.#cpuPages.hits,
       admittedUploadBytes: uploads.admittedBytes,
       atlasBytes,
       atlasPools: this.#atlases.size,
@@ -631,12 +644,13 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       }
     }
     for (const [key, { asset, storageKey }] of candidates) {
-      if (this.#activeStorageKeys?.has(storageKey) === false) continue;
       const existing = this.#resources.get(key);
       if (existing !== undefined) {
         claimed.add(key);
         continue;
       }
+      // Visibility gates new preparation, not ownership of already useful pages.
+      if (this.#activeStorageKeys?.has(storageKey) === false) continue;
       const decoded = this.#automatic.decoded(asset);
       if (decoded == null) {
         if (decoded === undefined) this.#automaticWaiting += 1;
@@ -675,6 +689,31 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         } };
       } else {
         const decodedBytes = this.#seenDecoded.get(decoded) === scan ? 0 : automaticSourceBytes(decoded);
+        if (retainedDecodedBytes + decodedBytes > MAX_LEASED_SOURCE_BYTES && this.#activeStorageKeys !== undefined) {
+          // Cold native-source leases must yield their CPU allowance to visible work.
+          const owners = new Map<DecodedTextureSource, number>();
+          const cold: RuntimeResource[] = [];
+          for (const owner of this.#resources.values()) {
+            if (owner.lease === undefined) continue;
+            owners.set(owner.lease.source, (owners.get(owner.lease.source) ?? 0) + 1);
+            const storage = candidates.get(owner.key)?.storageKey;
+            if (storage !== undefined && !this.#activeStorageKeys.has(storage)) cold.push(owner);
+          }
+          cold.sort((a, b) => (a.lastUsedFrame ?? 0) - (b.lastUsedFrame ?? 0));
+          for (const owner of cold) {
+            if (retainedDecodedBytes + decodedBytes <= MAX_LEASED_SOURCE_BYTES) break;
+            const source = owner.lease!.source, count = owners.get(source)! - 1;
+            owners.set(source, count);
+            if (count === 0) {
+              retainedDecodedBytes -= automaticSourceBytes(source);
+              this.#seenDecoded.delete(source);
+            }
+            this.#destroyResource(owner, true);
+            this.#resources.delete(owner.key);
+            claimed.delete(owner.key);
+            this.#bindingRevision++;
+          }
+        }
         if (retainedDecodedBytes + decodedBytes > MAX_LEASED_SOURCE_BYTES) {
           this.#automaticIneligible++;
           continue;
@@ -768,10 +807,12 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
 
     pending = this.#updateDemand(views);
     if (pending) this.#lastForeground = performance.now();
+    if (this.#reclaimColdStorage()) webGlStateChanged = true;
     this.#atlasDemand.clear();
     this.#atlasDemandBytes.clear();
+    this.#atlasCachedPages.clear();
     this.#atlasMinimumSlots.clear();
-    const poolRequests = new Map<string, { key: string; minimumBytes: number; wantedBytes: number }>();
+    const poolRequests = new Map<string, { key: string; minimumBytes: number; wantedBytes: number; cachedBytes: number }>();
     for (const resource of this.#resources.values()) {
       this.#refreshFrameDemand(resource);
       const layout = resource.layout;
@@ -780,21 +821,39 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       const bytesPerPage = virtualTexturePageBytes(layout);
       const compressedDemand = this.#compressedDemand(resource);
       const count = Math.max(0, (resource.desiredPageCount ?? 0) - compressedDemand);
+      let cached = 0;
+      for (const [page, slot] of resource.gpu?.residentSlots ?? []) {
+        if (slot < COMPRESSED_SLOT_BASE && !resource.desiredWorkspace.keys.has(page)) cached++;
+      }
+      this.#atlasCachedPages.set(key, (this.#atlasCachedPages.get(key) ?? 0) + cached);
       this.#atlasDemand.set(key, (this.#atlasDemand.get(key) ?? 0) + count);
       this.#atlasDemandBytes.set(key, (this.#atlasDemandBytes.get(key) ?? 0) + count * bytesPerPage);
-      this.#atlasMinimumSlots.set(key, (this.#atlasMinimumSlots.get(key) ?? 0) + (count > 0 ? 1 : 0));
+      this.#atlasMinimumSlots.set(key, Math.max(compressedDemand > 0 ? 1 : 0,
+        (this.#atlasMinimumSlots.get(key) ?? 0) + (count > 0 ? 1 : 0)));
       if (count === 0 && !this.#atlases.has(key)) continue;
-      if (!poolRequests.has(key)) poolRequests.set(key, { key, minimumBytes: bytesPerPage, wantedBytes: 0 });
+      if (!poolRequests.has(key)) poolRequests.set(key, { key, minimumBytes: bytesPerPage, wantedBytes: 0, cachedBytes: 0 });
     }
     // Foreground allocations must never wait for optional replacement storage
     // held by a paused encoder. The published ASTC atlas remains available.
     if (this.#compressionBusy()) this.#compressionJob?.gpu.astc?.cancelGrowth();
     for (const request of poolRequests.values()) {
-      request.wantedBytes ||= 2 ** Math.ceil(Math.log2(Math.max(1, this.#atlasDemand.get(request.key)!))) * request.minimumBytes;
-      request.minimumBytes *= Math.max(1, this.#atlasMinimumSlots.get(request.key)!);
+      const demand = this.#atlasDemand.get(request.key)!;
+      const cached = this.#atlasCachedPages.get(request.key) ?? 0;
+      // Compressed pages still publish through a binding with a valid RGBA
+      // atlas. Keep that one-cell scaffold for visible compressed-only demand.
+      request.wantedBytes = Math.max(this.#atlasMinimumSlots.get(request.key)!,
+        demand === 0 ? 0 : 2 ** Math.ceil(Math.log2(demand))) * request.minimumBytes;
+      request.cachedBytes = 2 ** Math.ceil(Math.log2(Math.max(1, demand + cached))) * request.minimumBytes;
+      request.minimumBytes *= this.#atlasMinimumSlots.get(request.key)!;
+    }
+    // Do not let optional cache capacity consume the scratch space needed to
+    // finish another pool's foreground growth. Both old and new atlases count.
+    if (poolRequests.size > 1 && [...poolRequests.values()].some(request =>
+      request.wantedBytes > (this.#atlases.get(request.key)?.allocationBytes ?? 0))) {
+      for (const request of poolRequests.values()) request.cachedBytes = request.wantedBytes;
     }
     this.#budget.setTextureMigrationReserve(Math.max(0, ...[...poolRequests.values()].map(request => request.minimumBytes)));
-    this.#atlasShares = allocateVirtualTexturePoolBytes([...poolRequests.values()],
+    this.#atlasShares = allocateVirtualTexturePoolWithCache([...poolRequests.values()],
       Math.max(0, this.#budget.textureBudgetBytes - this.#nonAtlasTextureBytes()
         // Waiting now counts the active working set, not the whole catalogue.
         // Its ordinary coverage must fit before detail consumes the remainder.
@@ -841,7 +900,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       }
       if (!needsFit) continue;
       const preparationSlots = this.#preparationAtlas(atlas).slotCount;
-      const requests = resources.filter((resource) => (resource.desiredPageCount ?? 0) > 0).map((resource) => {
+      const requests = resources.filter((resource) => (resource.desiredPageCount ?? 0) > this.#compressedDemand(resource)).map((resource) => {
         return { key: resource.key, minimumBytes: 1,
           wantedBytes: Math.max(1, Math.min(resource.desiredPageCount! - this.#compressedDemand(resource), preparationSlots)),
         };
@@ -1055,7 +1114,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
             || (resource.asset.colorSpace ?? layout.colorSpace) !== "srgb"
             || (gpu.astc?.blocks.length ?? 0) >= 512) continue;
           for (const [key, slot] of gpu.residentSlots) {
-            if (this.#pagePixels.has(`${resource.key}:${key}`) !== cached || slot >= COMPRESSED_SLOT_BASE || typeof key !== "number" || resource.workspace.keys.has(key) !== visible
+            if ((this.#pagePixels.has(`${resource.key}:${key}`) || this.#cpuPages.has(resource, key)) !== cached || slot >= COMPRESSED_SLOT_BASE || typeof key !== "number" || resource.workspace.keys.has(key) !== visible
             ) continue;
             const abort = new AbortController();
             const generation = this.#compressionGeneration;
@@ -1063,8 +1122,11 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
             const page = { mip: key % 256, x: Math.floor(key / 256) % 65536, y: Math.floor(key / 0x1000000) };
             const retained = this.#pagePixels.get(`${resource.key}:${key}`);
             this.#pagePixels.delete(`${resource.key}:${key}`);
-            if (retained !== undefined) this.#pixelCacheHits++; else this.#idleSourceReads++;
-            void (retained === undefined ? resource.source.read(page, abort.signal) : Promise.resolve(retained.decoded)).then(async decoded => {
+            const cpuPixels = retained === undefined ? this.#cpuPages.get(resource, key) : undefined;
+            const existing = retained?.decoded ?? (cpuPixels === undefined ? undefined
+              : { kind: "image" as const, source: cpuPixels, close: () => undefined });
+            if (existing !== undefined) this.#pixelCacheHits++; else this.#idleSourceReads++;
+            void (existing === undefined ? resource.source.read(page, abort.signal) : Promise.resolve(existing)).then(async decoded => {
               if (decoded === undefined) throw new Error("Idle ASTC source unavailable");
               try {
                 if (decoded.kind !== "image") throw new Error("Idle ASTC requires RGBA pixels");
@@ -1274,7 +1336,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         this.#clearReadyPages(resource);
       }
       this.#cancelStalePageReads(resource);
-      if (resource.gpu !== undefined) {
+      // Cold pages are reusable cache. Slot admission reclaims them when needed;
+      // leaving the frustum alone must not discard the previous view's detail.
+      if (resource.gpu?.residentSlots.size === 0 && resource.gpu.atlas.growth === undefined) {
         this.#releaseGpuResource(resource);
         this.#bindingRevision++;
         return true;
@@ -1349,6 +1413,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       }
       resource.readyPages.length = retainedReadyPages;
     }
+    resource.lastUsedFrame = this.#frame;
     for (let index = 0; index < resource.workspace.count; index += 1) {
       const key = virtualTexturePageKeyParts(
         resource.workspace.mips[index]!,
@@ -1362,6 +1427,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
   }
 
   #destroyResource(resource: RuntimeResource, deleteGpu: boolean): void {
+    this.#cpuPages.deleteOwner(resource);
     this.#clearPagePixels(resource);
     if (this.#compressionJob?.resource === resource) this.#cancelCompression();
     resource.abort.abort();
@@ -1375,12 +1441,49 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     resource.lease?.release();
   }
 
+  /** Cold page tables/atlases yield to actual foreground allocation pressure. */
+  #reclaimColdStorage(): boolean {
+    let required = this.#automaticWaiting
+      * ordinaryTextureStorageBytes(VIRTUAL_TEXTURE_FALLBACK_EDGE, VIRTUAL_TEXTURE_FALLBACK_EDGE, true);
+    const missingPools = new Set<string>();
+    const cold: { resource: RuntimeResource; lastUsed: number }[] = [];
+    for (const resource of this.#resources.values()) {
+      if (resource.layout === undefined || resource.sourceFailure !== undefined) continue;
+      if ((resource.desiredPageCount ?? 0) > 0 && resource.gpu === undefined) {
+        required += resource.layout.tableByteLength;
+        const key = virtualTextureAtlasKey(resource, resource.layout);
+        if (!this.#atlases.has(key) && !missingPools.has(key)) {
+          missingPools.add(key);
+          required += virtualTexturePageBytes(resource.layout);
+        }
+      } else if (resource.gpu !== undefined && resource.desiredPageCount === 0
+        && resource.demandRevision === this.#viewRevision) {
+        cold.push({ resource, lastUsed: resource.lastUsedFrame ?? 0 });
+      }
+    }
+    this.#budget.reclaimTextureSpace(required);
+    const needsSpace = () => required > this.#budget.textureAvailableBytes
+      || this.#budget.textureRetainedBytes > this.#budget.textureBudgetBytes;
+    if (!needsSpace()) return false;
+    cold.sort((a, b) => a.lastUsed - b.lastUsed);
+    let changed = false;
+    for (const { resource } of cold) {
+      if (!needsSpace()) break;
+      this.#clearReadyPages(resource);
+      this.#releaseGpuResource(resource);
+      resource.demandNeedsFit = true;
+      this.#bindingRevision++;
+      changed = true;
+    }
+    return changed;
+  }
+
   #targetAtlasSlots(key: string): number {
     const count = this.#atlasDemand.get(key) ?? 0;
     const pageBytes = count > 0 ? this.#atlasDemandBytes.get(key)! / count
       : (this.#atlases.get(key)?.storedPageSize ?? NaN) ** 2 * 4;
     const share = this.#atlasShares.get(key);
-    return Math.min(2 ** Math.ceil(Math.log2(Math.max(1, count))),
+    return Math.min(2 ** Math.ceil(Math.log2(Math.max(1, count + (this.#atlasCachedPages.get(key) ?? 0)))),
       share === undefined || !Number.isFinite(pageBytes) ? Infinity : Math.floor(share / pageBytes));
   }
 
@@ -1417,6 +1520,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
       missingBytes += Math.max(0, wantedBytes - (other?.allocationBytes ?? 0));
       replacementBytes = Math.max(replacementBytes, wantedBytes);
     }
+    if (demand > atlas.slotCount) this.#budget.reclaimTextureSpace(
+      Math.min(this.#atlasDemandBytes.get(atlas.key) ?? 0, this.#budget.textureBudgetBytes));
     const competingPressure = missingBytes > this.#atlasAllowance()
       || replacementBytes > this.#budget.textureAvailableBytes;
     const preserveCached = this.#atlasHasCompression(atlas) && !competingPressure;
@@ -1914,7 +2019,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         }
         return false;
       }
-      if ((gpu.residentSlots.size > 0 || detailSource !== undefined) && this.#detailJobs > 0) return false;
+      if ((gpu.residentSlots.size > 0 || detailSource !== undefined) && this.#detailJobs > 0
+        && !this.#cpuPages.has(resource, key)) return false;
       if (byteLength > MAX_PENDING_PAGE_BYTES) {
         resource.failedPages.add(key);
         this.#changed();
@@ -1942,7 +2048,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     const controller = new AbortController();
     // The native preview stays bound while its raster detail uses the background lane.
     const retainedSource = resource.lease?.source;
-    const detail = (resource.gpu!.residentSlots.size > 0
+    const cachedPixels = this.#cpuPages.get(resource, pageKey);
+    const detail = cachedPixels === undefined && (resource.gpu!.residentSlots.size > 0
       || (retainedSource !== undefined && automaticVirtualTextureHasPreview(retainedSource)));
     if (detail) this.#detailJobs += 1;
     this.#pendingPageBytes += byteLength;
@@ -1953,7 +2060,9 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     this.#changed(false);
     // Generated page work uses the bounded foreground or detail preparation lane.
     const queuedAt = performance.now();
-    void (detail ? this.#scheduleDetail : this.#schedule)(
+    void (cachedPixels !== undefined
+      ? Promise.resolve({ kind: "image" as const, source: cachedPixels, close: () => undefined })
+      : (detail ? this.#scheduleDetail : this.#schedule)(
       controller.signal,
       async () => {
         const startedAt = performance.now();
@@ -1962,8 +2071,12 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
         try { return await (source.read(page, controller.signal)); }
         finally { this.#pageTiming.readMs += performance.now() - startedAt; }
       },
-    ).then((decoded) => {
+    )).then((decoded) => {
       const current = resource.loadingPages.get(pageKey) === controller;
+      if (current && !controller.signal.aborted && !resource.abort.signal.aborted && !this.#disposed
+        && typeof ImageData !== "undefined" && decoded.source instanceof ImageData) {
+        this.#cpuPages.set(resource, pageKey, decoded.source);
+      }
       if (
         controller.signal.aborted
         || !current

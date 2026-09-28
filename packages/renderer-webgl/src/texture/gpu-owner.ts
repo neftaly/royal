@@ -75,6 +75,8 @@ const usesMipmaps = (filter: string): boolean => filter.includes("mipmap");
 export class TextureGpuOwner {
   readonly #anisotropy: TextureAnisotropy;
   readonly #budget: PersistentGpuBudgetOwner;
+  readonly #unregisterReclaimer: () => void;
+  readonly #coldStorage = new Set<string>();
   readonly #deniedStorageKeys = new Set<string>();
   readonly #deferredStorageKeys = new Set<string>();
   readonly #gl: WebGL2RenderingContext;
@@ -106,6 +108,15 @@ export class TextureGpuOwner {
     this.#anisotropy = anisotropy;
     this.#gl = gl;
     this.#budget = budget;
+    this.#unregisterReclaimer = budget.registerReclaimer(bytes => {
+      for (const key of this.#coldStorage) {
+        const texture = this.#textures.get(key);
+        if (texture === undefined) continue;
+        bytes -= texture.byteLength;
+        this.#releaseStorage(key, texture);
+        if (bytes <= 0) break;
+      }
+    });
     this.#uploadBudget = uploadBudget;
     this.#etc2Available = etc2Available;
   }
@@ -120,7 +131,10 @@ export class TextureGpuOwner {
   /** Complete scene ownership survives while offscreen storage can be reclaimed. */
   setActiveStorageKeys(keys: ReadonlySet<string>): void {
     this.#activeStorageKeys = keys;
-    this.#releaseUnclaimedStorage(keys);
+    for (const key of this.#textures.keys()) {
+      if (keys.has(key)) this.#coldStorage.delete(key);
+      else this.#coldStorage.add(key);
+    }
   }
 
   #storageSize(binding: CanonicalTextureBinding): { width: number; height: number } {
@@ -133,6 +147,8 @@ export class TextureGpuOwner {
   }
 
   dispose(): void {
+    this.#unregisterReclaimer();
+    this.#coldStorage.clear();
     for (const resource of this.#samplers.values()) this.#gl.deleteSampler(resource.sampler);
     for (const resource of this.#textures.values()) {
       this.#gl.deleteTexture(resource.texture);
@@ -149,6 +165,7 @@ export class TextureGpuOwner {
 
   /** Context loss invalidates handles without issuing deletion calls against the lost generation. */
   invalidate(): void {
+    this.#coldStorage.clear();
     this.#anisotropy.invalidate();
     this.#nativeAvailable.clear();
     this.#samplers.clear();
@@ -280,15 +297,20 @@ export class TextureGpuOwner {
   #releaseUnclaimedStorage(storageKeys: ReadonlySet<string>): void {
     for (const [key, resource] of this.#textures) {
       if (storageKeys.has(key)) continue;
-      this.#gl.deleteTexture(resource.texture);
-      this.#budget.release(resource.budgetIdentity);
-      this.#textures.delete(key);
-      this.#onFallbackChanged(key, false);
-      this.#releasedStorageKeys.add(key);
-      this.#uploadedStorageKeys.delete(key);
-      this.#deniedStorageKeys.delete(key);
-      this.#deferredStorageKeys.delete(key);
+      this.#releaseStorage(key, resource);
     }
+  }
+
+  #releaseStorage(key: string, resource: GpuTexture): void {
+    this.#gl.deleteTexture(resource.texture);
+    this.#budget.release(resource.budgetIdentity);
+    this.#textures.delete(key);
+    this.#coldStorage.delete(key);
+    this.#onFallbackChanged(key, false);
+    this.#releasedStorageKeys.add(key);
+    this.#uploadedStorageKeys.delete(key);
+    this.#deniedStorageKeys.delete(key);
+    this.#deferredStorageKeys.delete(key);
   }
 
   #releaseUnclaimedSamplers(samplerKeys: ReadonlySet<string>): void {

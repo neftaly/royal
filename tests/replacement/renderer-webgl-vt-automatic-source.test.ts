@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createGeneratedVirtualTextureLayout } from "../../packages/renderer-webgl/src/virtual-texture/layout";
 import {
   automaticVirtualTextureEligible,
   createAutomaticRasterPageSource,
   createAutomaticPreviewPageSource,
   planAutomaticVirtualTextureAxis,
+  renderAutomaticPage,
 } from "../../packages/renderer-webgl/src/virtual-texture/automatic-page-source";
 
 afterEach(() => {
@@ -12,7 +14,7 @@ afterEach(() => {
 
 describe("automatic virtual texture page source", () => {
   it.each(["abort", "close"] as const)("isolates %s during shared lazy raster loading", async (mode) => {
-    const context = { drawImage: vi.fn(), clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
+    const context = { drawImage: vi.fn(), getImageData: vi.fn(() => ({ width: 132, height: 132, data: new Uint8ClampedArray(132 * 132 * 4) })), clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
     const canvas = { getContext: () => context, width: 0, height: 0 };
     const createElement = vi.fn(() => canvas);
     vi.stubGlobal("document", { createElement });
@@ -46,6 +48,28 @@ describe("automatic virtual texture page source", () => {
     survivor.close?.();
     // The shared decoded-source owner, not either page source, closes the image.
     expect(close).not.toHaveBeenCalled();
+  });
+
+  it.each(["success", "draw-failure", "read-failure", "missing-context"])("releases page canvas backing immediately on %s", mode => {
+    const pixels = { width: 132, height: 132, data: new Uint8ClampedArray(132 * 132 * 4) };
+    const context = { drawImage: vi.fn(() => { if (mode === "draw-failure") throw new Error("draw failed"); }),
+      getImageData: vi.fn(() => { if (mode === "read-failure") throw new Error("read failed"); return pixels; }),
+      clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn() };
+    const canvas = { width: 0, height: 0, getContext: () => mode === "missing-context" ? null : context };
+    vi.stubGlobal("document", { createElement: () => canvas });
+    const layout = createGeneratedVirtualTextureLayout({ width: 512, height: 512, pageSize: 128, borderTexels: 2, colorSpace: "srgb" });
+    const sampler = { magFilter: "linear", minFilter: "linear-mipmap-linear", wrapS: "clamp-to-edge", wrapT: "clamp-to-edge" } as const;
+    const render = () => renderAutomaticPage(layout, sampler, {} as ImageBitmap, 1, 1,
+      { mip: 0, x: 0, y: 0 }, new AbortController().signal);
+    if (mode === "success") {
+      const page = render();
+      expect(page.source).toBe(pixels);
+      expect(context.getImageData).toHaveBeenCalledWith(0, 0, 132, 132);
+      expect([canvas.width, canvas.height]).toEqual([1, 1]);
+      page.close();
+      expect(pixels.data.byteLength).toBe(132 * 132 * 4);
+    } else expect(render).toThrow();
+    expect([canvas.width, canvas.height]).toEqual([1, 1]);
   });
 
   it("selects only sufficiently large browser raster sources", () => {

@@ -8,15 +8,20 @@ import { fakeGl } from "./support/canvas-root-harness";
 import * as automaticPageSources from "../../packages/renderer-webgl/src/virtual-texture/automatic-page-source";
 import * as storagePlans from "../../packages/renderer-webgl/src/virtual-texture/storage-plan";
 import { createGeneratedVirtualTextureLayout } from "../../packages/renderer-webgl/src/virtual-texture/layout";
+import { textureStorageKey } from "../../packages/renderer-webgl/src/texture/source";
 import { waitFor } from "./support/wait-for";
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-const harness = async (virtualSize = 1024, budgetBytes?: number, maxTextureSize?: number) => {
+const harness = async (virtualSize = 1024, budgetBytes?: number, maxTextureSize?: number, cpuPages = false) => {
   const decoded = { width: virtualSize, height: virtualSize, source: {} as ImageBitmap };
+  class CpuPixels { width = 130; height = 130; data = new Uint8ClampedArray(130 * 130 * 4); }
+  if (cpuPages) vi.stubGlobal("ImageData", CpuPixels);
+  const read = vi.fn(async () => ({ kind: "image" as const,
+    source: (cpuPages ? new CpuPixels() : { width: 130, height: 130 }) as unknown as ImageBitmap, close: vi.fn() }));
   vi.spyOn(automaticPageSources, "createAutomaticRasterPageSource").mockImplementation((_source, _sampler, colorSpace) => ({
     layout: createGeneratedVirtualTextureLayout({ width: virtualSize, height: virtualSize, pageSize: 128, borderTexels: 1, colorSpace }),
-    read: async () => ({ kind: "image", source: { width: 130, height: 130 } as ImageBitmap, close: vi.fn() }),
+    read,
   }));
   const texture = imageTexture("https://example.test/map.png");
   const gl = fakeGl();
@@ -38,13 +43,83 @@ const harness = async (virtualSize = 1024, budgetBytes?: number, maxTextureSize?
     runtime.update([view]);
     expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 5, pendingPages: 0 });
   });
-  return { runtime, view, gl, budget, texture };
+  return { runtime, view, gl, budget, texture, read };
 };
 
 const copiedPages = (gl: ReturnType<typeof fakeGl>): number => gl.copyTexSubImage2D.mock.calls.reduce(
   (total, call) => total + Number(call[6]) * Number(call[7]) / (130 * 130), 0);
 
 describe("demand-grown RGBA atlases", () => {
+  it("keeps resident detail across offscreen and active-set round trips without new reads", async () => {
+    const { runtime, view, texture, budget } = await harness();
+    try {
+      const before = runtime.runtimeSnapshot();
+      const binding = runtime.automaticBinding(texture);
+      const bytes = budget.snapshot().retainedBytes;
+      view.viewProjection = [...identityMat4()] as typeof view.viewProjection;
+      view.viewProjection[12] = 100;
+      runtime.setActiveStorageKeys!(new Set());
+      for (let frame = 0; frame < 20; frame++) runtime.update([view]);
+      expect(runtime.runtimeSnapshot().residentPages).toBe(before.residentPages);
+      expect(budget.snapshot().retainedBytes).toBe(bytes);
+      view.viewProjection[12] = 0;
+      // The runtime should retain an existing owner even while registration is
+      // reconciled against an empty active set.
+      runtime.setScene(prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}), nodes: [
+        mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture }) }),
+      ] })));
+      runtime.setActiveStorageKeys!(new Set([textureStorageKey(texture)]));
+      for (let frame = 0; frame < 20; frame++) runtime.update([view]);
+      expect(runtime.automaticBinding(texture)).toBe(binding);
+      expect(runtime.runtimeSnapshot().pageRequests).toBe(before.pageRequests);
+    } finally { runtime.dispose(); }
+    expect(budget.snapshot().retainedBytes).toBe(0);
+  });
+
+  it("reclaims offscreen residency when the texture budget is needed elsewhere", async () => {
+    const { runtime, view, budget } = await harness();
+    try {
+      view.viewProjection = [...identityMat4()] as typeof view.viewProjection;
+      view.viewProjection[12] = 100;
+      for (let frame = 0; frame < 10; frame++) runtime.update([view]);
+      expect(runtime.runtimeSnapshot().residentPages).toBe(5);
+      budget.setTextureBudget(0);
+      runtime.update([view]);
+      expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 0, atlasBytes: 0, pendingPages: 0 });
+      expect(budget.snapshot().retainedBytes).toBe(0);
+      budget.setTextureBudget(budget.budgetBytes);
+      view.viewProjection[12] = 0;
+      await waitFor(() => {
+        runtime.update([view]);
+        expect(runtime.runtimeSnapshot()).toMatchObject({ residentPages: 5, unresidentPages: 0 });
+      });
+    } finally { runtime.dispose(); }
+  });
+
+  it("reuploads existing CPU pages after GPU reclamation and context loss without regenerating them", async () => {
+    const { runtime, view, budget, read } = await harness(1024, undefined, undefined, true);
+    try {
+      const reads = read.mock.calls.length;
+      expect(runtime.runtimeSnapshot().cpuPageCacheBytes).toBe(5 * 130 * 130 * 4);
+      view.viewProjection = [...identityMat4()] as typeof view.viewProjection;
+      view.viewProjection[12] = 100;
+      for (let frame = 0; frame < 10; frame++) runtime.update([view]);
+      budget.setTextureBudget(0);
+      runtime.update([view]);
+      expect(runtime.runtimeSnapshot().residentPages).toBe(0);
+      budget.setTextureBudget(budget.budgetBytes);
+      view.viewProjection[12] = 0;
+      await waitFor(() => { runtime.update([view]); expect(runtime.runtimeSnapshot().residentPages).toBe(5); });
+      expect(read).toHaveBeenCalledTimes(reads);
+      runtime.invalidate();
+      await waitFor(() => { runtime.update([view]); expect(runtime.runtimeSnapshot().residentPages).toBe(5); });
+      expect(read).toHaveBeenCalledTimes(reads);
+      expect(runtime.runtimeSnapshot().cpuPageCacheHits).toBe(10);
+      runtime.setScene(null);
+      expect(runtime.runtimeSnapshot().cpuPageCacheBytes).toBe(0);
+    } finally { runtime.dispose(); }
+  });
+
   it("migrates small resident pages by a bounded byte allowance before requesting zoom detail", async () => {
     const { runtime, view, gl, texture } = await harness();
     try {

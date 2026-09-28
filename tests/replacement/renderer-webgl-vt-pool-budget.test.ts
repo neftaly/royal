@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { allocateVirtualTexturePoolBytes } from "../../packages/renderer-webgl/src/virtual-texture/pool-budget";
+import { allocateVirtualTexturePoolBytes, allocateVirtualTexturePoolWithCache } from "../../packages/renderer-webgl/src/virtual-texture/pool-budget";
 
 it("reserves coarse coverage and distributes excess independent of insertion order", () => {
   const requests = [
@@ -44,4 +44,14 @@ it("redistributes bytes through successive demand caps without starving the last
   expect([...allocateVirtualTexturePoolBytes(requests, 160).values()]).toEqual([11, 20, 50, 79]);
   expect(Object.fromEntries(allocateVirtualTexturePoolBytes([...requests].reverse(), 160)))
     .toEqual({ 0: 11, 1: 20, 2: 50, 3: 79 });
+});
+
+it("uses spare capacity for cached pages without taking bytes from visible detail", () => {
+  const requests = [
+    { key: "cold", minimumBytes: 0, wantedBytes: 0, cachedBytes: 100 },
+    { key: "visible", minimumBytes: 10, wantedBytes: 80, cachedBytes: 120 },
+  ];
+  expect(Object.fromEntries(allocateVirtualTexturePoolWithCache(requests, 60))).toEqual({ cold: 0, visible: 60 });
+  expect(Object.fromEntries(allocateVirtualTexturePoolWithCache(requests, 100))).toEqual({ cold: 10, visible: 90 });
+  expect(Object.fromEntries(allocateVirtualTexturePoolWithCache(requests, 300))).toEqual({ cold: 100, visible: 120 });
 });

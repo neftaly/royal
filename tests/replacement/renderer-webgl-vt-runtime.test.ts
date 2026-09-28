@@ -1,3 +1,4 @@
+import { textureStorageKey } from "../../packages/renderer-webgl/src/texture/source";
 import * as automaticSources from "../../packages/renderer-webgl/src/virtual-texture/automatic-page-source";
 import {
   imageTexture,
@@ -286,7 +287,7 @@ describe("browser virtual texture runtime", () => {
   it("routes automatic raster pages through the shared demand and residency runtime", async () => {
     const context = {
       clearRect: vi.fn(),
-      drawImage: vi.fn(),
+      drawImage: vi.fn(), getImageData: vi.fn(() => ({ width: 132, height: 132, data: new Uint8ClampedArray(132 * 132 * 4) })),
       imageSmoothingEnabled: false,
       imageSmoothingQuality: "low",
       restore: vi.fn(),
@@ -397,4 +398,24 @@ it("registers artwork beyond the decoded cache limit from coarse source metadata
   expect(acquireDecoded).toHaveBeenCalledTimes(20);
   expect(loadRaster).not.toHaveBeenCalled();
   runtime.dispose();
+});
+
+it("reclaims cold source leases when a newly visible image needs the CPU allowance", () => {
+  const assets = [imageTexture("/first-large.png"), imageTexture("/second-large.png")];
+  const sources = assets.map(() => ({ width: 4096, height: 4096, source: {} as ImageBitmap }));
+  const decoded = (asset: { kind: string; src?: string }) => sources[asset.src === assets[0]!.src ? 0 : 1]!;
+  const release = vi.fn();
+  const runtime = createBrowserVirtualTextureRuntime(fakeGl(), undefined, undefined, {
+    decoded, acquireDecoded: asset => ({ source: decoded(asset), release }), onChanged: vi.fn(),
+  });
+  try {
+    runtime.setActiveStorageKeys!(new Set([textureStorageKey(assets[0]!)]));
+    runtime.setScene(prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}), nodes: assets.map(texture =>
+      mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture }) })) }), undefined, undefined, decoded));
+    expect(runtime.runtimeSnapshot().automaticResources).toBe(1);
+    runtime.setActiveStorageKeys!(new Set([textureStorageKey(assets[1]!)]));
+    expect(release).toHaveBeenCalledOnce();
+    expect(runtime.runtimeSnapshot()).toMatchObject({ automaticResources: 1, automaticIneligible: 0, automaticDecodedBytes: 64 * 1024 * 1024 });
+  } finally { runtime.dispose(); }
+  expect(release).toHaveBeenCalledTimes(2);
 });

@@ -141,51 +141,51 @@ export const renderAutomaticPage = (
   const storedPageSize = layout.pageSize + layout.borderTexels * 2;
   canvas.width = storedPageSize;
   canvas.height = storedPageSize;
-  // Request CPU backing for page generation; older browsers may ignore this hint.
-  const context = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
-  if (context === null) throw new Error("Royal automatic VT could not allocate a page canvas");
-  context.clearRect(0, 0, storedPageSize, storedPageSize);
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-  const sourceTexelsPerMipTexel = 2 ** page.mip;
-  const sourceX = (page.x * layout.pageSize - layout.borderTexels)
-    * sourceTexelsPerMipTexel;
-  const sourceY = (page.y * layout.pageSize - layout.borderTexels)
-    * sourceTexelsPerMipTexel;
-  const sourceSpan = storedPageSize * sourceTexelsPerMipTexel;
-  const xs = planAutomaticVirtualTextureAxis(
-    sourceX,
-    sourceSpan,
-    layout.width,
-    storedPageSize,
-    sampler.wrapS,
-  );
-  const ys = planAutomaticVirtualTextureAxis(
-    sourceY,
-    sourceSpan,
-    layout.height,
-    storedPageSize,
-    sampler.wrapT,
-  );
-  for (const y of ys) for (const x of xs) {
-    drawSegment(context, image, x, y, sourceScaleX, sourceScaleY);
-  }
-  if (signal.aborted) {
+  try {
+    // Request CPU backing for page generation; older browsers may ignore this hint.
+    const context = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
+    if (context === null) throw new Error("Royal automatic VT could not allocate a page canvas");
+    context.clearRect(0, 0, storedPageSize, storedPageSize);
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    const sourceTexelsPerMipTexel = 2 ** page.mip;
+    const sourceX = (page.x * layout.pageSize - layout.borderTexels)
+      * sourceTexelsPerMipTexel;
+    const sourceY = (page.y * layout.pageSize - layout.borderTexels)
+      * sourceTexelsPerMipTexel;
+    const sourceSpan = storedPageSize * sourceTexelsPerMipTexel;
+    const xs = planAutomaticVirtualTextureAxis(
+      sourceX,
+      sourceSpan,
+      layout.width,
+      storedPageSize,
+      sampler.wrapS,
+    );
+    const ys = planAutomaticVirtualTextureAxis(
+      sourceY,
+      sourceSpan,
+      layout.height,
+      storedPageSize,
+      sampler.wrapT,
+    );
+    for (const y of ys) for (const x of xs) {
+      drawSegment(context, image, x, y, sourceScaleX, sourceScaleY);
+    }
+    if (signal.aborted) throw new DOMException("VT page generation was aborted", "AbortError");
+    // Materialize CPU pixels during preparation. Canvas-backed WebGL uploads
+    // otherwise perform this readback inside the small frame upload budget.
+    return {
+      close: () => undefined,
+      kind: "image",
+      source: context.getImageData(0, 0, storedPageSize, storedPageSize),
+    };
+  } finally {
     canvas.width = 1;
     canvas.height = 1;
-    throw new DOMException("VT page generation was aborted", "AbortError");
   }
-  return {
-    close: () => {
-      canvas.width = 1;
-      canvas.height = 1;
-    },
-    kind: "image",
-    source: canvas,
-  };
 };
 
-/** Browser raster adapter; it owns page canvases but no demand, residency, or GL state. */
+/** Browser raster adapter; it produces CPU pages without demand, residency, or GL state. */
 export const createAutomaticRasterPageSource = (
   source: DecodedImageTextureSource,
   sampler: CanonicalTextureSampler,

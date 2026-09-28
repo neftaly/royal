@@ -15,6 +15,8 @@ export type VirtualTexturePoolSlot = Readonly<{
 
 export interface ProtectedVirtualTexturePoolPages {
   has(resourceKey: string, pageKey: VirtualTexturePageKey): boolean;
+  /** Higher values preserve a useful fallback until less valuable cache is gone. */
+  priority?(resourceKey: string, pageKey: VirtualTexturePageKey): number;
 }
 
 /** Patches only descendants affected by an added page, preserving finer mappings. */
@@ -64,14 +66,17 @@ export const selectVirtualTexturePoolSlot = (
   }
   let candidate = -1;
   let oldestFrame = Infinity;
+  let lowestPriority = Infinity;
   if (ownedSlots !== undefined) {
     for (const slot of ownedSlots.values()) {
       if (slot >= COMPRESSED_SLOT_BASE) continue;
       const resident = slots[slot]!;
       if (resident.pageKey === pageKey) return slot;
       if (protectedPages.has(resourceKey, resident.pageKey)) continue;
-      if (lastUsedFrames[slot]! < oldestFrame) {
+      const priority = protectedPages.priority?.(resourceKey, resident.pageKey) ?? 0;
+      if (priority < lowestPriority || (priority === lowestPriority && lastUsedFrames[slot]! < oldestFrame)) {
         candidate = slot;
+        lowestPriority = priority;
         oldestFrame = lastUsedFrames[slot]!;
       }
     }
@@ -85,8 +90,10 @@ export const selectVirtualTexturePoolSlot = (
     if (resident === undefined) return slot;
     if (protectedPages.has(resident.resourceKey, resident.pageKey)) continue;
     const lastUsed = lastUsedFrames[slot]!;
-    if (lastUsed < oldestFrame) {
+    const priority = protectedPages.priority?.(resident.resourceKey, resident.pageKey) ?? 0;
+    if (priority < lowestPriority || (priority === lowestPriority && lastUsed < oldestFrame)) {
       candidate = slot;
+      lowestPriority = priority;
       oldestFrame = lastUsed;
     }
   }

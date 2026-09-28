@@ -570,3 +570,49 @@ it("keeps the GPU copy while reacquiring a released source for late compaction",
   expect(gl.deleteTexture).toHaveBeenCalledOnce();
   owner.dispose();
 });
+
+it.each(["geometry", "texture", "replacement", "replacement scratch"] as const)("keeps cached textures when an oversized %s claim cannot fit", kind => {
+  const gl = fakeGl(), budget = new PersistentGpuBudgetOwner(1024);
+  budget.setTextureBudget(kind === "replacement scratch" ? 1024 : 768);
+  const replaced = {};
+  expect(budget.tryClaimTexture(replaced, 128)).toBe(true);
+  const owner = new TextureGpuOwner(gl, budget);
+  const input = binding("first", "linear", "first");
+  const original = owner.reconcileComplete([input]);
+  owner.setActiveStorageKeys(new Set());
+  const before = budget.snapshot().retainedBytes;
+  const admitted = kind === "geometry" ? budget.tryClaim({}, 1025)
+    : kind === "texture" ? budget.tryClaimTexture({}, 769)
+    : budget.tryClaimTextureReplacement({}, kind === "replacement scratch" ? 897 : 769, replaced);
+  expect(admitted).toBe(false);
+  expect(owner.takeReleasedStorageKeys()).toEqual([]);
+  expect(gl.deleteTexture).not.toHaveBeenCalled();
+  expect(budget.snapshot().retainedBytes).toBe(before);
+  expect(budget.snapshot().deniedClaims).toBe(1);
+  owner.setActiveStorageKeys(new Set(["first"]));
+  expect(owner.reconcileComplete([input])).toEqual(original);
+  owner.dispose();
+  budget.release(replaced);
+  expect(budget.snapshot().retainedBytes).toBe(0);
+});
+
+it("retains offscreen textures until another domain needs their bytes", () => {
+  const gl = fakeGl(), budget = new PersistentGpuBudgetOwner(1024);
+  budget.setTextureBudget(1024);
+  const owner = new TextureGpuOwner(gl, budget);
+  const first = binding("first", "linear", "first"), second = binding("second", "linear", "second");
+  owner.setActiveStorageKeys(new Set(["first", "second"]));
+  const original = owner.reconcileComplete([first, second]);
+  const uploaded = vi.mocked(gl.texImage2D).mock.calls.length;
+  owner.setActiveStorageKeys(new Set(["second"]));
+  expect(budget.textureRetainedBytes).toBe(512);
+  owner.setActiveStorageKeys(new Set(["first", "second"]));
+  expect(owner.reconcileComplete([first, second])).toEqual(original);
+  expect(gl.texImage2D).toHaveBeenCalledTimes(uploaded);
+  owner.setActiveStorageKeys(new Set(["second"]));
+  expect(budget.tryClaim({}, 600)).toBe(true);
+  expect(owner.takeReleasedStorageKeys()).toEqual(["first"]);
+  expect(budget.textureRetainedBytes).toBe(256);
+  expect(owner.retain(second)).toBe(original[1]);
+  owner.dispose();
+});

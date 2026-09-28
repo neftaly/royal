@@ -27,7 +27,7 @@ class EncoderWorker extends PoolWorker {
 }
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); EncoderWorker.instances = []; });
 
-const harness = async (failAstcProbe = false) => {
+const harness = async (failAstcProbe = false, cpuPages = false, reloadable = false) => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   let time = 0;
   vi.spyOn(performance, "now").mockImplementation(() => time);
@@ -37,10 +37,14 @@ const harness = async (failAstcProbe = false) => {
   const manifest = createGeneratedVirtualTextureLayout({ colorSpace: "srgb", pageSize: 128, borderTexels: 2, width: 1024, height: 1024 });
   let held = false;
   const gates: (() => void)[] = [];
+  class CpuPixels { width = 132; height = 132; data = new Uint8ClampedArray(132 * 132 * 4); }
+  if (cpuPages) vi.stubGlobal("ImageData", CpuPixels);
+  const pixels = () => ({ kind: "image" as const, source: (cpuPages ? new CpuPixels() : { width: 132, height: 132 }) as unknown as HTMLCanvasElement, close: vi.fn() });
   const read = vi.fn(async () => {
     if (held) await new Promise<void>(resolve => gates.push(resolve));
-    return { kind: "image" as const, source: { width: 132, height: 132 } as HTMLCanvasElement, close: vi.fn() };
+    return pixels();
   });
+  if (reloadable) vi.spyOn(sources, "renderAutomaticPage").mockImplementation(pixels);
   vi.spyOn(sources, "createAutomaticRasterPageSource").mockImplementation((_source, _sampler, colorSpace) => ({ layout: { ...manifest, colorSpace }, read }));
   const decoded = { width: 1024, height: 1024, source: {} as ImageBitmap };
   const asset = imageTexture("https://example.test/art.png");
@@ -49,6 +53,7 @@ const harness = async (failAstcProbe = false) => {
   const budget = new PersistentGpuBudgetOwner();
   const runtime = createBrowserVirtualTextureRuntime(gl, budget, undefined, {
     decoded: () => decoded, acquireDecoded: () => ({ source: decoded, release: vi.fn() }), onChanged: vi.fn(),
+    ...(reloadable ? { loadRaster: async () => decoded } : {}),
   });
   const matrix = identityMat4();
   const view = { view: matrix, viewProjection: matrix, viewport: { width: 256, height: 256, x: 0, y: 0 } };
@@ -338,4 +343,32 @@ it("keeps foreground RGBA usable when the optional ASTC capability probe throws"
     expect(EncoderWorker.instances).toHaveLength(0);
   } finally { h.runtime.dispose(); }
   for (const result of h.read.mock.results) expect((await result.value).close).toHaveBeenCalledTimes(1);
+});
+
+it("uses retained CPU pages beyond the small ASTC handoff without regenerating source pixels", async () => {
+  const h = await harness(false, true);
+  try {
+    h.view.viewport.width = h.view.viewport.height = 512;
+    for (let frame = 0; frame < 500; frame++) await h.frame();
+    const snapshot = h.runtime.runtimeSnapshot();
+    expect(snapshot.residentPages).toBeGreaterThan(8);
+    expect(snapshot.unresidentPages).toBe(0);
+    expect(snapshot.idleAstcBytes).toBeGreaterThan(0);
+    expect(snapshot.cpuPageCacheHits).toBeGreaterThan(0);
+    expect(snapshot.idleAstcSourceReads ?? 0).toBe(0);
+  } finally { h.runtime.dispose(); }
+});
+
+it("keeps reloadable compressed-only coverage resident with spare budget", async () => {
+  const h = await harness(false, true, true);
+  try {
+    for (let frame = 0; frame < 400; frame++) await h.frame();
+    const before = h.runtime.runtimeSnapshot();
+    expect(before.residentPages).toBeGreaterThan(0);
+    expect(before.idleAstcBytes).toBeGreaterThan(0);
+    for (let frame = 0; frame < 100; frame++) await h.frame();
+    expect(h.runtime.runtimeSnapshot()).toMatchObject({ residentPages: before.residentPages,
+      pageRequests: before.pageRequests, unresidentPages: 0 });
+    expect(h.runtime.automaticBinding(h.asset)).toBeDefined();
+  } finally { h.runtime.dispose(); }
 });

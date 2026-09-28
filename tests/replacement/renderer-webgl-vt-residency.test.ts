@@ -117,3 +117,11 @@ describe("VT2 residency core", () => {
     expect(selectVirtualTexturePoolSlot("capped", 3, slots, frames, protectedPages)).toBe(0);
   });
 });
+
+it("keeps cached coverage until detail and free slots are exhausted", () => {
+  const slots = [{ resourceKey: "cold", pageKey: "root" }, { resourceKey: "cold", pageKey: "detail" }];
+  const policy = { has: () => false, priority: (_resource: string, page: number | string) => page === "root" ? 1 : 0 };
+  expect(selectVirtualTexturePoolSlot("new", "root", slots, [1, 20], policy)).toBe(1);
+  expect(selectVirtualTexturePoolSlot("new", "root", [...slots, undefined], [1, 20, 0], policy)).toBe(2);
+  expect(selectVirtualTexturePoolSlot("new", "root", slots.slice(0, 1), [1], policy)).toBe(0);
+});

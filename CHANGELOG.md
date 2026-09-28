@@ -5,12 +5,16 @@ versions identify source-level prerelease checkpoints in this repository.
 
 ## Unreleased
 
+- Retain offscreen VT pages and ordinary textures until memory is needed, grow VT cache capacity from spare GPU budget, preserve fallback coverage under pressure, and reuse already-generated CPU pages from a bounded 16 MiB cache.
+
+- Prepare automatic virtual-texture pages as CPU pixels, release scratch canvases immediately, and batch up to sixteen small pages within the existing upload and memory limits.
+
 - Allow sixteen browser texture preparations behind the native decode byte gate so small images can advance together; custom decoders retain the four-job ceiling.
 
 - Bound concurrent native raster decodes by estimated source bytes and fit large AVIF images without a full-size ImageBitmap intermediate. Request CPU-backed staging canvases and release their pixels after use.
 - Recover allocation failures that precede context-loss events, discard stale browser pixel sources and in-flight decode results, and restore blend/draw state after WebGL recovery.
 
-- Stream reloadable raster textures from a bounded CPU cache, keep ordinary fallback and VT residency tied to visible demand, and share the remaining GPU budget after essential scene storage with bounded atlas migration headroom.
+- Stream reloadable raster textures from a bounded CPU cache, prioritize visible demand while retaining reusable fallback and VT residency, and share the remaining GPU budget after essential scene storage with bounded atlas migration headroom.
 - Reuse coarse decoded pixels during page generation, report source-cache timings and presentation readiness, and distinguish deferred offscreen glTF images from loading images.
 - Preserve existing GPU coverage when target replacement or late texture resizing cannot complete, and retry after capacity returns.
 - Avoid repeated texture-key serialization, subtree depth sorting and large-to-small incremental uploads during game loading. Skip VT detail for GPU-culled backfaces while preserving thin visible coverage and consistent source filtering across detail mips.

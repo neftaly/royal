@@ -1,0 +1,287 @@
+{
+  "desktop": [
+    {
+      "label": "quic-default-off-1",
+      "archive": false,
+      "interactiveMs": 8019.400000095367,
+      "fullDetailMs": 11536,
+      "requests": 555,
+      "bytes": 5734138,
+      "protocols": {
+        "h3": 554,
+        "no response": 1
+      },
+      "zipMs": [],
+      "completed": true,
+      "errors": [],
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "label": "quic-default-off-2",
+      "archive": false,
+      "interactiveMs": 7503.5,
+      "fullDetailMs": 11354.799999952316,
+      "requests": 552,
+      "bytes": 5942735,
+      "protocols": {
+        "h3": 552
+      },
+      "zipMs": [],
+      "completed": true,
+      "errors": [],
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "label": "quic-default-off-3",
+      "archive": false,
+      "interactiveMs": 7977,
+      "fullDetailMs": 11071,
+      "requests": 552,
+      "bytes": 6876182,
+      "protocols": {
+        "h3": 552
+      },
+      "zipMs": [],
+      "completed": true,
+      "errors": [],
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "label": "quic-default-off-4",
+      "archive": false,
+      "interactiveMs": 7523.599999904633,
+      "fullDetailMs": 11165,
+      "requests": 553,
+      "bytes": 5942597,
+      "protocols": {
+        "h3": 553
+      },
+      "zipMs": [],
+      "completed": true,
+      "errors": [],
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "label": "quic-default-off-5",
+      "archive": false,
+      "interactiveMs": 7075.399999856949,
+      "fullDetailMs": 11732.200000047684,
+      "requests": 552,
+      "bytes": 5831760,
+      "protocols": {
+        "h3": 551,
+        "no response": 1
+      },
+      "zipMs": [],
+      "completed": true,
+      "errors": [],
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "label": "quic-default-off-6",
+      "archive": false,
+      "interactiveMs": 5992.400000095367,
+      "fullDetailMs": 9802.299999952316,
+      "requests": 555,
+      "bytes": 5734621,
+      "protocols": {
+        "h3": 554,
+        "no response": 1
+      },
+      "zipMs": [],
+      "completed": true,
+      "errors": [],
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "label": "quic-default-on-1",
+      "archive": true,
+      "interactiveMs": 11177.200000047684,
+      "fullDetailMs": 14529,
+      "requests": 250,
+      "bytes": 5193335,
+      "protocols": {
+        "h3": 250
+      },
+      "zipMs": [
+        2481.7
+      ],
+      "completed": true,
+      "errors": [],
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "label": "quic-default-on-2",
+      "archive": true,
+      "interactiveMs": 7443,
+      "fullDetailMs": 10505.299999952316,
+      "requests": 282,
+      "bytes": 5851997,
+      "protocols": {
+        "h3": 282
+      },
+      "zipMs": [
+        2319.3
+      ],
+      "completed": true,
+      "errors": [],
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "label": "quic-default-on-3",
+      "archive": true,
+      "interactiveMs": 7730.800000190735,
+      "fullDetailMs": 11291.600000143051,
+      "requests": 219,
+      "bytes": 4746574,
+      "protocols": {
+        "h3": 219
+      },
+      "zipMs": [
+        1242.5
+      ],
+      "completed": true,
+      "errors": [],
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "label": "quic-default-on-4",
+      "archive": true,
+      "interactiveMs": 8140.399999856949,
+      "fullDetailMs": 10496.5,
+      "requests": 251,
+      "bytes": 5881304,
+      "protocols": {
+        "h3": 251
+      },
+      "zipMs": [
+        1833.6
+      ],
+      "completed": true,
+      "errors": [],
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "label": "quic-default-on-5",
+      "archive": true,
+      "interactiveMs": 6686.099999904633,
+      "fullDetailMs": 10422.899999856949,
+      "requests": 284,
+      "bytes": 5192336,
+      "protocols": {
+        "h3": 284
+      },
+      "zipMs": [
+        2297.3
+      ],
+      "completed": true,
+      "errors": [],
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    {
+      "label": "quic-default-on-6",
+      "archive": true,
+      "interactiveMs": 8610.5,
+      "fullDetailMs": 11595.799999952316,
+      "requests": 218,
+      "bytes": 4740430,
+      "protocols": {
+        "h3": 218
+      },
+      "zipMs": [
+        1516.4
+      ],
+      "completed": true,
+      "errors": [],
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    }
+  ],
+  "summary": {
+    "individual": {
+      "interactiveMs": {
+        "median": 7513.549999952316,
+        "min": 5992.400000095367,
+        "max": 8019.400000095367
+      },
+      "fullDetailMs": {
+        "median": 11259.899999976158,
+        "min": 9802.299999952316,
+        "max": 11732.200000047684
+      },
+      "requests": {
+        "median": 552.5,
+        "min": 552,
+        "max": 555
+      },
+      "bytes": {
+        "median": 5887178.5,
+        "min": 5734138,
+        "max": 6876182
+      }
+    },
+    "zip": {
+      "interactiveMs": {
+        "median": 7935.600000023842,
+        "min": 6686.099999904633,
+        "max": 11177.200000047684
+      },
+      "fullDetailMs": {
+        "median": 10898.450000047684,
+        "min": 10422.899999856949,
+        "max": 14529
+      },
+      "requests": {
+        "median": 250.5,
+        "min": 218,
+        "max": 284
+      },
+      "bytes": {
+        "median": 5192835.5,
+        "min": 4740430,
+        "max": 5881304
+      }
+    }
+  },
+  "ipad": [
+    {
+      "label": "royal-ipad-quic-off-1",
+      "fullDetailMs": 29228,
+      "interactiveMs": 15738,
+      "requests": 467,
+      "protocols": {
+        "h3": 467
+      },
+      "completed": true
+    },
+    {
+      "label": "royal-ipad-quic-off-4",
+      "fullDetailMs": 28914,
+      "interactiveMs": 17489,
+      "requests": 449,
+      "protocols": {
+        "h3": 449
+      },
+      "completed": true
+    },
+    {
+      "label": "royal-ipad-quic-on-2",
+      "fullDetailMs": 26949,
+      "interactiveMs": 15769,
+      "requests": 219,
+      "protocols": {
+        "h3": 219
+      },
+      "completed": true
+    },
+    {
+      "label": "royal-ipad-quic-on-3",
+      "fullDetailMs": 28262,
+      "interactiveMs": 16920,
+      "requests": 214,
+      "protocols": {
+        "h3": 214
+      },
+      "completed": true
+    }
+  ]
+}

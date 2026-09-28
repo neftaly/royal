@@ -37,6 +37,27 @@ export class PersistentGpuBudgetOwner {
   #textureBytes = 0;
   #migrationReserve = 0;
   readonly #textures = new Set<object>();
+  readonly #reclaimers = new Set<(bytes: number) => void>();
+
+  /** Optional resident caches yield synchronously before a foreground denial. */
+  registerReclaimer(reclaim: (bytes: number) => void): () => void {
+    this.#reclaimers.add(reclaim);
+    return () => { this.#reclaimers.delete(reclaim); };
+  }
+
+  reclaimTextureSpace(bytes: number): void {
+    validateBytes(bytes, "texture reclamation byte length", true);
+    this.#reclaimSpace(bytes, bytes);
+  }
+
+  #reclaimSpace(bytes: number, textureBytes: number): void {
+    for (const reclaim of this.#reclaimers) {
+      const needed = Math.max(0, bytes - this.availableBytes,
+        textureBytes + this.#textureBytes - ((this.#textureBudget ?? this.#budgetBytes) - this.#textureReserveBytes));
+      if (needed === 0) break;
+      reclaim(needed);
+    }
+  }
 
   constructor(budgetBytes = DEFAULT_PERSISTENT_GPU_BYTE_BUDGET) {
     validateBytes(budgetBytes, "persistent GPU byte budget", false);
@@ -73,6 +94,11 @@ export class PersistentGpuBudgetOwner {
     validateBytes(bytes, "texture replacement byte length", true);
     const oldBytes = this.#textures.has(replaced) ? this.#claims.get(replaced) : undefined;
     if (identity === replaced || this.#claims.has(identity) || oldBytes === undefined) return false;
+    if (bytes > this.#budgetBytes - oldBytes || (bytes > oldBytes && bytes > this.textureBudgetBytes)) {
+      this.#deniedClaims++;
+      return false;
+    }
+    this.#reclaimSpace(bytes, Math.max(0, bytes - oldBytes));
     if (bytes > this.availableBytes || (bytes > oldBytes
       && this.#textureBytes - oldBytes + bytes > this.textureBudgetBytes)) {
       this.#deniedClaims++;
@@ -94,6 +120,12 @@ export class PersistentGpuBudgetOwner {
   tryClaimTexture(identity: object, bytes: number): boolean {
     validateBytes(bytes, "persistent GPU allocation byte length", true);
     const existing = this.#textures.has(identity);
+    if (bytes > this.#budgetBytes || (bytes > (this.#claims.get(identity) ?? 0)
+      && bytes > (this.#textureBudget ?? this.#budgetBytes) - this.#textureReserveBytes)) {
+      this.#deniedClaims++;
+      return false;
+    }
+    if (!existing) this.reclaimTextureSpace(bytes);
     if (!existing && this.#textureBytes + bytes > (this.#textureBudget ?? this.#budgetBytes) - this.#textureReserveBytes) {
       this.#deniedClaims++;
       return false;
@@ -130,6 +162,13 @@ export class PersistentGpuBudgetOwner {
   tryClaim(identity: object, bytes: number): boolean {
     validateBytes(bytes, "persistent GPU allocation byte length", true);
     const previous = this.#claims.get(identity) ?? 0;
+    // Reclaiming cache cannot make an individually oversized allocation fit.
+    if (bytes > this.#budgetBytes || (bytes > previous && this.#textures.has(identity)
+      && bytes > (this.#textureBudget ?? this.#budgetBytes) - this.#textureReserveBytes)) {
+      this.#deniedClaims++;
+      return false;
+    }
+    if (bytes > previous) this.#reclaimSpace(bytes - previous, this.#textures.has(identity) ? bytes - previous : 0);
     const nextRetained = this.#retainedBytes - previous + bytes;
     const textureBytes = this.#textureBytes + (this.#textures.has(identity) ? bytes - previous : 0);
     if (!Number.isSafeInteger(nextRetained) || nextRetained > this.#budgetBytes
