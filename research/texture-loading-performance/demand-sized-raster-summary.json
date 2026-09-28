@@ -1,0 +1,40 @@
+[
+  {
+    "variant": "before",
+    "firstReadyMs": 18130.700000047684,
+    "interactionReadyMs": 13353.100000143051,
+    "errors": [],
+    "browser": {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    "virtualTextures": {
+      "rasterCacheReads": 4,
+      "rasterCacheHits": 204,
+      "rasterCacheBytes": 33396036,
+      "rasterCachePeakBytes": 33553920,
+      "rasterCacheDecodeMs": 1914.3000001907349,
+      "residentPages": 207,
+      "visibleDetailFraction": 1
+    }
+  },
+  {
+    "variant": "after",
+    "firstReadyMs": 24545.599999904633,
+    "interactionReadyMs": 19075.700000047684,
+    "errors": [],
+    "browser": {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+    },
+    "virtualTextures": {
+      "rasterCacheReads": 3,
+      "rasterCacheHits": 204,
+      "rasterCacheBytes": 33344056,
+      "rasterCachePeakBytes": 33552172,
+      "rasterCacheDecodeMs": 2093.2000000476837,
+      "residentPages": 207,
+      "visibleDetailFraction": 1
+    }
+  }
+]

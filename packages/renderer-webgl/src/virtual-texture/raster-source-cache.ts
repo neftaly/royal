@@ -58,10 +58,18 @@ export class RasterSourceCache {
     return true;
   }
 
-  /** Serialize source misses and synchronous page rendering to bound decode peaks. */
-  read<T>(asset: TextureSourceRef, signal: AbortSignal, render: (source: DecodedImageTextureSource) => T, maxBytes = this.#sourceLimit): Promise<T> {
-    if (!Number.isSafeInteger(maxBytes) || maxBytes < 4) return Promise.reject(new RangeError("Invalid raster read limit"));
-    const reservation = Math.min(maxBytes, this.#sourceLimit);
+  /**
+   * Serialize source misses and page rendering to bound decode peaks.
+   * maxBytes is sufficient for this page; missBytes sizes a new decode for
+   * known upcoming detail without replacing an already sufficient warm source.
+   */
+  read<T>(asset: TextureSourceRef, signal: AbortSignal, render: (source: DecodedImageTextureSource) => T,
+    maxBytes = this.#sourceLimit, missBytes = maxBytes): Promise<T> {
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 4 || !Number.isSafeInteger(missBytes) || missBytes < maxBytes) {
+      return Promise.reject(new RangeError("Invalid raster read limit"));
+    }
+    const required = Math.min(maxBytes, this.#sourceLimit);
+    const reservation = Math.min(missBytes, this.#sourceLimit);
     this.#queued++;
     const generation = this.#generation;
     const queuedAt = performance.now();
@@ -70,7 +78,7 @@ export class RasterSourceCache {
       if (this.#disposed || signal.aborted || generation !== this.#generation) throw abortError();
       const key = decodedTextureKey(asset);
       let entry = this.#entries.get(key);
-      if (entry !== undefined && entry.maxBytes < reservation) {
+      if (entry !== undefined && entry.maxBytes < required) {
         this.#entries.delete(key);
         this.#bytes -= entry.source.width * entry.source.height * 4;
         entry.source.close?.();

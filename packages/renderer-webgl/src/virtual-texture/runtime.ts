@@ -679,13 +679,17 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           // All detail pages use a source sufficient for the finest requested
           // mip. Otherwise scheduling coarse before fine changes its filtering
           // (seed pixels versus a newly decoded source). Keep fast root coverage.
-          const mip = page.mip === layout.mipCount - 1 ? page.mip
-            : Math.min(page.mip, this.#resources.get(key)?.rasterMip ?? page.mip);
+          const detailMip = Math.min(page.mip, this.#resources.get(key)?.rasterMip ?? page.mip);
+          const mip = page.mip === layout.mipCount - 1 ? page.mip : detailMip;
+          const rasterBytes = (level: number) => ordinaryTextureStorageBytes(
+            Math.max(1, Math.ceil(layout.width / 2 ** level)),
+            Math.max(1, Math.ceil(layout.height / 2 ** level)), true);
           return this.#rasterCache!.read(asset, signal,
             raster => renderAutomaticPage(layout, sampler, raster.source as CanvasImageSource,
               raster.width / layout.width, raster.height / layout.height, page, signal),
-            ordinaryTextureStorageBytes(Math.max(1, Math.ceil(layout.width / 2 ** mip)),
-              Math.max(1, Math.ceil(layout.height / 2 ** mip)), true));
+            // Reuse a warm preview, but do not decode a throwaway tiny raster
+            // on a miss when this view already needs a higher resolution.
+            rasterBytes(mip), rasterBytes(detailMip));
         } };
       } else {
         const decodedBytes = this.#seenDecoded.get(decoded) === scan ? 0 : automaticSourceBytes(decoded);

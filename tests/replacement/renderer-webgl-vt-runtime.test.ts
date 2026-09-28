@@ -32,7 +32,7 @@ import { fitOrdinaryTextureStorage } from "../../packages/renderer-webgl/src/tex
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-it.each([256 * 1024 * 1024, 400_000])("uses the finest requested raster even with partial atlas admission (%i bytes)", async (budgetBytes) => {
+it.each([[256 * 1024 * 1024, true], [400_000, true], [256 * 1024 * 1024, false], [400_000, false]] as const)("uses the finest requested raster even with partial atlas admission (%i bytes, seed=%s)", async (budgetBytes, seedAvailable) => {
   const asset = imageTexture("/tracks.avif");
   const seed = { width: 359, height: 183, sourceWidth: 3124, sourceHeight: 1600, source: {} as ImageBitmap };
   const rendered = vi.spyOn(automaticSources, "renderAutomaticPage").mockImplementation(() => ({
@@ -45,7 +45,7 @@ it.each([256 * 1024 * 1024, 400_000])("uses the finest requested raster even wit
     mesh({ geometry: planeGeometry(2), material: unlitMaterial({ texture: asset }) }),
   ] }), undefined, undefined, () => seed);
   const runtime = createBrowserVirtualTextureRuntime(fakeGl(), new PersistentGpuBudgetOwner(budgetBytes), (_signal, work) => work(), {
-    acquireDecoded: () => ({ source: seed, release: vi.fn() }), decoded: () => seed, loadRaster, onChanged: vi.fn(),
+    acquireDecoded: () => seedAvailable ? ({ source: seed, release: vi.fn() }) : undefined, decoded: () => seed, loadRaster, onChanged: vi.fn(),
   });
   try {
     runtime.setScene(prepared);

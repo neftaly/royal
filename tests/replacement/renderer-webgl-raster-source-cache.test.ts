@@ -156,3 +156,27 @@ it("discards browser pixels and rejects old queued work across context recovery"
   expect(load).toHaveBeenCalledOnce();
   cache.dispose();
 });
+
+it("decodes known detail on a coarse miss and reuses it for subsequent detail", async () => {
+  const load = vi.fn(async () => raster());
+  const cache = new RasterSourceCache(load, 128, 64);
+  await cache.read(asset(0), signal(), () => undefined, 4, 64);
+  expect(load).toHaveBeenCalledWith(asset(0), expect.any(AbortSignal), 64);
+  await cache.read(asset(0), signal(), () => undefined, 64);
+  expect(load).toHaveBeenCalledOnce();
+  expect(cache.snapshot.peakBytes).toBeLessThanOrEqual(128);
+  cache.dispose();
+});
+
+it("uses an already cached preview without decoding detail prematurely", async () => {
+  const load = vi.fn(async () => raster());
+  const cache = new RasterSourceCache(load, 128, 64);
+  const preview = { ...raster(), width: 1, height: 1 }, release = vi.fn();
+  expect(cache.seed(asset(0), preview, release)).toBe(true);
+  await cache.read(asset(0), signal(), source => expect(source.source).toBe(preview.source), 4, 64);
+  expect(load).not.toHaveBeenCalled();
+  await cache.read(asset(0), signal(), () => undefined, 64);
+  expect(load).toHaveBeenCalledOnce();
+  expect(release).toHaveBeenCalledOnce();
+  cache.dispose();
+});
