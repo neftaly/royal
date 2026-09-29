@@ -1,0 +1,56 @@
+{
+  "sortingMicrobenchmark": [
+    {
+      "label": "before",
+      "count": 1000,
+      "medianMs": 7.306695499999989
+    },
+    {
+      "label": "after",
+      "count": 1000,
+      "medianMs": 0.7603844999999865
+    },
+    {
+      "label": "before",
+      "count": 4000,
+      "medianMs": 69.5262535
+    },
+    {
+      "label": "after",
+      "count": 4000,
+      "medianMs": 2.389084499999967
+    },
+    {
+      "label": "before",
+      "count": 16000,
+      "medianMs": 546.5403674999998
+    },
+    {
+      "label": "after",
+      "count": 16000,
+      "medianMs": 2.4764064999990296
+    }
+  ],
+  "questCpuRuns": [
+    {
+      "label": "before",
+      "firstReadyMs": 18424.5,
+      "interactionReadyMs": 12205,
+      "gcSampledMs": 559.157,
+      "pages": 147,
+      "detailFraction": 1,
+      "errors": [],
+      "completed": true
+    },
+    {
+      "label": "after",
+      "firstReadyMs": 18476.199999999255,
+      "interactionReadyMs": 11233.399999999441,
+      "gcSampledMs": 531.256,
+      "pages": 147,
+      "detailFraction": 1,
+      "errors": [],
+      "completed": true
+    }
+  ]
+}

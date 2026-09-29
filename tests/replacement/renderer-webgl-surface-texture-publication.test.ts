@@ -51,6 +51,35 @@ const createSurfaceGpuOwner = (
 );
 
 describe("retained surface texture publication", () => {
+  it("advances view preparation without clearing or drawing the displayed scene", () => {
+    const gl = fakeGl(), owner = createSurfaceGpuOwner(gl), state = new WebGlStateOwner(gl);
+    const update = vi.fn(() => ({ pending: true, webGlStateChanged: true }));
+    const runtime = {
+      bindingRevision: 0, shaderSource: { declarations: VIRTUAL_TEXTURE_FRAGMENT_DECLARATIONS },
+      automaticBinding: () => undefined, setScene: vi.fn(), dispose: vi.fn(), update,
+    } as unknown as VirtualTextureRuntime;
+    try {
+      owner.setScene(prepareCanonicalSurfaceScene(scene({ camera: perspectiveCamera({}), nodes: [
+        mesh({ geometry: planeGeometry(1), material: unlitMaterial({ color: [1, 1, 1, 1] }) }),
+      ] })));
+      owner.setVirtualTextureRuntime(runtime);
+      owner.beginFrame();
+      expect(owner.prepareViews(TEST_VIEWS, state, [0, 0, 0, 1])).toBe(true);
+      expect(update).toHaveBeenCalledWith(TEST_VIEWS, false);
+      expect(owner.viewWorkPending).toBe(true);
+      expect(gl.clear).not.toHaveBeenCalled();
+      expect(gl.drawElements).not.toHaveBeenCalled();
+      expect(gl.drawArrays).not.toHaveBeenCalled();
+      update.mockReturnValue({ pending: false, webGlStateChanged: true });
+      owner.beginFrame();
+      expect(owner.prepareViews(TEST_VIEWS, state, [0, 0, 0, 1])).toBe(false);
+      expect(owner.viewWorkPending).toBe(false);
+      expect(gl.drawElements).not.toHaveBeenCalled();
+      owner.drawViews(TEST_VIEWS, null, state, [0, 0, 0, 1]);
+      expect(gl.drawElements).toHaveBeenCalledOnce();
+    } finally { owner.dispose(); }
+  });
+
   it("uses compact storage on the first incremental upload once a paging source is available", () => {
     vi.stubGlobal("document", { createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage: vi.fn() }) }) });
     const gl = fakeGl(), owner = createSurfaceGpuOwner(gl), state = new WebGlStateOwner(gl);

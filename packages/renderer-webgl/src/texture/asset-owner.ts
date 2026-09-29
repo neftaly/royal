@@ -345,30 +345,36 @@ export class TextureAssetOwner {
     this.#storageEntries.clear();
     const retainedAlphaKeys = new Set<string>();
     for (const asset of alphaMaskAssets) retainedAlphaKeys.add(decodedTextureKey(asset));
-    const claimed = new Map<string, { asset: TextureSourceRef; storageKeys: Set<string> }>();
+    const claimed = new Map<string, { asset: TextureSourceRef; storageKeys: Set<string>; active: boolean; pageable: boolean }>();
+    const claimedStorage = new Set<string>();
     for (const asset of assets) {
       const key = decodedTextureKey(asset);
       const storageKey = textureStorageKey(asset);
+      const active = activeStorageKeys === undefined || activeStorageKeys.has(storageKey);
+      const pageable = pageableStorageKeys.has(storageKey);
+      claimedStorage.add(storageKey);
       const existing = claimed.get(key);
-      if (existing === undefined) claimed.set(key, { asset, storageKeys: new Set([storageKey]) });
-      else existing.storageKeys.add(storageKey);
+      if (existing === undefined) claimed.set(key, { asset, storageKeys: new Set([storageKey]), active, pageable });
+      else {
+        existing.storageKeys.add(storageKey);
+        existing.active ||= active;
+        existing.pageable &&= pageable;
+      }
     }
-    const claimedStorage = new Set([...claimed.values()].flatMap(claim => [...claim.storageKeys]));
     for (const key of this.#deniedStorageKeys) if (!claimedStorage.has(key)
       || activeStorageKeys?.has(key) === false) this.#deniedStorageKeys.delete(key);
     this.#pageableKeys.clear();
+    const storageClaims: Array<{ source: DecodedTextureSource | undefined; copies: number }> = [];
     for (const [key, claim] of claimed) {
-      if ([...claim.storageKeys].every(storageKey => pageableStorageKeys.has(storageKey))) this.#pageableKeys.add(key);
+      if (claim.pageable) this.#pageableKeys.add(key);
+      if (claim.active) storageClaims.push({ source: this.#entries.get(key)?.decoded, copies: claim.storageKeys.size });
     }
     this.#currentStorageBudgetBytes = storageBudgetBytes;
     this.#initialDecodeBytes = initialDecodeBytes;
     let snapshotChangedKey: string | undefined;
-    this.#updateStorageShare([...claimed].filter(([, claim]) => activeStorageKeys === undefined
-      || [...claim.storageKeys].some(key => activeStorageKeys.has(key))).map(([key, claim]) => ({
-      source: this.#entries.get(key)?.decoded, copies: claim.storageKeys.size,
-    })));
+    this.#updateStorageShare(storageClaims);
     for (const [key, claim] of claimed) {
-      const active = activeStorageKeys === undefined || [...claim.storageKeys].some(key => activeStorageKeys.has(key));
+      const active = claim.active;
       const entry = this.#entries.get(key);
       if (entry === undefined) {
         this.#start(claim.asset, key, claim.storageKeys, retainedAlphaKeys.has(key), active);

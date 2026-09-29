@@ -7,11 +7,16 @@ const cpuOnly=process.env.ROYAL_PROFILE_MODE==='cpu';
 if(!/^[a-z0-9-]+$/.test(label))throw Error('Invalid profile label');
 const directory=`/tmp/royal-nova-profiles/${label}`;
 await mkdir(directory,{recursive:true});
-const profile=await mkdtemp('/tmp/royal-nova-browser-');
+const profile=await mkdtemp(`${directory}/browser-`);
 const browser=remotePort?undefined:spawnLogged('chromium',[...(process.env.ROYAL_PROFILE_NETLOG==='1'?[`--log-net-log=${directory}/netlog.json`]:[]),...(process.env.ROYAL_PROFILE_QUIC==='force'?['--enable-quic','--origin-to-force-quic-on=registry.probabilityusercontent.nz:443']:process.env.ROYAL_PROFILE_QUIC==='off'?['--disable-quic']:[]),'--headless=new','--no-sandbox','--use-gl=angle','--use-angle=vulkan','--ignore-gpu-blocklist','--disable-software-rasterizer','--use-gpu-in-tests','--remote-allow-origins=*','--remote-debugging-port=19387',`--user-data-dir=${profile}`,'about:blank']);
 const url=process.env.ROYAL_NOVA_URL??'http://localhost:3004/play/#template=http%3A%2F%2F127.0.0.1%3A45944%2Fcompact%2F';
 const result={label,url,timingOnly,archiveDisabled:process.env.ROYAL_PROFILE_DISABLE_ARCHIVE==='1',quic:process.env.ROYAL_PROFILE_QUIC??'default',samples:[],requests:[],errors:[]};
 let session,tracing=false,profiling=false;
+const initScripts=[];
+const installInitScript=async args=>{
+ const {identifier}=await session.call('Page.addScriptToEvaluateOnNewDocument',args);
+ initScripts.push(identifier);
+};
 try{
  session=await connectCdpPage({debugHost:'127.0.0.1',debugPort:remotePort||19387,commandTimeoutMs:60000});
  await session.call('Runtime.enable');await session.call('Network.enable');await session.call('Page.enable');
@@ -19,7 +24,7 @@ try{
  await session.call('Page.navigate',{url:'about:blank'});
  await session.call('Network.setCacheDisabled',{cacheDisabled:true});
  // Same wrapper in both arms; only the optional whole-archive request differs.
- await session.call('Page.addScriptToEvaluateOnNewDocument',{source:`(() => {
+ await installInitScript({source:`(() => {
   performance.setResourceTimingBufferSize(5000);
   const original = window.fetch;
   window.fetch = function(input, init) {
@@ -45,11 +50,11 @@ try{
  }
  if(process.env.ROYAL_PROFILE_DISABLE_ASTC==='1') {
   result.astcDisabled=true;
-  await session.call('Page.addScriptToEvaluateOnNewDocument',{source:`(() => { const get = WebGL2RenderingContext.prototype.getExtension; WebGL2RenderingContext.prototype.getExtension = function(name) { return name === 'WEBGL_compressed_texture_astc' ? null : get.call(this,name); }; })()`});
+  await installInitScript({source:`(() => { const get = WebGL2RenderingContext.prototype.getExtension; WebGL2RenderingContext.prototype.getExtension = function(name) { return name === 'WEBGL_compressed_texture_astc' ? null : get.call(this,name); }; })()`});
  }
- await session.call('Page.addScriptToEvaluateOnNewDocument',{source:await readFile(new URL((timingOnly||cpuOnly)?'./timing-probe.js':'./browser-probe.js',import.meta.url),'utf8')});
- await session.call('Page.addScriptToEvaluateOnNewDocument',{source:`window.__royalLoadingProbe.sample=()=>{${await readFile(new URL('./device-sample.js',import.meta.url),'utf8')}};`});
- if(process.env.ROYAL_PROFILE_SUPPORT_COUNTS==='1')await session.call('Page.addScriptToEvaluateOnNewDocument',{source:`
+ await installInitScript({source:await readFile(new URL((timingOnly||cpuOnly)?'./timing-probe.js':'./browser-probe.js',import.meta.url),'utf8')});
+ await installInitScript({source:`window.__royalLoadingProbe.sample=()=>{${await readFile(new URL('./device-sample.js',import.meta.url),'utf8')}};`});
+ if(process.env.ROYAL_PROFILE_SUPPORT_COUNTS==='1')await installInitScript({source:`
  const supportWorkers=new WeakSet();const NativeWorker=Worker;
  window.Worker=new Proxy(NativeWorker,{construct(target,args){const worker=Reflect.construct(target,args);if(String(args[0]).includes('support-worker'))supportWorkers.add(worker);return worker;}});
  const post=NativeWorker.prototype.postMessage;
@@ -116,6 +121,7 @@ finally{
  }
  try { await writeFile(`${directory}/result.json`,JSON.stringify(result,null,2)+'\n'); }
  finally {
+  if(session)for(const identifier of initScripts)await session.call('Page.removeScriptToEvaluateOnNewDocument',{identifier}).catch(()=>undefined);
   session?.socket.close();if(browser)await stopProcess(browser);await rm(profile,{recursive:true,force:true,maxRetries:10,retryDelay:100});
  }
  console.log(directory);

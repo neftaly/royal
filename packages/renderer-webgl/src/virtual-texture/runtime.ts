@@ -118,7 +118,7 @@ type GpuVirtualTextureAtlas = VirtualTextureAtlasStoragePlan & {
   validationPending?: boolean;
   validationFence?: WebGLSync;
   validationWaitFrames?: number;
-  growth?: { replacement: GpuVirtualTextureAtlas; nextSlot: number; retainedSlots?: number[]; capacityLimited?: boolean; targetSlots: number };
+  growth?: { replacement: GpuVirtualTextureAtlas; nextSlot: number; retainedSlots?: number[]; retainedSlotSet?: ReadonlySet<number>; capacityLimited?: boolean; targetSlots: number };
   blockedGrowth?: string;
   atlasTexture: WebGLTexture;
   budgetIdentity: object;
@@ -1659,7 +1659,8 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
           };
           return priority(b) - priority(a) || atlas.lastUsedFrames[b]! - atlas.lastUsedFrames[a]!;
         }).slice(0, replacement.slotCount) : undefined;
-        atlas.growth = { replacement, nextSlot: 0, targetSlots, capacityLimited, ...(retainedSlots === undefined ? {} : { retainedSlots }) };
+        atlas.growth = { replacement, nextSlot: 0, targetSlots, capacityLimited,
+          ...(retainedSlots === undefined ? {} : { retainedSlots, retainedSlotSet: new Set(retainedSlots) }) };
         // Never query allocation errors in the submitting frame: that query
         // can synchronously wait for the entire replacement's initialization.
         return result(true);
@@ -1714,7 +1715,7 @@ class BrowserVirtualTextureRuntime implements VirtualTextureRuntime {
     if (growth.retainedSlots !== undefined && atlas.slots.some((entry, slot) =>
       entry !== undefined && this.#protectedPoolPages.has(entry.resourceKey, entry.pageKey)
         && (!growth.capacityLimited || entry.pageKey === virtualTexturePageKeyParts(this.#resources.get(entry.resourceKey)!.layout!.mipCount - 1, 0, 0))
-        && !growth.retainedSlots!.includes(slot))) {
+        && !growth.retainedSlotSet!.has(slot))) {
       destroyGpuVirtualTextureAtlas(this.#gl, replacement, this.#budget);
       delete atlas.growth;
       return { copied: 0, pending: true, changed: true };

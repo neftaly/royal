@@ -1,0 +1,341 @@
+{
+  "baselineCommit": "0eb2e3b1",
+  "probabilityFixtureCommit": "d47b56e6de94424c61db4c8116341ee2eb3fd57a",
+  "notes": [
+    "Quest original timing comparisons used reversed C/B/B/C order.",
+    "Final Quest and iPad recovery runs overlapped; use them for reliability, not isolated timing conclusions.",
+    "First desktop baseline and iPad candidate overlapped; desktop and iPad figures are single-pair indicative measurements.",
+    "Timing is sampled at roughly 500 ms. Zoom durations include stability polling.",
+    "iPad zoom uses synthetic wheel events; selection uses trusted device touch."
+  ],
+  "runs": [
+    {
+      "label": "four-quest-baseline-timing",
+      "firstReadyMs": 19948.299999999814,
+      "interactionReadyMs": 9942.69999999972,
+      "completed": true,
+      "failure": null,
+      "browser": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/152.0.0.44.30.1069357998 Chrome/152.0.7977.64 VR Safari/537.36",
+        "renderer": "Adreno (TM) 650"
+      },
+      "frame": 201,
+      "pages": 147,
+      "detailFraction": 1,
+      "failedPages": 0,
+      "gpuRetainedBytes": 26419726,
+      "gpuBudgetBytes": 268435456,
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "trustedTouchSelected": false,
+      "zoom": []
+    },
+    {
+      "label": "four-quest-baseline2-timing",
+      "firstReadyMs": 19426.200000000186,
+      "interactionReadyMs": 9920.600000000093,
+      "completed": true,
+      "failure": null,
+      "browser": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/152.0.0.44.30.1069357998 Chrome/152.0.7977.64 VR Safari/537.36",
+        "renderer": "Adreno (TM) 650"
+      },
+      "frame": 190,
+      "pages": 147,
+      "detailFraction": 1,
+      "failedPages": 0,
+      "gpuRetainedBytes": 26419726,
+      "gpuBudgetBytes": 268435456,
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "trustedTouchSelected": false,
+      "zoom": []
+    },
+    {
+      "label": "four-quest-candidate-timing",
+      "firstReadyMs": 16584.900000000373,
+      "interactionReadyMs": 9670.80000000028,
+      "completed": true,
+      "failure": null,
+      "browser": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/152.0.0.44.30.1069357998 Chrome/152.0.7977.64 VR Safari/537.36",
+        "renderer": "Adreno (TM) 650"
+      },
+      "frame": 74,
+      "pages": 147,
+      "detailFraction": 1,
+      "failedPages": 0,
+      "gpuRetainedBytes": 26729486,
+      "gpuBudgetBytes": 268435456,
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "trustedTouchSelected": false,
+      "zoom": []
+    },
+    {
+      "label": "four-quest-candidate2-timing",
+      "firstReadyMs": 16164.700000000186,
+      "interactionReadyMs": 9168.30000000028,
+      "completed": true,
+      "failure": null,
+      "browser": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/152.0.0.44.30.1069357998 Chrome/152.0.7977.64 VR Safari/537.36",
+        "renderer": "Adreno (TM) 650"
+      },
+      "frame": 72,
+      "pages": 147,
+      "detailFraction": 1,
+      "failedPages": 0,
+      "gpuRetainedBytes": 26977294,
+      "gpuBudgetBytes": 268435456,
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "trustedTouchSelected": false,
+      "zoom": []
+    },
+    {
+      "label": "four-quest-final",
+      "firstReadyMs": 17621.700000000186,
+      "interactionReadyMs": 10299.700000000186,
+      "completed": true,
+      "failure": null,
+      "browser": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64; Quest 2) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/152.0.0.44.30.1069357998 Chrome/152.0.7977.64 VR Safari/537.36",
+        "renderer": "Adreno (TM) 650"
+      },
+      "frame": 93,
+      "pages": 147,
+      "detailFraction": 1,
+      "failedPages": 0,
+      "gpuRetainedBytes": 26605582,
+      "gpuBudgetBytes": 268435456,
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "trustedTouchSelected": false,
+      "zoom": [
+        {
+          "label": "in-1-settled",
+          "elapsedMs": 3589.5,
+          "uploadedPages": 234,
+          "residentPages": 234,
+          "failedPages": 0
+        },
+        {
+          "label": "out-1-settled",
+          "elapsedMs": 2658.800000000745,
+          "uploadedPages": 242,
+          "residentPages": 242,
+          "failedPages": 0
+        },
+        {
+          "label": "in-2-settled",
+          "elapsedMs": 2684.0999999996275,
+          "uploadedPages": 242,
+          "residentPages": 242,
+          "failedPages": 0
+        },
+        {
+          "label": "out-2-settled",
+          "elapsedMs": 2623.4000000003725,
+          "uploadedPages": 243,
+          "residentPages": 243,
+          "failedPages": 0
+        }
+      ]
+    },
+    {
+      "label": "four-desktop-baseline",
+      "firstReadyMs": 17713.800000190735,
+      "interactionReadyMs": 9133.300000190735,
+      "completed": true,
+      "failure": null,
+      "browser": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+        "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+      },
+      "frame": 198,
+      "pages": 207,
+      "detailFraction": 1,
+      "failedPages": 0,
+      "gpuRetainedBytes": 26853390,
+      "gpuBudgetBytes": 268435456,
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "trustedTouchSelected": false,
+      "zoom": []
+    },
+    {
+      "label": "four-desktop-candidate",
+      "firstReadyMs": 14460.100000143051,
+      "interactionReadyMs": 9110.5,
+      "completed": true,
+      "failure": null,
+      "browser": {
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+        "renderer": "ANGLE (Intel, Vulkan 1.4.305 (Intel(R) Iris(R) Xe Graphics (TGL GT2) (0x00009A49)), Intel open-source Mesa driver)"
+      },
+      "frame": 96,
+      "pages": 207,
+      "detailFraction": 1,
+      "failedPages": 0,
+      "gpuRetainedBytes": 26419726,
+      "gpuBudgetBytes": 268435456,
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "trustedTouchSelected": false,
+      "zoom": [
+        {
+          "label": "in-1-settled",
+          "elapsedMs": 3047.5,
+          "uploadedPages": 223,
+          "residentPages": 223,
+          "failedPages": 0
+        },
+        {
+          "label": "out-1-settled",
+          "elapsedMs": 2548.399999856949,
+          "uploadedPages": 233,
+          "residentPages": 233,
+          "failedPages": 0
+        },
+        {
+          "label": "in-2-settled",
+          "elapsedMs": 2533.5999999046326,
+          "uploadedPages": 238,
+          "residentPages": 238,
+          "failedPages": 0
+        },
+        {
+          "label": "out-2-settled",
+          "elapsedMs": 2557.5999999046326,
+          "uploadedPages": 238,
+          "residentPages": 238,
+          "failedPages": 0
+        }
+      ]
+    },
+    {
+      "label": "four-ipad-baseline",
+      "firstReadyMs": 29891,
+      "interactionReadyMs": null,
+      "completed": true,
+      "failure": null,
+      "browser": null,
+      "frame": 206,
+      "pages": 358,
+      "detailFraction": 1,
+      "failedPages": 0,
+      "gpuRetainedBytes": 41873282,
+      "gpuBudgetBytes": 268435456,
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "trustedTouchSelected": true,
+      "zoom": []
+    },
+    {
+      "label": "four-ipad-candidate",
+      "firstReadyMs": 23261,
+      "interactionReadyMs": null,
+      "completed": true,
+      "failure": null,
+      "browser": null,
+      "frame": 81,
+      "pages": 358,
+      "detailFraction": 1,
+      "failedPages": 0,
+      "gpuRetainedBytes": 41873282,
+      "gpuBudgetBytes": 268435456,
+      "context": {
+        "generation": 1,
+        "interruptions": 0,
+        "phase": "active",
+        "recoveries": 0
+      },
+      "trustedTouchSelected": true,
+      "zoom": []
+    },
+    {
+      "label": "four-ipad-recovery",
+      "firstReadyMs": 21538,
+      "interactionReadyMs": null,
+      "completed": true,
+      "failure": null,
+      "browser": null,
+      "frame": 119,
+      "pages": 358,
+      "detailFraction": 1,
+      "failedPages": 0,
+      "gpuRetainedBytes": 41873282,
+      "gpuBudgetBytes": 268435456,
+      "context": {
+        "generation": 2,
+        "interruptions": 1,
+        "phase": "active",
+        "recoveries": 1
+      },
+      "trustedTouchSelected": true,
+      "zoom": [
+        {
+          "label": "in-1-settled",
+          "elapsedMs": 7062.000000000007,
+          "uploadedPages": 358,
+          "residentPages": 358,
+          "failedPages": 0
+        },
+        {
+          "label": "out-1-settled",
+          "elapsedMs": 12175,
+          "uploadedPages": 475,
+          "residentPages": 475,
+          "failedPages": 0
+        },
+        {
+          "label": "in-2-settled",
+          "elapsedMs": 2894,
+          "uploadedPages": 475,
+          "residentPages": 475,
+          "failedPages": 0
+        },
+        {
+          "label": "out-2-settled",
+          "elapsedMs": 3409,
+          "uploadedPages": 490,
+          "residentPages": 490,
+          "failedPages": 0
+        }
+      ]
+    }
+  ]
+}

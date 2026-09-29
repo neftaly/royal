@@ -33,6 +33,43 @@ const item = (id: number, depth: number, alphaBlend = false): Surface => ({
 });
 
 describe("surface depth ordering core", () => {
+  it("keeps large runs stable, respects boundaries, and releases scratch references", () => {
+    const scratch: Array<Surface | undefined> = [];
+    forEachFuzzCase({ cases: 100, seed: 0x13_57_24_68 }, ({ random }) => {
+      const lengths = [random.int(33, 180), random.int(1, 80), random.int(33, 180)];
+      const surfaces = Array.from({ length: lengths.reduce((a, b) => a + b, 0) },
+        (_, id) => item(id, random.int(-8, 8)));
+      const ends = new Uint32Array(surfaces.length);
+      const expected: Surface[] = [];
+      let offset = 0;
+      for (const length of lengths) {
+        ends.fill(offset + length, offset, offset + length);
+        expected.push(...surfaces.slice(offset, offset + length).sort((a, b) =>
+          b.surface.worldBounds.min[2] - a.surface.worldBounds.min[2]));
+        offset += length;
+      }
+      sortSurfaceRunsFrontToBack(surfaces, ends, identityMat4(), scratch);
+      expect(surfaces).toEqual(expected);
+      expect(scratch.every(value => value === undefined)).toBe(true);
+    });
+  });
+
+  it("bounds comparison work for a reversed large state-equivalent run", () => {
+    const count = 4096;
+    let reads = 0;
+    const surfaces = Array.from({ length: count }, (_, id) => {
+      const surface = item(id, id);
+      let depth = 0;
+      Object.defineProperty(surface, "depthOrder", {
+        get: () => { reads++; return depth; }, set: value => { depth = value; },
+      });
+      return surface;
+    });
+    sortSurfaceRunsFrontToBack(surfaces, new Uint32Array(count).fill(count), identityMat4(), []);
+    expect(surfaces.map(surface => surface.id)).toEqual(Array.from({ length: count }, (_, i) => count - i - 1));
+    expect(reads).toBeLessThan(count * Math.ceil(Math.log2(count)) * 6);
+  });
+
   it("matches a stable ordering oracle across adversarial camera orders", () => {
     const view = identityMat4();
     forEachFuzzCase({ cases: 100, seed: 0x12_34_56_78 }, ({ random }) => {

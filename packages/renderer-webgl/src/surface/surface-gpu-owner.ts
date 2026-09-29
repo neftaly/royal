@@ -298,6 +298,7 @@ export type SurfaceGpuOwnerOptions = Readonly<{
 export class SurfaceGpuOwner {
   #admittedSurfaceCount = 0;
   readonly #cameraPosition = new Float32Array(4);
+  readonly #depthSortScratch: Array<GpuSurface | undefined> = [];
   #boundedVolumeLoadGeneration = 0;
   #boundedVolumeLoadRequested = false;
   #boundedVolumes: BoundedVolumeGpuOwner | null = null;
@@ -526,6 +527,7 @@ export class SurfaceGpuOwner {
 
   #clearGpuSurfaces(): void {
     this.#invalidateBlendDepthPartitions();
+    this.#depthSortScratch.length = 0;
     this.#admittedSurfaceCount = 0;
     this.#opaqueSurfaces = [];
     this.#opaqueMultiDrawRunEnds = EMPTY_RUN_ENDS;
@@ -938,6 +940,23 @@ export class SurfaceGpuOwner {
     cssScaleX = 1,
     cssScaleY = 1,
   ): boolean {
+    return this.#processViews(views, framebuffer, state, clearColor, cssScaleX, cssScaleY, true);
+  }
+
+  /** Advance view-dependent preparation without clearing or drawing a presentation. */
+  prepareViews(views: readonly SurfaceFrameView[], state: WebGlStateOwner, clearColor: LinearRgba): boolean {
+    return this.#processViews(views, null, state, clearColor, 1, 1, false);
+  }
+
+  #processViews(
+    views: readonly SurfaceFrameView[],
+    framebuffer: WebGLFramebuffer | null,
+    state: WebGlStateOwner,
+    clearColor: LinearRgba,
+    cssScaleX: number,
+    cssScaleY: number,
+    present: boolean,
+  ): boolean {
     const scene = this.#scene;
     if (this.#textureBudgetBytes !== this.#resourceBudget.textureBudgetBytes) {
       this.#textureBudgetBytes = this.#resourceBudget.textureBudgetBytes;
@@ -1086,6 +1105,7 @@ export class SurfaceGpuOwner {
     const presentationWorkPending = virtualTexturePending
       || this.#programs.virtualCompilationPending
       || this.#admittedSurfaceCount < scene.surfaces.length;
+    if (!present) return presentationWorkPending;
     if (
       this.#opaqueSurfaces.length
         + this.#transmissionSurfaces.length
@@ -1507,6 +1527,7 @@ export class SurfaceGpuOwner {
         this.#opaqueSurfaces,
         this.#opaqueMultiDrawRunEnds,
         view,
+        this.#depthSortScratch,
       );
       if (this.#depthPrepassActive) {
         this.#depthPrepassOwner?.draw(

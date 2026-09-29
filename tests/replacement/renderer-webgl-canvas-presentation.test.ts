@@ -19,8 +19,10 @@ describe("canvas presentation", () => {
     const original = SurfaceGpuOwner.prototype.drawViews;
     const draw = vi.spyOn(SurfaceGpuOwner.prototype, "drawViews").mockImplementation(function (this: SurfaceGpuOwner, ...args) {
       original.apply(this, args);
-      return --steps > 0;
+      steps = Math.max(0, steps - 1);
+      return steps > 0;
     });
+    const prepare = vi.spyOn(SurfaceGpuOwner.prototype, "prepareViews").mockImplementation(() => --steps > 0);
     const pending = vi.spyOn(SurfaceGpuOwner.prototype, "surfacePublicationsPending").mockImplementation(() => steps > 0);
     const viewPending = vi.spyOn(SurfaceGpuOwner.prototype, "viewWorkPending", "get").mockImplementation(() => steps > 0);
     const flush = vi.spyOn(SurfaceGpuOwner.prototype, "flushResourcePublications").mockReturnValue(true);
@@ -31,8 +33,9 @@ describe("canvas presentation", () => {
       ] }));
       for (let frame = 0; frame < 3; frame++) callbacks.shift()?.();
       expect(steps).toBe(0);
-      expect(draw).toHaveBeenCalledTimes(3);
-    } finally { root.dispose(); draw.mockRestore(); pending.mockRestore(); viewPending.mockRestore(); flush.mockRestore(); }
+      expect(draw).toHaveBeenCalledTimes(2);
+      expect(prepare).toHaveBeenCalledTimes(2);
+    } finally { root.dispose(); prepare.mockRestore(); draw.mockRestore(); pending.mockRestore(); viewPending.mockRestore(); flush.mockRestore(); }
   });
 
   it("does not copy changing camera frames and rebuilds hover retention lazily", () => {

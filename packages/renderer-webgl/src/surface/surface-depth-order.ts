@@ -70,13 +70,15 @@ export const sortSurfacesBackToFront = <Surface extends DepthOrderedSurface>(
 
 /**
  * Stably orders each retained state-equivalent run for early depth rejection.
- * Insertion sort avoids a per-frame slice allocation and is bounded by the
- * already-small runs accepted by one draw or multi-draw state packet.
+ * Small runs use insertion sort. Large runs use stable mergesort: state-equivalent
+ * runs are not size-limited, so a camera reversal must not cause quadratic work.
+ * The caller can retain scratch capacity; used slots are cleared of references.
  */
 export const sortSurfaceRunsFrontToBack = <Surface extends DepthOrderedSurface>(
   surfaces: Surface[],
   runEnds: Uint32Array,
   view: Mat4,
+  scratch?: Array<Surface | undefined>,
 ): void => {
   for (let runStart = 0; runStart < surfaces.length;) {
     const runEnd = runEnds[runStart] ?? runStart + 1;
@@ -89,7 +91,26 @@ export const sortSurfaceRunsFrontToBack = <Surface extends DepthOrderedSurface>(
         && compareFrontToBackDepthOrder(surfaces[index - 1]!, surface) > 0
       ) alreadyOrdered = false;
     }
-    if (!alreadyOrdered) {
+    if (!alreadyOrdered && runEnd - runStart > 32) {
+      const work = scratch ??= [];
+      for (let width = 1; width < runEnd - runStart; width *= 2) {
+        for (let start = runStart; start < runEnd; start += width * 2) {
+          const middle = Math.min(start + width, runEnd);
+          const end = Math.min(start + width * 2, runEnd);
+          if (middle === end || compareFrontToBackDepthOrder(surfaces[middle - 1]!, surfaces[middle]!) <= 0) continue;
+          let left = start, right = middle, count = 0;
+          while (left < middle || right < end) {
+            work[count++] = right === end || (left < middle
+              && compareFrontToBackDepthOrder(surfaces[left]!, surfaces[right]!) <= 0)
+              ? surfaces[left++]! : surfaces[right++]!;
+          }
+          for (let index = 0; index < count; index++) {
+            surfaces[start + index] = work[index]!;
+            work[index] = undefined;
+          }
+        }
+      }
+    } else if (!alreadyOrdered) {
       for (let index = runStart + 1; index < runEnd; index += 1) {
         const surface = surfaces[index]!;
         let destination = index;

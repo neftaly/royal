@@ -627,6 +627,7 @@ export class CanvasRoot implements RendererRoot {
   readonly #anisotropy: TextureAnisotropy;
   readonly #persistentGpuBudget: PersistentGpuBudgetOwner;
   #presentationRequired = false;
+  #virtualTexturePreparationRequired = false;
   readonly #progressivePresentation: ProgressivePresentationOwner;
   readonly #retainedPresentation: RetainedPresentationOwner;
   #renderObjectRefs: RenderObjectRefOwner | null = null;
@@ -1777,7 +1778,11 @@ export class CanvasRoot implements RendererRoot {
             ?? (this.#textureAssets.getSourceSnapshot(asset).status === "error" ? null : undefined),
           onChanged: (presentationChanged) => {
             if (!this.#disposed) {
-              if (presentationChanged) this.#invalidatePresentation();
+              if (presentationChanged) {
+                this.#virtualTexturePreparationRequired = true;
+                this.#progressivePresentation.changed();
+                this.#clock.invalidate();
+              }
               else this.#publish();
             }
           },
@@ -1881,6 +1886,27 @@ export class CanvasRoot implements RendererRoot {
         this.#clock.invalidate();
       }
     }
+    if (!this.#presentationRequired && this.#size !== null
+      && (this.#virtualTexturePreparationRequired || this.#surfaceGpu.viewWorkPending)) {
+      this.#virtualTexturePreparationRequired = false;
+      let pending: boolean;
+      try {
+        pending = this.#surfaceGpu.prepareViews(this.#canvasViews, this.#state, this.#clearColor);
+      } finally {
+        this.#releaseUploadedTextures();
+        this.#refreshPendingResources();
+      }
+      this.#progressivePresentation.changed();
+      if (pending) this.#clock.invalidate();
+      else if (this.#progressiveResourcesSettled()) {
+        const textures = this.#virtualTextureRuntime?.runtimeSnapshot();
+        // Async page reads need no frame pump, but are not settled detail.
+        if (textures === undefined || (textures.pendingPages === 0
+          && textures.unresidentPages === 0 && (textures.pendingDemandResources ?? 0) === 0)) {
+          this.#progressivePresentation.settled();
+        }
+      }
+    }
     if (!this.#presentationRequired) {
       this.#publish();
       return;
@@ -1889,6 +1915,7 @@ export class CanvasRoot implements RendererRoot {
     const cameraChanged = this.#cameraPresentationChanged;
     this.#cameraPresentationChanged = false;
     this.#presentationRequired = false;
+    this.#virtualTexturePreparationRequired = false;
     this.#worldPresentationRequired = false;
     const surfaceScene = this.#surfaceScene;
     const hasPresentationOverlay = this.#overlay.hasPresentation;
@@ -1953,9 +1980,9 @@ export class CanvasRoot implements RendererRoot {
         this.#surfaceResourcesPending = this.#surfaceGpu.surfacePublicationsPending();
         if (worldPending || overlayPending) {
           if (worldPending && this.#surfaceGpu.viewWorkPending) {
-            // Demand traversal and atlas migration cannot advance in a resource-
-            // only flush, even while other surfaces are still being published.
-            this.#invalidatePresentation();
+            // The current draw is already a presentation. The next preparation
+            // pass schedules any further visual change at the progressive cadence.
+            this.#clock.invalidate();
           } else if (this.#surfaceResourcesPending || this.#overlay.resourcesPending) {
             this.#clock.invalidate();
           } else if (worldPending) this.#invalidatePresentation();
